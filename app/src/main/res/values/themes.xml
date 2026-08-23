@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- alpha2.0: 官方 Material 3 主题（DayNight 深浅色自适应；NoActionBar 与各页 requestWindowFeature 一致） -->
+<resources>
+    <style name="Theme.FxxkMoondrop" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>
