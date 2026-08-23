@@ -418,17 +418,39 @@ class GaiaBleClient private constructor() {
                 addr = resolved
                 Log.d(TAG, "using resolved LE address " + addr)
             } else {
-                // alpha1.18: 构建候选队列：bonded 主地址 → 缓存 LE 地址 → 已知备用 LE 地址
+                // alpha2.20: 构建候选队列：缓存 LE 地址 → bonded 主地址 → 已知备用 LE 地址
                 val cand2 = candidates
                 if (cand2 == null || cand2.isEmpty()) {
                     buildCandidates(addr)
+                    // alpha2.20: buildCandidates 仅重建数组，需把 addr/device 指到
+                    // 首位候选（已学习 LE 地址），否则仍会连到 bonded 主地址白等超时。
+                    if (cachedLeAddress != null && candidates != null && candidates!!.isNotEmpty()) {
+                        val le = cachedLeAddress!!.uppercase()
+                        val first = candidates!![0]
+                        if (first != null && first.equals(le, true) && !addr.equals(le, true)) {
+                            addr = le
+                            device = adapter.getRemoteDevice(le)
+                            Log.d(TAG, "buildCandidates->le first " + addr)
+                        }
+                    }
                 } else {
-                    if (candidateIdx >= cand2.size) candidateIdx = 0
-                    val target = cand2[candidateIdx]
+                    // alpha2.20: 存在已学习 LE 地址时，强制把它提到首位并重置 idx，
+                    // 避免复用残留 candidateIdx 连到 bonded 主地址（GA2 双模机白等 12s 超时轮换）。
+                    var start = candidateIdx
+                    if (cachedLeAddress != null) {
+                        val le = cachedLeAddress!!.uppercase()
+                        val reordered = LinkedHashSet<String>()
+                        reordered.add(le)
+                        for (c in cand2) { if (c != null) reordered.add(c.uppercase()) }
+                        candidates = reordered.toTypedArray()
+                        start = 0
+                    }
+                    if (start >= candidates!!.size) start = 0
+                    val target = candidates!![start]
                     if (target != null && !target.equals(addr, ignoreCase = true)) {
                         device = adapter.getRemoteDevice(target)
                         addr = target
-                        Log.d(TAG, "using candidate[" + candidateIdx + "] " + addr)
+                        Log.d(TAG, "using candidate[" + start + "] " + addr)
                     }
                 }
             }
