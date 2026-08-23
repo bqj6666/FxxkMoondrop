@@ -126,12 +126,25 @@ val postEdf by tasks.registering(Exec::class) {
     val ksPass = providers.environmentVariable("FXXK_KEYPASS")
         .orElse(providers.gradleProperty("fxxkKeypass")).getOrElse("")
     doFirst {
+        // 动态解析 apksigner：优先 ANDROID_HOME / ANDROID_SDK_ROOT，其次 local.properties 的 sdk.dir，最后 fallback
+        val androidSdk = System.getenv("ANDROID_HOME")
+            ?: System.getenv("ANDROID_SDK_ROOT")
+            ?: run {
+                val lp = rootProject.file("local.properties")
+                if (lp.exists()) lp.readLines()
+                    .map { it.trim() }
+                    .firstOrNull { it.startsWith("sdk.dir=") }
+                    ?.substringAfter("sdk.dir=") else null
+            }
+        val buildTools = (androidSdk ?: "/workspace/sdk") + "/build-tools/34.0.0"
+        val apksigner = file(buildTools + "/apksigner")
+        if (!apksigner.exists()) throw GradleException("apksigner not found: ${apksigner.absolutePath}（请确认 SDK build-tools 34.0.0 已安装且 ANDROID_HOME 正确）")
         commandLine(
             "python3", "$rootDir/tools/post_edf.py",
             apk.get().asFile.absolutePath,
             "$edfDir/scope.list", "$edfDir/ascope.list",
             "$rootDir/app2.keystore", ksPass,
-            "/workspace/sdk/build-tools/34.0.0/apksigner"
+            apksigner.absolutePath
         )
     }
 }

@@ -32,7 +32,14 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - name: 安装 Android SDK 组件（platform-34 / build-tools 34.0.0）
+        env:
+          # 显式指定 SDK 根目录，保证 sdkmanager 与构建/postEdf 用同一路径
+          ANDROID_HOME: ${{ github.workspace }}/android-sdk
+          ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
         run: |
+          export ANDROID_HOME="${{ github.workspace }}/android-sdk"
+          export ANDROID_SDK_ROOT="${{ github.workspace }}/android-sdk"
+          mkdir -p "$ANDROID_HOME"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
 
@@ -52,6 +59,8 @@ jobs:
 
       - name: Gradle 构建（有密钥=Release+EDF 注入；无密钥=Debug 降级）
         env:
+          ANDROID_HOME: ${{ github.workspace }}/android-sdk
+          ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
           FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
         run: |
           chmod +x gradlew
