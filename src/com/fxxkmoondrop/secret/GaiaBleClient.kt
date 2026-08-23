@@ -468,7 +468,11 @@ class GaiaBleClient private constructor() {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
             }
-            Log.d(TAG, "connectGatt(auto) " + addr + " (cand " + candidateIdx + "/" +
+            // alpha2.21: 日志打印实际连接的 addr 在候选中的真实索引（candidateIdx 可能因
+            // cachedLe 重排未同步更新，避免误导诊断）
+            val candIdxForLog = candidates?.indexOfFirst { it != null && it.equals(addr, ignoreCase = true) }
+                    ?: -1
+            Log.d(TAG, "connectGatt(auto) " + addr + " (cand " + candIdxForLog + "/" +
                     (candidates?.size ?: 0) + ")")
             return gatt != null
         } catch (e: SecurityException) {
@@ -783,7 +787,11 @@ class GaiaBleClient private constructor() {
 
     /** 扫描失败/超时后回退到原地址连接 */
     private fun retryConnect() {
-        val addr = if (candidates != null && candidates!!.isNotEmpty()) candidates!![0] else deviceAddress
+        // alpha2.21: 重试优先已学习 LE 地址（缓存即正确 GAIA 通道），无缓存才回退候选首项/原地址
+        var addr: String? = null
+        if (cachedLeAddress != null) addr = cachedLeAddress
+        if (addr == null && candidates != null && candidates!!.isNotEmpty()) addr = candidates!![0]
+        if (addr == null) addr = deviceAddress
         if (addr == null) return
         try {
             val adapter = BluetoothAdapter.getDefaultAdapter()
