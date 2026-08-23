@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 发布 GitHub Release 需要写权限（GITHUB_TOKEN 默认只读）
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,3 +69,24 @@ jobs:
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
+      - name: 发布 GitHub Release（Prerelease，仅 push main 触发）
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-${{ github.run_number }}
+          name: FxxkMoondrop CI build #${{ github.run_number }}
+          body: |
+            ## 自动构建发布（CI #${{ github.run_number }}）
+
+            - 提交：`${{ github.sha }}`
+            - 触发：push main
+            - 构建方式：Release + EDF 注入（LSPosed 推荐作用域）
+            - 签名：CN=FxxkMoondrop（v2/v3）
+
+            变更内容请查看 [Commits](https://github.com/bqj6666/FxxkMoondrop/commits/main)。
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
+          prerelease: true
+          fail_on_unmatched_files: false
+          generate_release_notes: false
