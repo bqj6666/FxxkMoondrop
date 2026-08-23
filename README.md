@@ -43,14 +43,14 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 
 ## 安装
 
-1. 安装 APK（无需单独安装 GMS 模块，一体打包）
+1. 安装 APK
 2. 在 **LSPosed** 中启用并勾选作用域 `com.google.android.gms`（可选 `com.android.settings`）
 3. 授予蓝牙 / 通知 / 悬浮窗权限（设置页「检查权限」可一键跳转修复）
 4. 弹窗默认 Google Fast Pair 半屏弹窗，也可在设置中切换为应用自带悬浮卡片
 
 > ## 📣 需要更多耳机实机测试
 >
-> 下表**理论支持**与**未知**的型号多为芯片级推断，尚未逐一实机验证。欢迎拥有对应耳机的用户可以帮忙**连接一次并把结果反馈到 [Issue](https://github.com/bqj6666/FxxkMoondrop/issues)**，猫咪会一起把适配状态更新上去喵～
+> 下表**理论支持**与**未知**的型号多为芯片级推断，尚未逐一实机验证。欢迎拥有对应耳机的用户可以帮忙**连接一次并把结果反馈到 [Issue](https://github.com/bqj6666/FxxkMoondrop/issues)**
 
 ## 支持设备
 
@@ -78,6 +78,18 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 - **已实测**：开发者实机验证过
 - **理论上支持**：主控芯片已确认且协议侧能自动识别，但尚未逐一实机跑通
 - **未知**：主控未公开或被疑为蓝讯系，需连接耳机后看日志 GATT 指纹（`GAIA` / `9ECA0000`）定论
+
+---
+
+## Google Fast Pair Service 弹窗适配
+
+> **Fast Pair 弹窗依赖完整的 Google Play 服务（GMS）**，能否弹出与**手机系统的 GMS 完整程度**有关，与耳机型号无关。模块自身无需单独安装 GMS 组件。
+
+| 系统 | Fast Pair 弹窗 | 说明 |
+|---|---|---|
+| ✅ 已实测 | 类原生 / 原生系统（完整 GMS） | 功能完全正常 |
+| ⚠️ 需额外模块 | ColorOS（OPPO / realme / 一加） | 需搭配 [oplus-cn2global（Magisk 模块）](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool（Xposed，解除 GMS 限制）](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) 后 Fast Pair 弹窗才可用 |
+| ⚪ 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证） |
 
 ---
 
