@@ -1,0 +1,1217 @@
+package com.fxxkmoondrop.secret.hook
+
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
+import android.widget.ImageView
+import com.fxxkmoondrop.secret.DeviceMatcher
+import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.XposedHelpers
+import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.io.ByteArrayOutputStream
+import java.io.File
+
+class FastPairHookEntry : IXposedHookLoadPackage {
+
+    /** 【数据对接接口】本模块不内置任何模拟/占位数据。真实数据由外部注入，两条通道：
+     * 1. 【推荐·跨进程】ACTION_TRIGGER 广播（device_name/battery_left/battery_right/icon_path）
+     * 2. 【同进程】setDataProvider(FastPairDataProvider) 注入数据源 */
+    interface FastPairDataProvider {
+        /** 设备显示名称；返回 null 表示未知（ACL 回退蓝牙真实名 / TRIGGER 跳过弹窗） */
+        fun getDeviceName(): String?
+
+        /** 左耳电量 0-100；返回 -1 表示未知（不显示电量行） */
+        fun getBatteryLeft(): Int
+
+        /** 右耳电量 0-100；返回 -1 表示未知（不显示电量行） */
+        fun getBatteryRight(): Int
+
+        /** 弹窗图标 PNG 字节；返回 null 使用默认图标（文件优先，其次代码绘制） */
+        fun getIconBytes(): ByteArray?
+    }
+
+    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+        if (PKG_GMS != lpparam.packageName) return
+        sGmsCl = lpparam.classLoader
+        XposedBridge.log("[FastPairHook] GMS loaded, classLoader=" + lpparam.classLoader)
+
+        // alpha1.14fix4: 拿模块自身 context（读取内置默认图标 assets）
+        try {
+            val app = XposedHelpers.callStaticMethod(
+                    Class.forName("android.app.ActivityThread"), "currentApplication")
+            if (app is Context) {
+                sModCtx = app.createPackageContext("com.fxxkmoondrop.secret",
+                        Context.CONTEXT_IGNORE_SECURITY)
+                XposedBridge.log("[FastPairHook] mod ctx ready: " + sModCtx)
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] mod ctx init fail: " + t)
+        }
+
+        // 1. 注册广播接收器：手动触发 + 蓝牙连接自动触发
+        try {
+            registerReceiverWhenReady(lpparam.classLoader)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] register receiver failed: " + t)
+        }
+
+        // 2. hook dtes.f：真实配对弹窗 UI 设置时改写设备名
+        try {
+            val dtesClass = XposedHelpers.findClass("dtes", lpparam.classLoader)
+            XposedHelpers.findAndHookMethod(dtesClass, "f", Context::class.java,
+                    Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            try {
+                                val dtok = XposedHelpers.getObjectField(param.thisObject, "c")
+                                if (dtok != null) {
+                                    // 【数据对接】仅当数据源提供了名称才改写，否则保持 GMS 原生流程
+                                    val name = sDataProvider?.getDeviceName()
+                                    if (!name.isNullOrEmpty()) {
+                                        XposedHelpers.setObjectField(dtok, "l", name)
+                                        XposedHelpers.setObjectField(dtok, "i", name)
+                                        XposedBridge.log("[FastPairHook] (dtes.f) set name -> " + name)
+                                    }
+                                }
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] dtes.f hook err: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] dtes.f hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook dtes.f failed: " + t)
+        }
+
+        // 3. hook dthi.O(ImageView, dtok)：弹窗图片注入（原图为 dtok.h 字节，为空时替换）
+        try {
+            val dthiClass = XposedHelpers.findClass("dthi", lpparam.classLoader)
+            val dtokClass = XposedHelpers.findClass("dtok", lpparam.classLoader)
+            XposedHelpers.findAndHookMethod(dthiClass, "O", ImageView::class.java, dtokClass,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val iv = param.args[0] as? ImageView ?: return
+                                val bmp = loadOrDrawIcon() ?: return
+                                // 主线程直接设置（dthi.O 本身在 UI 线程）
+                                iv.setImageBitmap(bmp)
+                                XposedBridge.log("[FastPairHook] (dthi.O) icon injected")
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] dthi.O icon inject fail: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] dthi.O hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook dthi.O failed: " + t)
+        }
+
+        // 4. hook dthi.q(ImageView, dtok, boolean)：HalfSheetModuleFragment 图片渲染主入口
+        try {
+            val dthiClass = XposedHelpers.findClass("dthi", lpparam.classLoader)
+            val dtokClass = XposedHelpers.findClass("dtok", lpparam.classLoader)
+            XposedHelpers.findAndHookMethod(dthiClass, "q", ImageView::class.java, dtokClass,
+                    Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val iv = param.args[0] as? ImageView ?: return
+                                val bmp = loadOrDrawIcon() ?: return
+                                iv.setImageBitmap(bmp)
+                                XposedBridge.log("[FastPairHook] (dthi.q) icon injected")
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] dthi.q icon inject fail: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] dthi.q hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook dthi.q failed: " + t)
+        }
+
+        // 5. hook 框架层 Activity.onResume：HalfSheet 弹窗出现时注入图标
+        try {
+            XposedHelpers.findAndHookMethod(android.app.Activity::class.java, "onResume",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val act = param.thisObject as? android.app.Activity ?: return
+                                val cname = act.javaClass.name
+                                if (!cname.contains("HalfSheet")) return
+                                sHalfSheetActivity = act
+                                // 从 Intent 同步模拟电量（渲染进程与触发进程静态字段不共享）
+                                try {
+                                    val it = act.intent
+                                    if (it != null) {
+                                        val bl = it.getIntExtra(EXTRA_BATTERY_LEFT, -1)
+                                        val br = it.getIntExtra(EXTRA_BATTERY_RIGHT, -1)
+                                        if (bl >= 0) sBatteryLeft = bl
+                                        if (br >= 0) sBatteryRight = br
+                                        XposedBridge.log("[FastPairHook] battery from intent: L=" + sBatteryLeft + " R=" + sBatteryRight)
+                                    }
+                                } catch (t: Throwable) {
+                                    XposedBridge.log("[FastPairHook] intent battery fail: " + t)
+                                }
+                                XposedBridge.log("[FastPairHook] HalfSheet onResume: " + cname)
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    try {
+                                        injectIconIntoTree(act.window.decorView)
+                                        injectIconOverlay(act)
+                                        injectBatteryOverlay(act)
+                                        injectModeButtons(act)
+                                        // alpha1.20: 已知模式立即高亮 + 向应用请求当前模式
+                                        if (sLastMode >= 0) applyModeHighlight(sLastMode)
+                                        sendModeRequest()
+                                    } catch (t: Throwable) {
+                                        XposedBridge.log("[FastPairHook] inject fail: " + t)
+                                    }
+                                }, 400)
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] onResume inject fail: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] Activity.onResume hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook Activity.onResume failed: " + t)
+        }
+
+        // 5.5. hook 框架层 Activity.onDestroy：HalfSheet 弹窗关闭时通知应用
+        try {
+            XposedHelpers.findAndHookMethod(android.app.Activity::class.java, "onDestroy",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val act = param.thisObject as? android.app.Activity ?: return
+                                if (!act.javaClass.name.contains("HalfSheet")) return
+                                if (act !== sHalfSheetActivity) return
+                                sHalfSheetActivity = null
+                                val ctx = sAppContext
+                                if (ctx != null) {
+                                    val i = Intent(ACTION_FP_SHEET_CLOSED)
+                                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    ctx.sendBroadcast(i)
+                                    XposedBridge.log("[FastPairHook] half sheet closed -> sim restore signal")
+                                }
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] onDestroy hook fail: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] Activity.onDestroy hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook Activity.onDestroy failed: " + t)
+        }
+
+        // 6. hook View.performClick：捕捉 central_btn（连接按钮）点击 -> 接管连接流程
+        try {
+            XposedHelpers.findAndHookMethod(android.view.View::class.java, "performClick",
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            try {
+                                val v = param.thisObject as? android.view.View ?: return
+                                val ctx = v.context ?: return
+                                if (sCentralBtnId == 0) {
+                                    sCentralBtnId = ctx.resources.getIdentifier("central_btn", "id", PKG_GMS)
+                                    XposedBridge.log("[FastPairHook] central_btn id resolved: " + sCentralBtnId)
+                                }
+                                if (sCentralBtnId != 0 && v.id == sCentralBtnId) {
+                                    // 拦截真实配对流程（setResult 阻止 GMS 监听器执行）
+                                    param.result = true
+                                    XposedBridge.log("[FastPairHook] central_btn click intercepted -> fake connect")
+                                    showConnectingUi()
+                                    startFakeConnectSequence()
+                                }
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] performClick hook err: " + t)
+                            }
+                        }
+                    })
+            XposedBridge.log("[FastPairHook] View.performClick hooked")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] hook View.performClick failed: " + t)
+        }
+    }
+
+    /** 在弹窗 DecorView 上叠加自定义图标（标题与按钮之间的中央区域） */
+    private fun injectIconOverlay(act: android.app.Activity) {
+        try {
+            val decor = act.window.decorView
+            if (decor.findViewWithTag<android.view.View>("fxxk_quickpair_icon") != null) return // 已叠加
+            val bmp = loadOrDrawIcon() ?: return
+            val iv = ImageView(act)
+            iv.setImageBitmap(bmp)
+            iv.tag = "fxxk_quickpair_icon"
+            val size = 340 // v0.8 缩小：给三模式按钮腾空间
+            val lp = android.widget.FrameLayout.LayoutParams(size, size)
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+            lp.topMargin = 1660 // v0.8 上移缩小（原 1700/400），三模式按钮区 2050-2280
+            (decor as android.view.ViewGroup).addView(iv, lp)
+            XposedBridge.log("[FastPairHook] icon overlay added")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] overlay fail: " + t)
+        }
+    }
+
+    /** 递归遍历视图树：给无 drawable 的 ImageView 注入自定义图标 */
+    private fun injectIconIntoTree(root: android.view.View?) {
+        if (root == null) return
+        if (root is ImageView) {
+            val iv = root
+            if (iv.drawable == null) {
+                val bmp = loadOrDrawIcon()
+                if (bmp != null) {
+                    iv.setImageBitmap(bmp)
+                    // alpha1.14fix6: 放大 ImageView 布局尺寸 1.4x（仅正值，不动 wrap/match）
+                    try {
+                        iv.scaleType = ImageView.ScaleType.FIT_CENTER
+                        val lp = iv.layoutParams
+                        if (lp != null) {
+                            if (lp.width > 0) lp.width = Math.round(lp.width * 1.4f)
+                            if (lp.height > 0) lp.height = Math.round(lp.height * 1.4f)
+                            iv.layoutParams = lp
+                            iv.requestLayout()
+                        }
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] icon resize fail: " + t)
+                    }
+                    XposedBridge.log("[FastPairHook] tree icon injected into " + iv.id)
+                }
+            }
+        }
+        if (root is android.view.ViewGroup) {
+            val vg = root
+            for (i in 0 until vg.childCount) {
+                injectIconIntoTree(vg.getChildAt(i))
+            }
+        }
+    }
+
+    // ==================== 图标 ====================
+
+    /** 加载自定义图标（Download/moondrop_icon.png），失败则代码绘制默认图标 */
+    private fun loadOrDrawIcon(): Bitmap? {
+        try {
+            val f = File(ICON_PATH)
+            if (f.exists() && f.length() > 0) {
+                val b = BitmapFactory.decodeFile(f.absolutePath)
+                if (b != null) {
+                    XposedBridge.log("[FastPairHook] icon from file: " + f.length() + "B")
+                    return b
+                }
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] icon file load fail: " + t)
+        }
+
+        // alpha1.14fix4: 软件自带默认图标（打包在模块 APK assets/ga2_icon.png）
+        try {
+            var ctx = sModCtx
+            if (ctx == null) {
+                val app = XposedHelpers.callStaticMethod(
+                        Class.forName("android.app.ActivityThread"), "currentApplication")
+                if (app is Context) {
+                    ctx = app.createPackageContext("com.fxxkmoondrop.secret",
+                            Context.CONTEXT_IGNORE_SECURITY)
+                    sModCtx = ctx
+                }
+            }
+            if (ctx != null) {
+                val input = ctx.assets.open(MOD_ASSET_ICON)
+                try {
+                    val b = BitmapFactory.decodeStream(input)
+                    if (b != null) {
+                        XposedBridge.log("[FastPairHook] icon from builtin asset")
+                        return b
+                    }
+                } finally {
+                    input.close()
+                }
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] builtin asset load fail: " + t)
+        }
+        return drawDefaultIcon()
+    }
+
+    /** Moondrop 风格默认图标：深蓝紫渐变圆 + 品红环 + 白 M */
+    private fun drawDefaultIcon(): Bitmap {
+        val s = 512
+        val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.shader = LinearGradient(0f, 0f, s.toFloat(), s.toFloat(),
+                0xFF0F2E5E.toInt(), 0xFF1A1A2E.toInt(), Shader.TileMode.CLAMP)
+        c.drawCircle(s / 2f, s / 2f, s / 2f, p)
+        val ring = Paint(Paint.ANTI_ALIAS_FLAG)
+        ring.style = Paint.Style.STROKE
+        ring.strokeWidth = 28f
+        ring.color = 0xFFE94560.toInt()
+        c.drawCircle(s / 2f, s / 2f, s / 2f - 20f, ring)
+        val t = Paint(Paint.ANTI_ALIAS_FLAG)
+        t.color = 0xFFFFFFFF.toInt()
+        t.textSize = 280f
+        t.typeface = Typeface.DEFAULT_BOLD
+        t.textAlign = Paint.Align.CENTER
+        c.drawText("M", s / 2f, s / 2f + 100f, t)
+        return bmp
+    }
+
+    /** 电量显示：直接写入 GMS 原生 subhead TextView */
+    private fun injectBatteryOverlay(act: android.app.Activity) {
+        try {
+            if (sBatteryLeft < 0 || sBatteryRight < 0) return
+            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+            val sub = if (subId != 0) act.window.decorView.findViewById<android.view.View>(subId) else null
+            if (sub is android.widget.TextView) {
+                val tv = sub
+                tv.text = "左耳 " + sBatteryLeft + "%  ·  右耳 " + sBatteryRight + "%"
+                // alpha1.36: 电量文字随深浅色自适应
+                val batNight = (tv.resources.configuration.uiMode and
+                        android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                tv.setTextColor(if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
+                tv.visibility = android.view.View.VISIBLE
+                XposedBridge.log("[FastPairHook] battery on subhead: L=" + sBatteryLeft + " R=" + sBatteryRight)
+                // v0.7: 连接按钮文字 -> "确定"
+                val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+                val btnV = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
+                if (btnV is android.widget.TextView) {
+                    btnV.text = "确定"
+                    XposedBridge.log("[FastPairHook] central_btn text -> 确定")
+                }
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] battery overlay fail: " + t)
+        }
+    }
+
+    /** 点击连接后自绘"正在连接"状态：subhead 文字 + 隐藏按钮 + 底部载条 */
+    private fun showConnectingUi() {
+        try {
+            val act = sHalfSheetActivity ?: return
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    val decor = act.window.decorView
+                    // subhead 显示"正在连接…"
+                    val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+                    val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+                    if (sub is android.widget.TextView) {
+                        sub.text = "正在连接…"
+                        sub.visibility = android.view.View.VISIBLE
+                    }
+                    // v0.7: 连接中 -> 按钮禁用（原生置灰样式），不再自绘转圈
+                    val btn = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
+                    if (btn != null) btn.isEnabled = false
+                    XposedBridge.log("[FastPairHook] connecting ui shown")
+                } catch (t: Throwable) {
+                    XposedBridge.log("[FastPairHook] connecting ui fail: " + t)
+                }
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] showConnectingUi fail: " + t)
+        }
+    }
+
+    /** 点击"确定"后的 UI 连接流程：等待 CONNECT_DELAY_MS -> 关闭弹窗 -> 发 ACTION_CONNECTED */
+    private fun startFakeConnectSequence() {
+        val act = sHalfSheetActivity
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                if (act != null && !act.isFinishing) {
+                    act.finish()
+                    XposedBridge.log("[FastPairHook] fake connect: half sheet finished")
+                }
+                val i = Intent(ACTION_CONNECTED)
+                i.putExtra(EXTRA_DEVICE_NAME, sLastDeviceName)
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val ctx = sAppContext
+                if (ctx != null) {
+                    ctx.sendBroadcast(i)
+                    XposedBridge.log("[FastPairHook] CONNECTED broadcast sent, name=" + sLastDeviceName)
+                }
+            } catch (t: Throwable) {
+                XposedBridge.log("[FastPairHook] fake connect fail: " + t)
+            }
+        }, CONNECT_DELAY_MS)
+    }
+
+    // ==================== 三模式按钮（v0.8） ====================
+
+    /** v1.0: 三模式按钮点击 -> 广播给 FxxkMoondrop 应用（MODE_CHANGED, extra mode=0关闭/1降噪/2透传） */
+    private fun sendModeChanged(mode: Int) {
+        try {
+            val ctx = sAppContext
+            if (ctx == null) {
+                XposedBridge.log("[FastPairHook] MODE_CHANGED skip: no app context")
+                return
+            }
+            val i = Intent(ACTION_MODE_CHANGED)
+            i.putExtra(EXTRA_MODE, mode)
+            ctx.sendBroadcast(i)
+            XposedBridge.log("[FastPairHook] MODE_CHANGED sent, mode=" + mode)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] MODE_CHANGED fail: " + t)
+        }
+    }
+
+    /** alpha1.20: 向应用广播请求当前降噪模式（应用回发 MODE_STATE 驱动高亮） */
+    private fun sendModeRequest() {
+        try {
+            val ctx = sAppContext
+            if (ctx == null) {
+                XposedBridge.log("[FastPairHook] MODE_REQUEST skip: no app context")
+                return
+            }
+            val i = Intent(ACTION_MODE_REQUEST)
+            i.setPackage(PKG_APP)
+            ctx.sendBroadcast(i)
+            XposedBridge.log("[FastPairHook] MODE_REQUEST sent")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] MODE_REQUEST fail: " + t)
+        }
+    }
+
+    /** alpha1.20: 把弹窗三按钮中对应 mode 的按钮置为高亮（其余恢复默认） */
+    private fun applyModeHighlight(mode: Int) {
+        try {
+            val act = sHalfSheetActivity ?: return
+            val decor = act.window.decorView
+            for (m in 0..2) {
+                val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
+                var bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg")
+                if (bgV == null) bgV = holder
+                bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
+            }
+            XposedBridge.log("[FastPairHook] mode highlight -> " + mode)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] mode highlight fail: " + t)
+        }
+    }
+
+    /** alpha1.20: 高亮圆底：亮色半透明填充 + 白色描边（深色弹窗上醒目） */
+    private fun buildModeHighlightBg(act: android.app.Activity): android.graphics.drawable.Drawable {
+        try {
+            val d = act.resources.displayMetrics.density
+            val g = android.graphics.drawable.GradientDrawable()
+            g.shape = android.graphics.drawable.GradientDrawable.OVAL
+            g.setColor(0x66FFFFFF.toInt())
+            g.setStroke((2.5f * d).toInt(), 0xFFFFFFFF.toInt())
+            return android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x66FFFFFF.toInt()), g, g)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] highlight bg fail: " + t)
+            return buildCircleRipple(act)
+        }
+    }
+
+    private fun injectModeButtons(act: android.app.Activity) {
+        try {
+            val decor = act.window.decorView
+            if (decor.findViewWithTag<android.view.View>("fxxk_mode_bar") != null) return // 已插入
+            val bar = android.widget.LinearLayout(act)
+            bar.tag = "fxxk_mode_bar"
+            bar.orientation = android.widget.LinearLayout.HORIZONTAL
+            bar.gravity = android.view.Gravity.CENTER
+            bar.addView(buildModeItem(act, MODE_OFF, "关闭"))
+            bar.addView(buildModeItem(act, MODE_ANC, "降噪"))
+            bar.addView(buildModeItem(act, MODE_TRANS, "透传"))
+            val lp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+            lp.topMargin = 2050 // 图标(1660-2000)与确定按钮(2370)之间
+            (decor as android.view.ViewGroup).addView(bar, lp)
+            XposedBridge.log("[FastPairHook] mode buttons injected (关闭/降噪/透传)")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] mode buttons fail: " + t)
+        }
+    }
+
+    /** 构建单个模式项：Material 风格圆形按钮 + 下方功能小字（克隆 central_btn 样式） */
+    private fun buildModeItem(act: android.app.Activity, mode: Int, label: String): android.view.View {
+        val item = android.widget.LinearLayout(act)
+        item.orientation = android.widget.LinearLayout.VERTICAL
+        item.gravity = android.view.Gravity.CENTER_HORIZONTAL
+        // 圆形按钮：Ripple 圆形背景 + 中央 Material 图标（24dp）
+        val holder = android.widget.FrameLayout(act)
+        holder.tag = "fxxk_mode_btn_" + mode
+        val bg = android.view.View(act)
+        bg.tag = "fxxk_mode_bg" // alpha1.20: 高亮定位
+        bg.background = buildCircleRipple(act)
+        holder.addView(bg, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+        val d = act.resources.displayMetrics.density
+        val iconPx = (24 * d).toInt() // Material 图标规范 24dp
+        val iv = ImageView(act)
+        iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
+        val il = android.widget.FrameLayout.LayoutParams(iconPx, iconPx)
+        il.gravity = android.view.Gravity.CENTER
+        holder.addView(iv, il)
+        holder.setOnClickListener {
+            XposedBridge.log("[FastPairHook] mode clicked: " + mode)
+            // alpha1.21: 点击立即乐观高亮（应用回发 MODE_STATE 仍会校准）
+            sLastMode = mode
+            applyModeHighlight(mode)
+            sendModeChanged(mode)
+        }
+        item.addView(holder, android.widget.LinearLayout.LayoutParams(170, 170))
+        val tv = android.widget.TextView(act)
+        tv.text = label
+        applyCentralTextStyle(act, tv)
+        tv.gravity = android.view.Gravity.CENTER
+        val tl = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+        tl.topMargin = 6
+        item.addView(tv, tl)
+        val ilp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+        ilp.leftMargin = 22
+        ilp.rightMargin = 22
+        item.layoutParams = ilp
+        return item
+    }
+
+    /** 圆形 Material 底：填充色克隆 central_btn 的 backgroundTintList，ripple 用主题 colorControlHighlight */
+    private fun buildCircleRipple(act: android.app.Activity): android.graphics.drawable.Drawable {
+        try {
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            val cv = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
+            val tint = cv?.backgroundTintList
+            val fill = tint?.defaultColor ?: 0x29FFFFFF.toInt() // 兜底：半透明白
+            XposedBridge.log("[FastPairHook] circle fill = 0x" + Integer.toHexString(fill) + " (from central tint=" + (tint != null) + ")")
+            val content = android.graphics.drawable.GradientDrawable()
+            content.shape = android.graphics.drawable.GradientDrawable.OVAL
+            content.setColor(fill)
+            val typed = android.util.TypedValue()
+            var rippleColor = 0x66FFFFFF.toInt()
+            if (act.theme.resolveAttribute(android.R.attr.colorControlHighlight, typed, true)) {
+                rippleColor = typed.data
+            }
+            return android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(rippleColor), content, content)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] circle ripple fail: " + t)
+            val gd = android.graphics.drawable.GradientDrawable()
+            gd.shape = android.graphics.drawable.GradientDrawable.OVAL
+            gd.setColor(0x29FFFFFF.toInt())
+            return gd
+        }
+    }
+
+    /** 小字克隆 central_btn 的文字规格（size/color/typeface/letterSpacing） */
+    private fun applyCentralTextStyle(act: android.app.Activity, dst: android.widget.TextView) {
+        try {
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            val v = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
+            if (v is android.widget.TextView) {
+                val src = v
+                dst.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,
+                        src.textSize / act.resources.displayMetrics.scaledDensity)
+                dst.setTextColor(src.currentTextColor)
+                dst.typeface = src.typeface
+                dst.letterSpacing = src.letterSpacing
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] central text style fail: " + t)
+        }
+    }
+
+    /** Material 图标（24dp，2dp 描边）：颜色克隆 central_btn 前景色；关闭=电源 / 降噪=波浪 / 透传=耳朵 */
+    private fun buildModeIcon(act: android.app.Activity, mode: Int, px: Int): android.graphics.drawable.Drawable {
+        var iconColor = 0xFFFFFFFF.toInt()
+        try {
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            val v = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
+            if (v is android.widget.TextView) {
+                iconColor = v.currentTextColor
+            }
+        } catch (_: Throwable) { }
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.style = Paint.Style.STROKE
+        val density = act.resources.displayMetrics.density
+        p.strokeWidth = 2f * density // Material 图标 2dp 描边
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        p.color = iconColor
+        val cx = px / 2f
+        val cy = px / 2f
+        val ir = px * 0.36f
+        when (mode) {
+            MODE_OFF -> { // 电源符号
+                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
+                c.drawArc(rect, 50f, 260f, false, p)
+                c.drawLine(cx, cy - ir * 1.25f, cx, cy - ir * 0.35f, p)
+            }
+            MODE_ANC -> { // 降噪：三条水平波浪
+                for (i in -1..1) {
+                    val yy = cy + i * px * 0.16f
+                    val wv = android.graphics.Path()
+                    wv.moveTo(cx - px * 0.30f, yy)
+                    wv.cubicTo(cx - px * 0.10f, yy - px * 0.14f, cx + px * 0.10f, yy + px * 0.14f, cx + px * 0.30f, yy)
+                    c.drawPath(wv, p)
+                }
+            }
+            MODE_TRANS -> { // 透传：耳朵（双 C 弧 + 耳道圆点）
+                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
+                c.drawArc(rect, 60f, 240f, false, p)
+                val ir2 = ir * 0.5f
+                val rect2 = android.graphics.RectF(cx - ir2, cy - ir2, cx + ir2, cy + ir2)
+                c.drawArc(rect2, 90f, 180f, false, p)
+                val dot = Paint(Paint.ANTI_ALIAS_FLAG)
+                dot.style = Paint.Style.FILL
+                dot.color = iconColor
+                c.drawCircle(cx + ir * 0.10f, cy + ir * 0.14f, px * 0.05f, dot)
+            }
+        }
+        return android.graphics.drawable.BitmapDrawable(act.resources, bmp)
+    }
+
+    // ==================== 广播注册 ====================
+
+    private fun registerReceiverWhenReady(cl: ClassLoader) {
+        try {
+            val atClass = XposedHelpers.findClass("android.app.ActivityThread", cl)
+            val at = XposedHelpers.callStaticMethod(atClass, "currentActivityThread")
+            if (at != null) {
+                val app = XposedHelpers.callMethod(at, "getApplication")
+                if (app != null) {
+                    val ctx = XposedHelpers.callMethod(app, "getApplicationContext") as Context
+                    doRegister(ctx, cl)
+                    XposedBridge.log("[FastPairHook] receiver registered via currentApplication")
+                    return
+                }
+            }
+            XposedBridge.log("[FastPairHook] application not ready yet")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] direct register path failed: " + t)
+        }
+        try {
+            XposedHelpers.findAndHookMethod("android.app.Application", cl, "attach",
+                    Context::class.java,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val ctx = param.args[0] as Context
+                                doRegister(ctx, cl)
+                                XposedBridge.log("[FastPairHook] receiver registered via Application.attach")
+                            } catch (t: Throwable) {
+                                XposedBridge.log("[FastPairHook] attach register failed: " + t)
+                            }
+                        }
+                    })
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] Application.attach hook failed: " + t)
+        }
+    }
+
+    private fun doRegister(ctx: Context, cl: ClassLoader) {
+        sAppContext = ctx
+        var exportedFlag: Int
+        try {
+            exportedFlag = Context::class.java.getField("RECEIVER_EXPORTED").getInt(null)
+        } catch (_: Throwable) {
+            exportedFlag = 0x2 // 兜底
+        }
+        // 手动触发广播
+        try {
+            val filter = IntentFilter(ACTION_TRIGGER)
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    // 【数据对接·跨进程主入口】FxxkMoondrop 应用触发弹窗并传真实数据
+                    val deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME)
+                    try {
+                        val bl = intent.getStringExtra(EXTRA_BATTERY_LEFT)
+                        if (bl != null) sBatteryLeft = bl.toInt()
+                        else sBatteryLeft = sDataProvider?.getBatteryLeft() ?: -1 // alpha1.14fix3
+                        val br = intent.getStringExtra(EXTRA_BATTERY_RIGHT)
+                        if (br != null) sBatteryRight = br.toInt()
+                        else sBatteryRight = sDataProvider?.getBatteryRight() ?: -1 // alpha1.14fix3
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] battery extra parse fail: " + t)
+                    }
+                    postShow(context, cl, deviceName)
+                }
+            }
+            ctx.registerReceiver(receiver, filter, exportedFlag)
+            XposedBridge.log("[FastPairHook] trigger receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] trigger receiver fail: " + t)
+        }
+        // 蓝牙 ACL_CONNECTED 自动触发
+        try {
+            val acl = IntentFilter("android.bluetooth.device.action.ACL_CONNECTED")
+            val btReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    var name: String? = null
+                    try {
+                        @Suppress("DEPRECATION")
+                        val dev = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
+                        if (dev != null) {
+                            name = XposedHelpers.callMethod(dev, "getName") as String?
+                        }
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] get bt name fail: " + t)
+                    }
+                    // 【数据对接】设备名优先取蓝牙真实名称，未提供时回退 provider
+                    val dp = sDataProvider
+                    if (name.isNullOrEmpty() && dp != null) {
+                        name = dp.getDeviceName()
+                    }
+                    if (name.isNullOrEmpty()) {
+                        XposedBridge.log("[FastPairHook] ACL_CONNECTED skip: no device name")
+                        return
+                    }
+                    // ** alpha1.32: 事件通道——ACL 设备地址推送给应用（动态发现，零硬编码） **
+                    try {
+                        @Suppress("DEPRECATION")
+                        val dev2 = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
+                        if (dev2 != null) {
+                            val devAddr = XposedHelpers.callMethod(dev2, "getAddress") as String?
+                            if (devAddr != null && devAddr.matches(Regex("([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"))) {
+                                sendLeAddr(devAddr.uppercase())
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] acl addr push fail: " + t)
+                    }
+                    XposedBridge.log("[FastPairHook] ACL_CONNECTED -> " + name
+                            + " (deferred " + ACL_POSTSHOW_DELAY_MS + "ms for GAIA)")
+                    val fpName = name
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        val since = System.currentTimeMillis() - sLastShowMs
+                        if (since < ACL_REPEAT_GUARD_MS) {
+                            XposedBridge.log("[FastPairHook] ACL deferred skip (shown " + since + "ms ago)")
+                            return@postDelayed
+                        }
+                        postShow(context, cl, fpName)
+                    }, ACL_POSTSHOW_DELAY_MS)
+                }
+            }
+            ctx.registerReceiver(btReceiver, acl, exportedFlag)
+            XposedBridge.log("[FastPairHook] bluetooth ACL receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] bluetooth receiver fail: " + t)
+        }
+        // alpha1.20: 应用广播当前降噪模式 -> 弹窗按钮高亮
+        try {
+            val ms = IntentFilter(ACTION_MODE_STATE)
+            val modeStateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val mode = intent.getIntExtra(EXTRA_MODE, -1)
+                        if (mode < 0 || mode > 2) return
+                        sLastMode = mode
+                        XposedBridge.log("[FastPairHook] MODE_STATE received, mode=" + mode)
+                        applyModeHighlight(mode)
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] MODE_STATE handle fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(modeStateReceiver, ms, exportedFlag)
+            XposedBridge.log("[FastPairHook] mode state receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] mode state receiver fail: " + t)
+        }
+        // ** alpha1.32: 应用请求 LE 扫描 -> GMS 侧 receiver **
+        try {
+            val reqF = IntentFilter(ACTION_REQ_LE_SCAN)
+            val reqReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    XposedBridge.log("[FastPairHook] LE scan request received")
+                    handleLeScanRequest()
+                }
+            }
+            ctx.registerReceiver(reqReceiver, reqF, exportedFlag)
+            XposedBridge.log("[FastPairHook] LE scan request receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] LE scan req receiver fail: " + t)
+        }
+        // ** alpha1.34: 应用探测模块激活 -> PING/PONG **
+        try {
+            val pingF = IntentFilter(ACTION_FASTPAIR_PING)
+            val pingReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val pong = Intent(ACTION_FASTPAIR_PONG)
+                        pong.setPackage(PKG_APP)
+                        pong.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                        context.sendBroadcast(pong)
+                        XposedBridge.log("[FastPairHook] ping -> pong")
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] pong fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(pingReceiver, pingF, exportedFlag)
+            XposedBridge.log("[FastPairHook] ping receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] ping receiver fail: " + t)
+        }
+    }
+
+    // ** alpha1.32: 应用请求 -> GMS 侧 BLE 扫描发现耳机 LE 地址（ColorOS 放行 GMS，第三方应用被拦） **
+
+    /** alpha1.32b: 跨进程扫描锁——GMS 多子进程只允许一个扫描（文件锁，原子 createNewFile） */
+    private fun gmsContext(): Context? {
+        return try {
+            val app = XposedHelpers.callStaticMethod(
+                    Class.forName("android.app.ActivityThread"), "currentApplication")
+            if (app is Context) app else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun acquireScanLock(): Boolean {
+        return try {
+            val c = gmsContext() ?: return true
+            val f = File(c.filesDir, ".fxxk_le_scan_lock")
+            if (f.exists() && System.currentTimeMillis() - f.lastModified() > 15000) {
+                f.delete()
+            }
+            f.createNewFile()
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
+    private fun releaseScanLock() {
+        try {
+            val c = gmsContext() ?: return
+            File(c.filesDir, ".fxxk_le_scan_lock").delete()
+        } catch (_: Throwable) { }
+    }
+
+    private fun handleLeScanRequest() {
+        try {
+            val now = System.currentTimeMillis()
+            if (now - sLastScanReqMs < 30000) {
+                XposedBridge.log("[FastPairHook] LE scan req throttled (30s)")
+                return
+            }
+            sLastScanReqMs = now
+            val adapter = BluetoothAdapter.getDefaultAdapter()
+            if (adapter == null || !adapter.isEnabled) {
+                XposedBridge.log("[FastPairHook] LE scan skip: adapter off")
+                return
+            }
+            if (sLeScanning) return
+            sLeScanning = true
+            val sc = adapter.bluetoothLeScanner
+            if (sc == null) {
+                sLeScanning = false
+                return
+            }
+            if (!acquireScanLock()) {
+                XposedBridge.log("[FastPairHook] LE scan skip (locked by sibling process)")
+                return
+            }
+            val st = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+            val cbRef = arrayOfNulls<ScanCallback>(1)
+            cbRef[0] = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    try {
+                        if (result == null || result.device == null) return
+                        var n = result.scanRecord?.deviceName
+                        if (n == null) n = result.device.name
+                        val addr = result.device.address
+                        if (addr == null) return
+                        XposedBridge.log("[FastPairHook] LE scan result: " + addr
+                                + " name=" + (n ?: "<null>") + " rssi=" + result.rssi)
+                        var hit = false
+                        if (!n.isNullOrEmpty() && DeviceMatcher.isMoondrop(n)) {
+                            hit = true
+                        } else if (n.isNullOrEmpty()) {
+                            val pre = if (addr.length >= 12) addr.substring(0, 12).uppercase() else null
+                            if (pre != null) {
+                                for (d in adapter.bondedDevices) {
+                                    val dn = d.name
+                                    if (dn == null || !DeviceMatcher.isMoondrop(dn)) continue
+                                    val da = d.address
+                                    if (da != null && da.length >= 12
+                                            && da.substring(0, 12).uppercase() == pre) {
+                                        hit = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        if (!hit) return
+                        XposedBridge.log("[FastPairHook] LE scan hit: " + addr
+                                + " name=" + (n ?: "<null>"))
+                        try { sc.stopScan(cbRef[0]) } catch (_: Throwable) { }
+                        sLeScanning = false
+                        releaseScanLock()
+                        sendLeAddr(addr.uppercase())
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] LE scan result fail: " + t)
+                    }
+                }
+
+                override fun onScanFailed(errorCode: Int) {
+                    XposedBridge.log("[FastPairHook] LE scan failed code=" + errorCode)
+                    sLeScanning = false
+                    releaseScanLock()
+                }
+            }
+            sc.startScan(null, st, cbRef[0])
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!sLeScanning) return@postDelayed
+                try { sc.stopScan(cbRef[0]) } catch (_: Throwable) { }
+                sLeScanning = false
+                releaseScanLock()
+                XposedBridge.log("[FastPairHook] LE scan window done (no hit)")
+            }, 10000)
+            XposedBridge.log("[FastPairHook] LE scan started (GMS side)")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] handleLeScanRequest fail: " + t)
+            sLeScanning = false
+            releaseScanLock()
+        }
+    }
+
+    private fun sendLeAddr(addr: String) {
+        try {
+            if (addr == null || !addr.matches(Regex("([0-9A-F]{2}:){5}[0-9A-F]{2}"))) return
+            val now = System.currentTimeMillis()
+            if (addr == sLastPushedAddr && now - sLastPushMs < 60000) return
+            sLastPushedAddr = addr
+            sLastPushMs = now
+            val ctx = sAppContext
+            if (ctx == null) {
+                XposedBridge.log("[FastPairHook] LE addr push skip: no app context")
+                return
+            }
+            val i = Intent(ACTION_LE_ADDR_FOUND)
+            i.putExtra(EXTRA_LE_ADDR, addr)
+            i.setPackage(PKG_APP)
+            ctx.sendBroadcast(i)
+            XposedBridge.log("[FastPairHook] LE addr pushed: " + addr)
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] sendLeAddr fail: " + t)
+        }
+    }
+
+    private fun postShow(ctx: Context, cl: ClassLoader, deviceName: String?) {
+        // 【设备过滤】仅 Moondrop 品牌耳机弹窗；其他蓝牙设备连接一律不弹
+        if (!DeviceMatcher.isMoondrop(deviceName)) {
+            XposedBridge.log("[FastPairHook] postShow skip: not a Moondrop device -> " + deviceName)
+            return
+        }
+        Handler(Looper.getMainLooper()).post {
+            try {
+                showHalfSheet(ctx, cl, deviceName)
+            } catch (t: Throwable) {
+                XposedBridge.log("[FastPairHook] show failed: " + t)
+            }
+        }
+    }
+
+    // ==================== 弹窗 ====================
+
+    /** 手工构造 dtok protobuf payload（field 8 = l 设备名，field 5 = i）并启动 HalfSheetActivity */
+    @Throws(Throwable::class)
+    private fun showHalfSheet(ctx: Context, cl: ClassLoader, deviceName: String?) {
+        // 【数据对接】名称优先级：广播 extra / 蓝牙真实名 > provider > 无数据不弹窗
+        var name = deviceName
+        val dp = sDataProvider
+        if (name.isNullOrEmpty() && dp != null) {
+            name = dp.getDeviceName()
+        }
+        if (name.isNullOrEmpty()) {
+            XposedBridge.log("[FastPairHook] showHalfSheet skip: no device name")
+            return
+        }
+        sLastDeviceName = name
+        // 电量：触发进程静态值（由广播 extra/provider 写入）；无数据保持 -1，渲染端不显示
+        sDataProvider?.let {
+            if (sBatteryLeft < 0) sBatteryLeft = it.getBatteryLeft()
+            if (sBatteryRight < 0) sBatteryRight = it.getBatteryRight()
+        }
+        val icon = readIconBytes()
+        val payload = buildProtoPayload(name, icon)
+        XposedBridge.log("[FastPairHook] payload icon bytes=" + (icon?.size ?: 0))
+        XposedBridge.log("[FastPairHook] manual payload len=" + payload.size + " name=" + name)
+
+        val intent = Intent()
+        intent.setClassName(ctx, "com.google.android.gms.nearby.discovery.fastpair.HalfSheetActivity")
+        intent.putExtra("com.google.android.gms.nearby.discovery.fastpair.EXTRA_HALF_SHEET_TYPE", "SPOT")
+        intent.putExtra("com.google.android.gms.nearby.discovery.HALF_SHEET", payload)
+        intent.putExtra("com.google.android.gms.nearby.discovery.EXTRA_SPOT_FRAGMENT_STATE", 1) // FAST_PAIR_PROMPT
+        intent.putExtra(EXTRA_BATTERY_LEFT, sBatteryLeft)   // 电量经 Intent 传给渲染进程
+        intent.putExtra(EXTRA_BATTERY_RIGHT, sBatteryRight)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        XposedBridge.log("[FastPairHook] starting HalfSheetActivity...")
+        ctx.startActivity(intent)
+        sLastShowMs = System.currentTimeMillis()
+        XposedBridge.log("[FastPairHook] startActivity called")
+    }
+
+    /** 手工构造 dtok protobuf 字节：field 8 (l=设备名)、field 5 (i)、field 6 (h=图片 bytes) */
+    private fun buildProtoPayload(name: String, icon: ByteArray?): ByteArray {
+        return try {
+            val str = name.toByteArray(Charsets.UTF_8)
+            val bos = ByteArrayOutputStream()
+            writeTagAndBytes(bos, 8, str)  // l: 设备名/标题
+            writeTagAndBytes(bos, 5, str)  // i: 副标题
+            if (icon != null && icon.isNotEmpty()) {
+                writeTagAndBytes(bos, 6, icon)  // h: 图标字节（field 6 -> dtok.h）
+            }
+            bos.toByteArray()
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] buildProtoPayload fail: " + t)
+            ByteArray(0)
+        }
+    }
+
+    private fun writeTagAndBytes(bos: ByteArrayOutputStream, fieldNum: Int, data: ByteArray) {
+        writeVarint(bos, (fieldNum shl 3) or 2)
+        writeVarint(bos, data.size)
+        bos.write(data, 0, data.size)
+    }
+
+    /** 读取自定义图标字节（Download/moondrop_icon.png） */
+    private fun readIconBytes(): ByteArray? {
+        try {
+            val f = File(ICON_PATH)
+            if (f.exists() && f.length() > 0 && f.length() < 1024 * 1024) {
+                val fis = java.io.FileInputStream(f)
+                val buf = ByteArray(f.length().toInt())
+                var off = 0
+                while (off < buf.size) {
+                    val n = fis.read(buf, off, buf.size - off)
+                    if (n <= 0) break
+                    off += n
+                }
+                fis.close()
+                XposedBridge.log("[FastPairHook] icon bytes loaded: " + buf.size)
+                return buf
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] readIconBytes fail: " + t)
+        }
+        return null
+    }
+
+    private fun writeVarint(bos: ByteArrayOutputStream, v: Int) {
+        var value = v
+        while ((value and -0x80) != 0) {
+            bos.write((value and 0x7F) or 0x80)
+            value = value ushr 7
+        }
+        bos.write(value)
+    }
+
+    companion object {
+        const val PKG_GMS = "com.google.android.gms"
+        const val PKG_APP = "com.fxxkmoondrop.secret"
+        const val ACTION_TRIGGER = "com.fxxkmoondrop.secret.FASTPAIR_TRIGGER"
+        const val EXTRA_DEVICE_NAME = "device_name"
+        /** 首选自定义图标路径（放到 Download 目录即可被读取） */
+        const val ICON_PATH = "/data/user/0/com.google.android.gms/files/moondrop_icon.png"
+        const val MOD_ASSET_ICON = "ga2_icon.png" // alpha1.14fix4: 内置默认图标
+
+        /** v1.0: 三模式按钮 -> FxxkMoondrop 应用（GAIA 降噪控制） */
+        const val ACTION_MODE_CHANGED = "com.fxxkmoondrop.secret.FASTPAIR_MODE_CHANGED"
+        const val EXTRA_MODE = "mode"
+        /** alpha1.20: 弹窗按钮高亮双向同步 */
+        const val ACTION_MODE_STATE = "com.fxxkmoondrop.secret.FASTPAIR_MODE_STATE"
+        const val ACTION_MODE_REQUEST = "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST"
+        @JvmField @Volatile
+        var sLastMode = -1 // 最近一次收到的模式状态（-1=未知/不高亮）
+
+        /** 【对接广播】弹窗点击"确定"后发出（extra: device_name），应用监听后执行真实连接 */
+        const val ACTION_CONNECTED = "com.fxxkmoondrop.secret.FASTPAIR_CONNECTED"
+        // alpha2.7: GMS HalfSheet 弹窗关闭回调（模拟连接弹窗消失后应用恢复模拟状态）
+        const val ACTION_FP_SHEET_CLOSED = "com.fxxkmoondrop.secret.FASTPAIR_SHEET_CLOSED"
+        const val ACTION_LE_ADDR_FOUND = "com.fxxkmoondrop.secret.ACTION_LE_ADDR_FOUND"
+        const val ACTION_REQ_LE_SCAN = "com.fxxkmoondrop.secret.ACTION_REQ_LE_SCAN"
+        /** alpha1.34: 应用探测本模块是否激活（PING -> PONG 回显） */
+        const val ACTION_FASTPAIR_PING = "com.fxxkmoondrop.secret.FASTPAIR_PING"
+        const val ACTION_FASTPAIR_PONG = "com.fxxkmoondrop.secret.FASTPAIR_PONG"
+        const val EXTRA_LE_ADDR = "addr"
+        /** 【对接广播】TRIGGER 的 extra：左耳电量（0-100，-1/缺失=不显示） */
+        const val EXTRA_BATTERY_LEFT = "battery_left"
+        /** 【对接广播】TRIGGER 的 extra：右耳电量（0-100，-1/缺失=不显示） */
+        const val EXTRA_BATTERY_RIGHT = "battery_right"
+        /** 弹窗关闭延迟：UI 呈现"正在连接…"的时长 */
+        const val CONNECT_DELAY_MS = 1000L
+
+        @JvmField @Volatile
+        var sDataProvider: FastPairDataProvider? = null
+
+        /** 【合入点】注入真实数据源（同进程）。跨进程场景请改用 ACTION_TRIGGER 广播传数据。 */
+        @JvmStatic
+        fun setDataProvider(provider: FastPairDataProvider?) {
+            sDataProvider = provider
+            XposedBridge.log("[FastPairHook] data provider set: " + (provider != null))
+        }
+
+        /*** 当前 HalfSheet Activity 引用（用于接管连接回报） */
+        @JvmField @Volatile
+        var sHalfSheetActivity: android.app.Activity? = null
+        /** alpha1.14fix2: ACL 自动弹窗延迟——等 GAIA 连接+电量就绪，ACL 仅作兜底 */
+        const val ACL_POSTSHOW_DELAY_MS = 40000L
+        /** 弹窗重复保护：距上次显示不足该时长则跳过兜底弹窗 */
+        const val ACL_REPEAT_GUARD_MS = 60000L
+        @JvmField @Volatile
+        var sLastShowMs = 0L
+        /** 最近一次弹窗的设备名（由广播 extra/provider/蓝牙真实名提供；null=未触发） */
+        @JvmField @Volatile
+        var sLastDeviceName: String? = null
+        /** 电量渲染值：经 Intent 从触发进程传入渲染进程；-1=未知不显示 */
+        @JvmField @Volatile
+        var sBatteryLeft = -1
+        @JvmField @Volatile
+        var sBatteryRight = -1
+        /*** central_btn 资源 id（运行时解析后缓存） */
+        @JvmField @Volatile
+        var sCentralBtnId = 0
+
+        @JvmField @Volatile
+        var sAppContext: Context? = null
+        @JvmField @Volatile
+        var sModCtx: Context? = null // alpha1.14fix4: 模块 APK context（读内置 assets）
+        @JvmField @Volatile
+        var sGmsCl: ClassLoader? = null
+
+        const val MODE_OFF = 0
+        const val MODE_ANC = 1
+        const val MODE_TRANS = 2
+
+        @JvmField @Volatile
+        var sLeScanning = false
+        @JvmField @Volatile
+        var sLastScanReqMs = 0L
+        @JvmField @Volatile
+        var sLastPushedAddr: String? = null
+        @JvmField @Volatile
+        var sLastPushMs = 0L
+    }
+}

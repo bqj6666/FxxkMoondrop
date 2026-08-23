@@ -1,0 +1,55 @@
+# 签名密钥与凭据（绝不提交）
+app.keystore
+*.jks
+*.keystore
+*.idsig
+
+# 构建产物
+build/
+*.apk
+!res/**/*.png
+base*.apk
+v*.apk
+v*-aligned.apk
+v*-signed.apk
+classes.dex
+classes/
+classes_build/
+dex_out/
+lsposed_stub/
+manifest_axml.bin
+
+# 反编译/临时目录
+decoded/
+mf_tmp/
+versions/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+# —— Gradle（开源工程化 2026-08-23）——
+.gradle/
+local.properties
+app/build/
+tools/qemu/qroot/
+tools/qemu/aapt2
+working/
+
+# —— 发布到 GitHub 排除（2026-08-23）——
+/build_history/
+/backup/
+/backup_kt_migrate_b1/
+/backup_kt_migrate_b2_src/
+/libs/
+/tools/
+/archive_legacy_scripts/
+/assets/
+*.bak
+*.bak1
+*.bak2
+__pycache__/
+*.pyc
+*.bak*
+src/**/*.bak*
+*.legacy_bak
+*_legacy_bak*

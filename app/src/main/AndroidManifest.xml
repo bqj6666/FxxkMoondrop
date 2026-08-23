@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FxxkMoondrop M3 构建链文本 manifest（由二进制 AXML 完整转写，组件/权限/元数据不增不减） -->
+<!-- 版本号参数化：alpha2.12 / 228，由 build_m3.py 替换 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fxxkmoondrop.secret"
+    android:versionCode="228"
+    android:versionName="alpha2.12">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <application
+        android:label="Fxxkmoondrop"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.FxxkMoondrop"
+        android:allowBackup="false">
+
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".PermissionActivity" android:exported="false" />
+        <activity android:name=".AboutActivity" android:exported="false" />
+
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="FxxkMoondrop FastPair Popup" />
+        <meta-data android:name="xposedminversion" android:value="93" />
+        <meta-data android:name="xposedscope" android:value="com.google.android.gms;com.android.settings" />
+
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".PopupActivity" android:exported="false" />
+
+        <service
+            android:name=".HeadsetDetectService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="com.fxxkmoondrop.secret.BT_EVENT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".AliveReceiver" android:exported="false" />
+    </application>
+</manifest>
