@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.18**（versionCode 235） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.19**（versionCode 236） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair 风格卡片**（设备名 + 电量 + 降噪模式），并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**（单一 APK 一体打包），同时内置可直接运行的应用主体。
 
@@ -20,6 +20,12 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 - **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP（含 Material 隐私声明弹窗）
 - **Root 强力保活**、开机自启、后台隐藏（可选开关）
+
+## 软件截图
+
+| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 |
+|---|---|---|---|
+| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) |
 
 ## 技术栈
 
@@ -114,7 +120,8 @@ alpha_src/
 
 ## 版本历史
 
-- **alpha2.18**（当前）：修复"耳机已断开仍显示已连接"的假连接问题（陈旧缓存作废 / 双地址自我反馈防护）
+- **alpha2.19**（当前）：修复降噪控制“时好时坏”——能力探测标志永不重置导致 `ancPath` 卡死在 -1，现改为断连与每次新 GATT 会话均重置并超时自愈重发
+- **alpha2.18**：修复"耳机已断开仍显示已连接"的假连接问题（陈旧缓存作废 / 双地址自我反馈防护）
 - **alpha2.17**：修复 GA2（DUAL）连接不上——按名称扫描真实 LE 地址，实现自愈闭环
 - **alpha2.16**：接入 9ECA0000 完整协议客户端（音源切换 / EQ / MIC / SN），全链路运行日志
 - **alpha2.15**：跨型号适配 + 官方 App 逆向证据补充

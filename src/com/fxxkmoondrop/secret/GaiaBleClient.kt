@@ -884,6 +884,10 @@ class GaiaBleClient private constructor() {
         srcInfoChar = null
         srcClient?.clear()
         srcClient = null
+        // alpha2.19: 断开后重置能力探测标志与 ANC 路径，使每次重连都重新执行能力探测
+        // （修复 ancPath 永远停留在 -1 导致降噪控制"时好时坏"、切后台后失联）
+        featureProbeSent = false
+        ancPath = GaiaCommands.ANC_PATH_UNKNOWN
     }
 
     /** 请求左右耳电量 */
@@ -1133,6 +1137,8 @@ class GaiaBleClient private constructor() {
                     return
                 }
                 connected = true
+                // alpha2.19: 每次成功建立新 GATT 会话都重新执行能力探测（防止复用旧状态跳过探测）
+                featureProbeSent = false
                 // alpha1.18: 记住成功连接的地址（双耳双地址轮换后锁定）
                 val okAddr = deviceAddress
                 if (okAddr != null) {
@@ -1154,6 +1160,15 @@ class GaiaBleClient private constructor() {
                         featureProbeSent = true
                         writeCommand(FEATURE_BASIC, CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
                         writeCommand(FEATURE_BASIC, CMD_GET_VARIANT, ByteArray(0))
+                        // alpha2.19: 探测超时自愈——若 2 秒内 ancPath 仍未知（响应丢失），
+                        // 说明设备未回复能力位图，主动重发一次，避免 ancPath 卡死在 -1
+                        handler.postDelayed({
+                            if (connected && gatt != null && ancPath == GaiaCommands.ANC_PATH_UNKNOWN) {
+                                Log.w(TAG, "capability probe timeout, re-send GET_SUPPORTED_FEATURES")
+                                writeCommand(FEATURE_BASIC, CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+                                writeCommand(FEATURE_BASIC, CMD_GET_VARIANT, ByteArray(0))
+                            }
+                        }, 2000)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "capability probe failed", e)
