@@ -11,8 +11,8 @@ android {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 26
         targetSdk = 36
-        versionCode = 236
-        versionName = "alpha2.19"
+        versionCode = 237
+        versionName = "alpha2.20"
     }
 
     signingConfigs {

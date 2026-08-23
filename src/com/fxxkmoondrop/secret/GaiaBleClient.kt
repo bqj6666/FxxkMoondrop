@@ -792,8 +792,10 @@ class GaiaBleClient private constructor() {
     @Synchronized
     private fun buildCandidates(bondedAddr: String?) {
         val set = LinkedHashSet<String>()
-        if (bondedAddr != null) set.add(bondedAddr.uppercase())
+        // alpha2.20: 已学习 LE 地址优先于 bonded 主地址；GA2 双模机开盖可秒连 GAIA 通道，
+        // 避免先拿 TRANSPORT_LE 连 BR 主地址白等 GATT_PENDING_TIMEOUT(12s) 再轮换。
         if (cachedLeAddress != null) set.add(cachedLeAddress!!.uppercase())
+        if (bondedAddr != null) set.add(bondedAddr.uppercase())
         for (r in scanHits) {
             if (r != null && r.device != null) set.add(r.device.address.uppercase())
         }
