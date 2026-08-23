@@ -41,14 +41,20 @@ jobs:
           mkdir -p /workspace/sdk/build-tools/34.0.0
           ln -sf "$ANDROID_HOME/build-tools/34.0.0/apksigner" /workspace/sdk/build-tools/34.0.0/apksigner
 
-      - name: 还原签名密钥（需仓库 Secrets：KEYSTORE_B64 + FXXK_KEYPASS）
-        if: ${{ secrets.KEYSTORE_B64 != '' }}
-        run: |
-          echo "$SECRET_KEYSTORE_B64" | base64 -d > app2.keystore
+      - name: 还原签名密钥（仓库 Secrets：KEYSTORE_B64 + FXXK_KEYPASS，未配置则跳过）
         env:
-          SECRET_KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > app2.keystore
+            echo "已还原 app2.keystore"
+          else
+            echo "未配置 KEYSTORE_B64，跳过（构建将降级为 Debug）"
+          fi
 
       - name: Gradle 构建（有密钥=Release+EDF 注入；无密钥=Debug 降级）
+        env:
+          FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
         run: |
           chmod +x gradlew
           if [ -n "$FXXK_KEYPASS" ]; then
@@ -56,8 +62,6 @@ jobs:
           else
             ./gradlew assembleDebug
           fi
-        env:
-          FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
