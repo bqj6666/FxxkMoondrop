@@ -31,17 +31,16 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: 安装 Android SDK 组件（platform-34 / build-tools 34.0.0）
-        env:
-          # 显式指定 SDK 根目录，保证 sdkmanager 与构建/postEdf 用同一路径
-          ANDROID_HOME: ${{ github.workspace }}/android-sdk
-          ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+      - name: 接受 SDK 许可证 + 安装组件（platform-34 / build-tools 34.0.0）
         run: |
-          export ANDROID_HOME="${{ github.workspace }}/android-sdk"
-          export ANDROID_SDK_ROOT="${{ github.workspace }}/android-sdk"
-          mkdir -p "$ANDROID_HOME"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
+          # 使用 runner 预装 SDK 根，先强制接受所有许可证，再安装组件
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "SDK_ROOT=$SDK_ROOT"
+          yes | sdkmanager --licenses --sdk_root="$SDK_ROOT" >/dev/null 2>&1
+          yes | sdkmanager --licenses --sdk_root="$SDK_ROOT" || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" --sdk_root="$SDK_ROOT" || true
+          ls -la "$SDK_ROOT/build-tools/34.0.0/apksigner" && echo "apksigner OK: $SDK_ROOT/build-tools/34.0.0/apksigner"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
 
       - name: CI 环境适配（移除本机 ARM64 qemu aapt2 override）
         run: sed -i '/aapt2FromMavenOverride/d' gradle.properties
@@ -59,8 +58,6 @@ jobs:
 
       - name: Gradle 构建（有密钥=Release+EDF 注入；无密钥=Debug 降级）
         env:
-          ANDROID_HOME: ${{ github.workspace }}/android-sdk
-          ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
           FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
         run: |
           chmod +x gradlew
