@@ -26,6 +26,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.init(this) // alpha2.16: 运行日志（无 Root 可收集）
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         if (savedInstanceState != null) curTab = savedInstanceState.getInt(KEY_TAB, 1)
 

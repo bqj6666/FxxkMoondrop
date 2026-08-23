@@ -68,21 +68,16 @@ class AncBridge {
         }
 
         /** 设置 ANC 模式（UI：0=关闭 1=降噪 2=透传 3=抗风 4=自适应 5=直播）
-         *  alpha1.8: GA2 走 AudioCuration(V1)，设备模式枚举与 UI 不同（LSPosed 时期 mapToAncV1 实证）：
-         *  UI 0->1(关闭) 1->2(降噪) 2->4(透传) 3->3(抗风) 4->3(自适应) 5->忽略 */
+         *  alpha2.14: UI 模式直传 GaiaBleClient，由能力探测结果选择协议路径
+         *  （AudioCuration / ANC V2 / ANC V1），设备枚举映射在 GaiaCommands.ancDevFromUi */
         @JvmStatic
         fun setAncMode(mode: Int) {
             if (mode < 0 || mode > 5) return
-            val dev = mapToAncV1(mode)
-            if (dev < 0) {
-                Log.d(TAG, "setAncMode ignore ui mode $mode")
-                return
-            }
-            Log.d(TAG, "setAncMode ui=$mode dev=$dev")
+            Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
             notifyAncMode(mode)
-            GaiaBleClient.getInstance().setAncMode(dev, object : GaiaBleClient.AncControlCallback {
+            GaiaBleClient.getInstance().setAncMode(mode, object : GaiaBleClient.AncControlCallback {
                 override fun onAncModeResult(m: Int) {
                     notifyAncMode(m)
                 }
@@ -91,31 +86,6 @@ class AncBridge {
                     Log.w(TAG, "setAncMode error: $message")
                 }
             })
-        }
-
-        /** UI mode -> AudioCuration 设备 mode（LSPosed mapToAncV1 实证） */
-        @JvmStatic
-        fun mapToAncV1(ui: Int): Int {
-            return when (ui) {
-                0 -> 1   // 关闭
-                1 -> 2   // 降噪
-                2 -> 4   // 透传
-                3 -> 3   // 抗风
-                4 -> 3   // 自适应
-                else -> -1 // 直播等不支持
-            }
-        }
-
-        /** AudioCuration 设备 mode -> UI mode（用于设备上报/响应） */
-        @JvmStatic
-        fun unmapAncV1(dev: Int): Int {
-            return when (dev) {
-                1 -> 0   // 关闭
-                2 -> 1   // 降噪
-                4 -> 2   // 透传
-                3 -> 3   // 抗风/自适应
-                else -> -1
-            }
         }
 
         /** 查询当前 ANC 模式 */

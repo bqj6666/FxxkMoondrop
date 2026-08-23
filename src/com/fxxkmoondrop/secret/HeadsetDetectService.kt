@@ -115,6 +115,8 @@ class HeadsetDetectService : Service() {
         super.onCreate()
         RUNNING = true
         Log.i(TAG, "service created (multi-path detect)")
+        AppLog.init(this)
+        AppLog.i(TAG, "HeadsetDetectService created (multi-path detect)")
         AncBridge.bind(this) // alpha1.20: 绑定广播 Context（模式状态同步通道）
         GaiaBleClient.getInstance().init(this) // alpha1.32: 注册 LE 地址 receiver + 无缓存时请求发现
 
@@ -161,6 +163,7 @@ class HeadsetDetectService : Service() {
         if (intent != null && BootReceiver.ACTION_BT_EVENT == intent.action) {
             val evt = intent.getStringExtra("evt")
             Log.i(TAG, "BT_EVENT: $evt")
+            AppLog.i(TAG, "BT_EVENT: " + evt)
             if (evt == "connected" || evt == "disconnected") {
                 // 立即触发一次轮询（连接/断开事件已经由 hook 处理弹窗，轮询增量同步）
                 pollConnected()
@@ -210,6 +213,7 @@ class HeadsetDetectService : Service() {
     private val gaiaCallback = object : GaiaBleClient.Callback {
         override fun onConnected(address: String) {
             Log.i(TAG, "GAIA connected: $address")
+            AppLog.i(TAG, "GAIA connected: " + address + " protocol=" + GaiaBleClient.getInstance().activeProtocol())
             lastGaiaFetchMs = 0
             // alpha1.4: 延迟等 notification descriptor 写完后请求电量/降噪模式
             handler.postDelayed({
@@ -220,6 +224,7 @@ class HeadsetDetectService : Service() {
 
         override fun onDisconnected(address: String) {
             Log.i(TAG, "GAIA disconnected: $address")
+            AppLog.w(TAG, "GAIA disconnected: " + address)
         }
 
         override fun onBatteryLevel(batteryId: Int, level: Int) {
@@ -303,12 +308,22 @@ class HeadsetDetectService : Service() {
                 val nm = key.substring(idx + 1)
                 PopupGate.tryShowConnectedDeferred(this, addr, nm)
                 hasMoondrop = true
+                // alpha2.18: 同族设备（前缀12位相同）GAIA 已连时不重复发起（双地址自我反馈防护）
+                val gaia = GaiaBleClient.getInstance()
+                if (gaia.isConnected()) {
+                    val cur = gaia.deviceAddress
+                    if (cur != null && cur.length >= 12 && addr.length >= 12 &&
+                            cur.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)) {
+                        AppLog.i(TAG, "gaia already connected to " + cur + ", skip reconnect (" + addr + ")")
+                        continue
+                    }
+                }
                 // alpha1.0: 直连 GAIA BLE 读左右耳电量 / ANC（不再依赖官方 App）
                 // alpha1.4: 优先解析 LE 地址（GAIA over BLE），避免连 BR/EDR 地址失败
-                val gaia = GaiaBleClient.getInstance()
                 var gaiaAddr: String? = null
                 try { gaiaAddr = GaiaBleClient.resolveLeAddress(adapter, adapter.getRemoteDevice(addr)) } catch (_: Exception) { }
                 if (gaiaAddr == null) gaiaAddr = addr
+                AppLog.i(TAG, "detect: headset " + nm + " " + addr + " -> gaia conn " + gaiaAddr)
                 // alpha1.4: 已连接/等待连接中不重复发起（地址比较在 LE 缓存下会误判）
                 if (!gaia.isConnected() && gaia.deviceAddress == null) {
                     gaia.setCallback(gaiaCallback)
@@ -326,6 +341,7 @@ class HeadsetDetectService : Service() {
                     val addr = key.substring(0, idx)
                     val nm = key.substring(idx + 1)
                     PopupGate.tryShowDisconnected(this, addr, nm)
+                    AppLog.w(TAG, "headset disconnected: " + nm + " " + addr)
                     // alpha1.0: 断开 GAIA 直连
                     GaiaBleClient.getInstance().disconnect()
                     BatteryStore.clearGaia(addr)

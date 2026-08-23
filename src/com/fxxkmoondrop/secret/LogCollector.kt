@@ -41,19 +41,21 @@ class LogCollector {
         @JvmStatic
         fun collect(ctx: Context): String {
             probeCtx = ctx
+            AppLog.init(ctx) // alpha2.16: 确保运行日志目录就绪
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val baseName = ZIP_PREFIX + stamp
             try {
                 // 1) 组装 5 条分类日志
                 val names = arrayOf(
                         "01_系统信息.txt", "02_应用与设置.txt", "03_蓝牙信息.txt",
-                        "04_运行环境.txt", "05_logcat.txt")
+                        "04_运行环境.txt", "05_logcat.txt", "06_运行日志.txt")
                 val contents = arrayOf(
                         buildSystemInfo(ctx, stamp),
                         buildAppInfo(ctx),
                         buildBleInfo(),
                         buildEnvInfo(),
-                        buildLogcat())
+                        buildLogcat(),
+                        buildRuntimeLog())
 
                 // 2) 先写入应用私有目录 files/logs/（打包 zip 的临时位置）
                 var base = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
@@ -214,6 +216,18 @@ class LogCollector {
             } catch (e: Exception) {
                 sb.append("环境探测失败: ").append(e).append('\n')
             }
+            sb.append("==== 结束 ====\n")
+            return sb.toString()
+        }
+
+        // ── 06 应用内运行日志（alpha2.16：BLE/协议全链路，无 Root 也可收集）──
+        private fun buildRuntimeLog(): String {
+            val sb = StringBuilder()
+            sb.append("==== 应用内运行日志 (AppLog) ====\n")
+            val fp = AppLog.filePath()
+            sb.append("文件: ").append(fp ?: "(未初始化/不可用)").append('\n')
+            // alpha2.16.1: 导出文件全文 + 内存增量（进程重启后历史不丢）
+            sb.append(AppLog.dumpAll())
             sb.append("==== 结束 ====\n")
             return sb.toString()
         }

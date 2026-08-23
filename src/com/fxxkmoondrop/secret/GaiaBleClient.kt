@@ -60,9 +60,21 @@ class GaiaBleClient private constructor() {
     private var srcCmdChar: BluetoothGattCharacteristic? = null
     private var srcRespChar: BluetoothGattCharacteristic? = null
     private var srcNotifyChar: BluetoothGattCharacteristic? = null
+    private var srcCapChar: BluetoothGattCharacteristic? = null
+    private var srcInfoChar: BluetoothGattCharacteristic? = null
+    private var srcClient: BleSourceSwitchClient? = null
     var deviceAddress: String? = null
     private var connected = false
     private var ancCallback: AncControlCallback? = null
+
+    /** alpha2.14: ANC 协议路径（feature id），能力探测后确定；-1=未探测/未知 */
+    @Volatile private var ancPath = GaiaCommands.ANC_PATH_UNKNOWN
+
+    /** alpha2.14: 能力探测只在每次成功连接后发送一次（防重复） */
+    @Volatile private var featureProbeSent = false
+
+    /** alpha2.14: 设备型号/版本字符串（GET_VARIANT / GET_APP_VERSION 响应） */
+    @Volatile private var deviceInfo = ""
     private val handler = Handler(Looper.getMainLooper())
 
     // alpha1.4: BLE 扫描解析 LE 地址（独立 LE 身份地址设备，bonded 列表只有 BR/EDR 地址）
@@ -171,8 +183,10 @@ class GaiaBleClient private constructor() {
         val UUID_DATA = UUID.fromString("00001103-d102-11e1-9b23-00025b00a5a5")
         val UUID_CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val GAIA_VENDOR = 0x1D
+        const val FEATURE_BASIC = 0x00
         const val FEATURE_BATTERY = 0x0D
         const val FEATURE_ANC_V2 = 0x20
+        const val FEATURE_ANC_V1 = 0x02
         const val F_AUDIO_CURATION = 0x08
         const val CMD_AC_GET_MODE = 0x03
         const val CMD_AC_SET_MODE = 0x04
@@ -182,6 +196,11 @@ class GaiaBleClient private constructor() {
         const val CMD_GET_BATTERY_LEVELS = 0x01
         const val CMD_GET_CURRENT_MODE = 0x03
         const val CMD_SET_CURRENT_MODE = 0x04
+        const val CMD_GET_SUPPORTED_FEATURES = 0x01
+        const val CMD_GET_VARIANT = 0x04
+        const val CMD_GET_APP_VERSION = 0x05
+        const val CMD_ANC1_GET_ANC_STATE = 0x01
+        const val CMD_ANC1_SET_ANC_STATE = 0x02
         const val BATTERY_LEFT = 1
         const val BATTERY_RIGHT = 2
         const val BATTERY_CASE = 3
@@ -220,13 +239,12 @@ class GaiaBleClient private constructor() {
                     try {
                         val rooted = EnvProbe.isRooted()
                         val hookOk = EnvProbe.isFastPairHookActive(context)
-                        if (rooted || hookOk) {
-                            Log.d(TAG, "env: root=" + rooted + " module=" + hookOk +
-                                    " -> GMS bridge (requestRemoteScan)")
+                        Log.d(TAG, "env: root=" + rooted + " module=" + hookOk)
+                        if (hookOk) {
+                            AppLog.i(TAG, "env: fastpair hook alive -> GMS bridge scan")
                             requestRemoteScan("boot-no-cache")
                         } else {
-                            Log.d(TAG, "clean env: root=" + rooted + " module=" + hookOk +
-                                    " -> backup self-scan")
+                            AppLog.i(TAG, "env: hook not reachable -> app self-scan fallback")
                             handler.postDelayed({ startGenericScan() }, 800)
                         }
                     } catch (t: Throwable) {
@@ -263,6 +281,7 @@ class GaiaBleClient private constructor() {
             i.putExtra("reason", reason)
             ctx.sendBroadcast(i)
             Log.d(TAG, "LE scan requested -> GMS side: " + reason)
+            AppLog.i(TAG, "LE scan requested -> GMS side: " + reason)
         } catch (t: Throwable) {
             Log.e(TAG, "requestRemoteScan failed", t)
         }
@@ -324,6 +343,7 @@ class GaiaBleClient private constructor() {
     @Synchronized
     fun connect(ctx: Context, address: String?): Boolean {
         if (address == null) return false
+        AppLog.i(TAG, "connect() addr=" + address + " cachedLe=" + cachedLeAddress)
         simConnected = false // 真实连接接管
         if (context == null) context = ctx.applicationContext
         registerLeAddrReceiver() // alpha1.32: 兜底注册（幂等）
@@ -413,9 +433,15 @@ class GaiaBleClient private constructor() {
                 }
             }
             deviceAddress = addr
+            // alpha2.17: DUAL 设备 bonded 无独立 LE 条目 -> 启动按名称扫描发现真实 LE 地址（自愈闭环）
+            if (cachedLeAddress == null && resolved == null && !scanning) {
+                Log.d(TAG, "no LE addr known, start name scan for " + (device.name ?: address))
+                handler.removeCallbacks(scanTimeout)
+                startScanForLe(device)
+            }
             gattPendingSince = System.currentTimeMillis()
             if (Build.VERSION.SDK_INT >= 23) {
-                gatt = device.connectGatt(context, true, gattCallback, transportFor(device))
+                gatt = device.connectGatt(context, false, gattCallback, transportFor(device))
             } else {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
@@ -425,6 +451,7 @@ class GaiaBleClient private constructor() {
             return gatt != null
         } catch (e: SecurityException) {
             Log.e(TAG, "no BLUETOOTH_CONNECT permission", e)
+            AppLog.e(TAG, "connect SecurityException(no BLUETOOTH_CONNECT): " + e)
             callback?.onError("缺少蓝牙权限")
             return false
         } catch (e: Exception) {
@@ -453,6 +480,7 @@ class GaiaBleClient private constructor() {
                         if (n == null) n = result.device.name
                         val addr = result.device.address
                         Log.d(TAG, "scan result: " + addr + " name=" + n)
+                        AppLog.d("Scan", "hit " + addr + " name=" + n + " rssi=" + result.rssi)
                         var match = false
                         if (n != null && targetName != null) {
                             match = n == targetName ||
@@ -476,7 +504,7 @@ class GaiaBleClient private constructor() {
                                     Log.d(TAG, "LE address cached: " + addr)
                                 }
                             } catch (_: Exception) { }
-                            doConnectLe(addr)
+                            doConnectLe(result)
                         }
                     }
                 }
@@ -493,9 +521,15 @@ class GaiaBleClient private constructor() {
             return true
         } catch (e: SecurityException) {
             Log.e(TAG, "scan permission denied", e)
+            scanning = false
+            scanCallback = null
+            leScanner = null
             return false
         } catch (e: Exception) {
             Log.e(TAG, "scan start failed", e)
+            scanning = false
+            scanCallback = null
+            leScanner = null
             return false
         }
     }
@@ -679,7 +713,7 @@ class GaiaBleClient private constructor() {
             val leAddress = device.address
             disconnectInternal()
             if (Build.VERSION.SDK_INT >= 23) {
-                gatt = device.connectGatt(context, true, gattCallback, transportFor(device))
+                gatt = device.connectGatt(context, false, gattCallback, transportFor(device))
             } else {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
@@ -704,8 +738,9 @@ class GaiaBleClient private constructor() {
             val adapter = BluetoothAdapter.getDefaultAdapter()
             if (adapter == null) return
             val device = adapter.getRemoteDevice(leAddress)
+            // alpha2.17: direct connect（auto=false），已知地址立即直连
             if (Build.VERSION.SDK_INT >= 23) {
-                gatt = device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+                gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
             } else {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
@@ -733,7 +768,7 @@ class GaiaBleClient private constructor() {
             if (adapter == null) return
             val device = adapter.getRemoteDevice(addr)
             if (Build.VERSION.SDK_INT >= 23) {
-                gatt = device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+                gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
             } else {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
@@ -845,6 +880,10 @@ class GaiaBleClient private constructor() {
         srcCmdChar = null
         srcRespChar = null
         srcNotifyChar = null
+        srcCapChar = null
+        srcInfoChar = null
+        srcClient?.clear()
+        srcClient = null
     }
 
     /** 请求左右耳电量 */
@@ -864,21 +903,40 @@ class GaiaBleClient private constructor() {
             cb?.onAncModeResult(if (m >= 0) m else 1)
             return
         }
-        // alpha1.8: GA2 走 AudioCuration(V1)：feature=0x08, GET_CURRENT_MODE=0x03（设备通常不回，无害）
-        writeCommand(F_AUDIO_CURATION, CMD_AC_GET_MODE, ByteArray(0))
+        // alpha2.14: 按能力探测结果选择 ANC 查询路径（未知时回退 AudioCuration，兼容 GA2）
+        when (ancPath) {
+            GaiaCommands.ANC_PATH_ANC_V2 ->
+                writeCommand(FEATURE_ANC_V2, CMD_GET_CURRENT_MODE, ByteArray(0))
+            GaiaCommands.ANC_PATH_ANC_V1 ->
+                writeCommand(FEATURE_ANC_V1, CMD_ANC1_GET_ANC_STATE, ByteArray(0))
+            else -> writeCommand(F_AUDIO_CURATION, CMD_AC_GET_MODE, ByteArray(0))
+        }
     }
 
-    /** 设置 ANC 模式（V2）：0=关闭 1=降噪 2=透传 */
+    /** 设置 ANC 模式（入参为 UI 模式：0=关闭 1=降噪 2=透传 3=抗风 4=自适应）
+     *  alpha2.14: 按能力探测结果映射到对应协议路径（AudioCuration / ANC V2 / ANC V1） */
     fun setAncMode(mode: Int, cb: AncControlCallback?) {
         this.ancCallback = cb
         if (simConnected) {
-            cb?.onAncModeResult(AncBridge.unmapAncV1(mode)) // 模拟：映射回 UI mode（防显示错乱）
+            cb?.onAncModeResult(mode) // 模拟链路：直接回显 UI 模式
             return
         }
-        val payload = byteArrayOf(mode.toByte())
-        // alpha1.8: GA2 走 AudioCuration(V1)：feature=0x08, V1_SET_MODE=0x04, payload=[设备mode]
-        // （LSPosed 时期实证：setMode 对 GA2 有效但设备不回 ACK，故此处无回调也无妨）
-        writeCommand(F_AUDIO_CURATION, CMD_AC_SET_MODE, payload)
+        val dev = GaiaCommands.ancDevFromUi(ancPath, mode)
+        if (dev < 0) {
+            Log.w(TAG, "setAncMode: mode " + mode + " unsupported on path " + ancPath)
+            cb?.onAncError("该设备不支持此模式")
+            return
+        }
+        Log.d(TAG, "setAncMode ui=" + mode + " path=" + ancPath + " dev=" + dev)
+        when (ancPath) {
+            GaiaCommands.ANC_PATH_ANC_V2 ->
+                writeCommand(FEATURE_ANC_V2, CMD_SET_CURRENT_MODE, byteArrayOf(dev.toByte()))
+            GaiaCommands.ANC_PATH_ANC_V1 ->
+                writeCommand(FEATURE_ANC_V1, CMD_ANC1_SET_ANC_STATE, byteArrayOf(dev.toByte()))
+            else ->
+                // AudioCuration(V1)：GA2 实证 setMode 有效但设备通常不回 ACK（乐观更新已由 AncBridge 负责）
+                writeCommand(F_AUDIO_CURATION, CMD_AC_SET_MODE, byteArrayOf(dev.toByte()))
+        }
     }
 
     @Synchronized
@@ -924,6 +982,24 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    /** alpha2.15: 9ECA 事务客户端（蓝讯系设备；null=无 9ECA 服务） */
+    fun getSrcClient(): BleSourceSwitchClient? = srcClient
+
+    /** alpha2.15: 设备是否带 9ECA0000 服务（蓝讯系自动识别结果） */
+    fun hasSrcService(): Boolean = srcClient != null && srcClient!!.isPresent()
+
+    /** alpha2.15: 当前生效协议标识（GAIA / 9ECA / GAIA+9ECA / NONE） */
+    fun activeProtocol(): String {
+        val gaia = cmdChar != null
+        val src = srcClient != null && srcClient!!.isPresent()
+        return when {
+            gaia && src -> "GAIA+9ECA"
+            src -> "9ECA"
+            gaia -> "GAIA"
+            else -> "NONE"
+        }
+    }
+
     /** 通用发送：发送 Moondrop 私有协议帧（音源切换/EQ/MIC/SN，需设备支持 9ECA 服务） */
     @Synchronized
     fun sendSrc(frame: ByteArray) {
@@ -938,6 +1014,7 @@ class GaiaBleClient private constructor() {
             ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             g.writeCharacteristic(ch)
             Log.d(TAG, "TX src " + frame.contentToString())
+            AppLog.d(TAG, "SRC TX " + AppLog.hex(frame))
         } catch (e: SecurityException) {
             Log.e(TAG, "src write denied", e)
         } catch (e: Exception) {
@@ -949,6 +1026,7 @@ class GaiaBleClient private constructor() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d(TAG, "gatt connected, discovering services")
+                AppLog.i(TAG, "GATT connected " + deviceAddress + " -> discovering services")
                 gattPendingSince = 0
                 deviceAddress?.let {
                     saveLeAddrFile(it)
@@ -960,6 +1038,7 @@ class GaiaBleClient private constructor() {
                 g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "gatt disconnected status=" + status)
+                AppLog.w(TAG, "GATT disconnected status=" + status + " addr=" + deviceAddress)
                 connected = false
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     // alpha1.26/1.29: 连接立即失败也计数；先轮换完所有候选，再扫描兜底
@@ -1000,37 +1079,58 @@ class GaiaBleClient private constructor() {
                 return
             }
             try {
+                AppLog.i(TAG, "GATT services(" + (g.services?.size ?: 0) + "): " +
+                        (g.services?.joinToString(" ") { it.uuid.toString() } ?: "?"))
+                // alpha2.15: 自动识别协议——按 GATT 服务指纹路由，不依赖型号名：
+                // GAIA 服务（QCC 系）与 9ECA0000（蓝讯系）可单独或同时存在
                 val service = g.getService(UUID_SERVICE)
-                if (service == null) {
-                    Log.e(TAG, "GAIA service not found")
-                    callback?.onError("未找到 GAIA 服务")
-                    return
+                val hasGaia = service != null
+                if (hasGaia) {
+                    AppLog.i(TAG, "protocol: GAIA service present (QCC 系)")
+                    cmdChar = service.getCharacteristic(UUID_COMMAND)
+                    respChar = service.getCharacteristic(UUID_RESPONSE)
+                    dataChar = service.getCharacteristic(UUID_DATA)
+                    if (cmdChar == null) {
+                        Log.w(TAG, "GAIA service 存在但缺 command 特征")
+                    } else {
+                        enableNotification(respChar)
+                        enableNotification(dataChar)
+                    }
+                } else {
+                    Log.d(TAG, "GAIA service not present（疑为蓝讯 9ECA 设备）")
                 }
-                cmdChar = service.getCharacteristic(UUID_COMMAND)
-                respChar = service.getCharacteristic(UUID_RESPONSE)
-                dataChar = service.getCharacteristic(UUID_DATA)
-                if (cmdChar == null) {
-                    Log.e(TAG, "GAIA command characteristic not found")
-                    callback?.onError("未找到 GAIA 命令特征")
-                    return
-                }
-                enableNotification(respChar)
-                enableNotification(dataChar)
                 // Moondrop 私有 BleSourceSwitch 协议服务（9ECA0000，音源切换/EQ/MIC/设备信息）
+                var hasSrc9 = false
                 try {
                     val srcSvc = g.getService(UUID.fromString(GaiaCommands.SRC_SERVICE))
                     if (srcSvc != null) {
                         srcCmdChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_COMMAND))
                         srcRespChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_RESPONSE))
                         srcNotifyChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_NOTIFICATION))
+                        srcCapChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_CAPABILITY))
+                        srcInfoChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_FW_INFO))
+                        srcClient = BleSourceSwitchClient(handler, null)
+                        srcClient?.bind(g, srcCmdChar, srcRespChar, srcNotifyChar, srcCapChar, srcInfoChar)
                         enableNotification(srcRespChar)
                         enableNotification(srcNotifyChar)
-                        Log.d(TAG, "BleSourceSwitch service ready")
+                        hasSrc9 = true
+                        Log.d(TAG, "BleSourceSwitch(9ECA) service ready, srcClient bound")
+                        AppLog.i(TAG, "protocol: 9ECA(9ECA0000) service present (蓝讯系) -> srcClient bound")
+
+                        // 直读能力页/固件信息（9ECA0004/0005），回调由 srcClient 解析
+                        try { if (srcCapChar != null) g.readCharacteristic(srcCapChar) } catch (_: Exception) { }
+                        try { if (srcInfoChar != null) g.readCharacteristic(srcInfoChar) } catch (_: Exception) { }
                     } else {
                         Log.d(TAG, "BleSourceSwitch service not present on this device")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "src service lookup failed", e)
+                }
+                if (!hasGaia && !hasSrc9) {
+                    Log.e(TAG, "neither GAIA nor 9ECA service found")
+                    AppLog.e(TAG, "protocol: neither GAIA nor 9ECA service found - unsupported device")
+                    callback?.onError("未找到 GAIA / 9ECA 服务（暂不支持该设备）")
+                    return
                 }
                 connected = true
                 // alpha1.18: 记住成功连接的地址（双耳双地址轮换后锁定）
@@ -1048,6 +1148,16 @@ class GaiaBleClient private constructor() {
                     Log.d(TAG, "GAIA locked to " + okAddr)
                 }
                 Log.d(TAG, "GAIA ready")
+                // alpha2.14: 能力探测——GET_SUPPORTED_FEATURES 决定 ANC 路径等跨型号适配
+                try {
+                    if (!featureProbeSent) {
+                        featureProbeSent = true
+                        writeCommand(FEATURE_BASIC, CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+                        writeCommand(FEATURE_BASIC, CMD_GET_VARIANT, ByteArray(0))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "capability probe failed", e)
+                }
                 callback?.onConnected(deviceAddress ?: "")
             } catch (e: SecurityException) {
                 Log.e(TAG, "permission denied", e)
@@ -1072,17 +1182,23 @@ class GaiaBleClient private constructor() {
             val value = ch.value
             if (value == null || value.size < 2) return
             if (ch === srcRespChar || ch === srcNotifyChar) {
-                handleSrcPacket(value)
+                val sc = srcClient
+                if (sc != null) sc.onCharacteristicChanged(ch, value) else handleSrcPacket(value)
+            } else if (ch === srcCapChar || ch === srcInfoChar) {
+                srcClient?.onCharacteristicRead(ch, BluetoothGatt.GATT_SUCCESS, value)
             } else {
                 handlePacket(value)
             }
         }
 
         override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                val value = ch.value
-                if (value != null && value.size >= 4) handlePacket(value)
+            if (status != BluetoothGatt.GATT_SUCCESS) return
+            val value = ch.value ?: return
+            if (srcClient != null && (ch === srcCapChar || ch === srcInfoChar || ch === srcRespChar)) {
+                srcClient?.onCharacteristicRead(ch, status, value)
+                return
             }
+            if (value.size >= 4) handlePacket(value)
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
@@ -1093,6 +1209,7 @@ class GaiaBleClient private constructor() {
     /** 解析 Moondrop 私有协议响应帧：[0xA5][0x01][frameType][msgId][seq][len][payload] */
     private fun handleSrcPacket(value: ByteArray) {
         try {
+            AppLog.d(TAG, "SRC RX " + AppLog.hex(value))
             if ((value[0].toInt() and 0xFF) != 0xA5 || (value[1].toInt() and 0xFF) != 0x01) return
             val frameType = value[2].toInt() and 0xFF
             val msgId = value[3].toInt() and 0xFF
@@ -1110,6 +1227,7 @@ class GaiaBleClient private constructor() {
     /** 解析 GAIA V3 数据包 */
     private fun handlePacket(value: ByteArray) {
         try {
+            AppLog.d(TAG, "GAIA RX " + AppLog.hex(value))
             val vendor = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
             val cmdValue = ((value[2].toInt() and 0xFF) shl 8) or (value[3].toInt() and 0xFF)
             if (vendor != GAIA_VENDOR) return
@@ -1123,10 +1241,26 @@ class GaiaBleClient private constructor() {
 
             if (feature == FEATURE_BATTERY && command == CMD_GET_BATTERY_LEVELS) {
                 parseBatteryLevels(payload)
+            } else if (feature == FEATURE_BASIC && command == CMD_GET_SUPPORTED_FEATURES) {
+                // alpha2.14: 能力位图 -> ANC 路径
+                val feats = GaiaCommands.parseSupportedFeatures(payload)
+                ancPath = GaiaCommands.ancPathFrom(feats)
+                Log.d(TAG, "capabilities: " + feats.sorted().joinToString(",") +
+                        " -> ancPath=" + ancPath)
+            } else if (feature == FEATURE_BASIC &&
+                    (command == CMD_GET_VARIANT || command == CMD_GET_APP_VERSION)) {
+                try {
+                    val v = String(payload, Charsets.UTF_8).trim { it <= ' ' }
+                    if (v.isNotEmpty()) deviceInfo = v
+                    Log.d(TAG, "device info: " + deviceInfo)
+                } catch (_: Exception) { }
             } else if ((feature == FEATURE_ANC_V2 || feature == F_AUDIO_CURATION) &&
                     (command == CMD_GET_CURRENT_MODE || command == CMD_SET_CURRENT_MODE ||
                             command == 0x01)) {
                 // 0x01 = notification MODE_CHANGE（AudioCuration/ANC_V2 均为 cmd=1）
+                parseAncMode(payload)
+            } else if (feature == FEATURE_ANC_V1 &&
+                    (command == CMD_ANC1_GET_ANC_STATE || command == CMD_ANC1_SET_ANC_STATE)) {
                 parseAncMode(payload)
             }
         } catch (e: Exception) {
@@ -1153,9 +1287,9 @@ class GaiaBleClient private constructor() {
     private fun parseAncMode(payload: ByteArray) {
         if (payload.isEmpty()) return
         val dev = payload[0].toInt() and 0xFF
-        // AudioCuration 设备枚举（1关 2降噪 4透传 3抗风）-> UI 枚举（0关 1降噪 2透传 3抗风）
-        val mode = AncBridge.unmapAncV1(dev)
-        Log.d(TAG, "anc mode dev=" + dev + " ui=" + mode)
+        // alpha2.14: 按 ANC 路径映射（ANC V2: 0关/1降噪/3抗风；ANC V1: 0关/1开；AC: 1关/2降噪/4透传/3抗风）
+        val mode = GaiaCommands.ancUiFromDev(ancPath, dev)
+        Log.d(TAG, "anc mode path=" + ancPath + " dev=" + dev + " ui=" + mode)
         if (mode >= 0) {
             ancCallback?.let { cb ->
                 handler.post {

@@ -540,7 +540,7 @@ class SettingsFragment : Fragment() {
                 val path = LogCollector.collect(requireContext())
                 requireActivity().runOnUiThread {
                     showSimpleDialog("日志已保存",
-                            "已打包为 ZIP（含 5 条分类日志）。\n\n路径：\n$path" +
+                            "已打包为 ZIP（含 6 条分类日志：系统/应用/蓝牙/环境/logcat/运行日志）。\n\n路径：\n$path" +
                                     "\n\n您可自行将文件分享给开发者进行设备适配分析。")
                 }
             }.start()

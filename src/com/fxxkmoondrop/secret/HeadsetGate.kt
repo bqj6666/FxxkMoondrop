@@ -44,9 +44,10 @@ class HeadsetGate {
                     remember(ctx, mac)
                     return mac
                 }
+                // alpha2.18: 实时探测未命中 -> 陈旧缓存立即作废（修复"耳机已断开仍显示已连接"）
                 if (cached != null) {
-                    asyncRefresh(ctx)
-                    return cached
+                    Log.d(TAG, "quickScan miss -> stale cache invalidated: " + cached)
+                    clearConnectedMac(ctx)
                 }
                 asyncRefresh(ctx)
                 return null
@@ -56,7 +57,12 @@ class HeadsetGate {
                 remember(ctx, mac)
                 return mac
             }
-            return cached
+            // alpha2.18: 全量探测也未命中 -> 陈旧缓存作废
+            if (cached != null) {
+                Log.d(TAG, "fullScan miss -> stale cache invalidated: " + cached)
+                clearConnectedMac(ctx)
+            }
+            return null
         }
 
         /** 非阻塞探测：服务共享 proxy + GATT 同步 API（无回调等待） */
@@ -131,6 +137,13 @@ class HeadsetGate {
                             Log.d(TAG, "async scan found: $mac")
                         } catch (e: Exception) {
                             Log.w(TAG, "broadcast failed: $e")
+                        }
+                    } else {
+                        // alpha2.18: 补扫未命中 -> 清陈旧缓存（断连后不再残留假 MAC）
+                        val stale = lastKnown(app)
+                        if (stale != null) {
+                            Log.d(TAG, "async refresh miss -> stale cache invalidated: $stale")
+                            clearConnectedMac(app)
                         }
                     }
                 } catch (t: Throwable) {

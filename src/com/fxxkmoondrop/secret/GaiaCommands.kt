@@ -252,9 +252,9 @@ object GaiaCommands {
     const val SRC_FW_INFO = "9eca0005-7f3a-4f32-9a38-a91b2c6e0100"
     const val SRC_CCCD = "00002902-0000-1000-8000-00805f9b34fb"
 
-    const val SRC_FRAME_COMMAND = 0
-    const val SRC_FRAME_RESPONSE = 1
-    const val SRC_FRAME_NOTIFICATION = 2
+    const val SRC_FRAME_COMMAND = 1
+    const val SRC_FRAME_RESPONSE = 2
+    const val SRC_FRAME_NOTIFICATION = 3
 
     // 音源（BleSourceSwitchFrames.SourceId）
     const val SRC_ID_BLUETOOTH = 0
@@ -297,9 +297,9 @@ object GaiaCommands {
     const val SRC_CMD_PING = 127
 
     // 通知 ID（BleSourceNotificationId）
-    const val SRC_NOTIF_AUDIO_SOURCE_CHANGED = 128
-    const val SRC_NOTIF_SWITCH_STATE_CHANGED = 129
-    const val SRC_NOTIF_CAPABILITY_CHANGED = 130
+    const val SRC_NOTIF_AUDIO_SOURCE_CHANGED = 129
+    const val SRC_NOTIF_SWITCH_STATE_CHANGED = 130
+    const val SRC_NOTIF_CAPABILITY_CHANGED = 131
     const val SRC_NOTIF_VOLUME_CHANGED = 133
     const val SRC_NOTIF_PRESET_EQ_CHANGED = 134
     const val SRC_NOTIF_PEQ_COMMITTED = 135
@@ -539,4 +539,60 @@ object GaiaCommands {
     @JvmStatic fun basicGetEarbudSnL(): ByteArray = v3Packet(F_BASIC, C_BASIC_GET_EARBUD_SN_L, null)
     @JvmStatic fun basicGetEarbudSnR(): ByteArray = v3Packet(F_BASIC, C_BASIC_GET_EARBUD_SN_R, null)
     @JvmStatic fun basicGetTwsStatus(): ByteArray = v3Packet(F_BASIC, C_BASIC_GET_TWS_CONNECTION_STATUS, null)
+
+    // ============================================================
+    // 14. 能力探测与 ANC 路径选择（alpha2.14：跨型号自适应）
+    //     GET_SUPPORTED_FEATURES 响应 = 32-bit word 序列（BE），
+    //     word i 覆盖 feature 32*i .. 32*i+31，bit(feature) = feature % 32
+    // ============================================================
+    const val ANC_PATH_AUDIO_CURATION = 8   // feature F_AUDIO_CURATION（GA2 现行路径）
+    const val ANC_PATH_ANC_V1 = 2           // feature F_ANC
+    const val ANC_PATH_ANC_V2 = 32          // feature F_ANC_V2
+    const val ANC_PATH_UNKNOWN = -1
+
+    /** 解析 GET_SUPPORTED_FEATURES 响应位图 -> 支持的 feature id 集合 */
+    @JvmStatic
+    fun parseSupportedFeatures(payload: ByteArray?): Set<Int> {
+        val p = payload ?: return emptySet()
+        val features = HashSet<Int>()
+        var wordIdx = 0
+        var i = 0
+        while (i + 3 < p.size) {
+            val word = ((p[i].toInt() and 0xFF) shl 24) or
+                    ((p[i + 1].toInt() and 0xFF) shl 16) or
+                    ((p[i + 2].toInt() and 0xFF) shl 8) or
+                    (p[i + 3].toInt() and 0xFF)
+            for (bit in 0 until 32) {
+                if (word and (1 shl bit) != 0) features.add(wordIdx * 32 + bit)
+            }
+            wordIdx++
+            i += 4
+        }
+        return features
+    }
+
+    /** 由能力集合推导 ANC 路径（优先级：AudioCuration > ANC V2 > ANC V1 > 未知） */
+    @JvmStatic
+    fun ancPathFrom(features: Set<Int>): Int = when {
+        F_AUDIO_CURATION in features -> ANC_PATH_AUDIO_CURATION
+        F_ANC_V2 in features -> ANC_PATH_ANC_V2
+        F_ANC in features -> ANC_PATH_ANC_V1
+        else -> ANC_PATH_UNKNOWN
+    }
+
+    /** 设备模式 -> UI 模式（0关 1降噪 2透传 3抗风；按 ANC 路径区分语义） */
+    @JvmStatic
+    fun ancUiFromDev(path: Int, dev: Int): Int = when (path) {
+        ANC_PATH_ANC_V2 -> when (dev) { 0 -> 0; 1 -> 1; 3 -> 3; else -> -1 }
+        ANC_PATH_ANC_V1 -> if (dev == 0) 0 else 1
+        else -> when (dev) { 1 -> 0; 2 -> 1; 4 -> 2; 3 -> 3; else -> -1 } // AudioCuration
+    }
+
+    /** UI 模式 -> 设备模式（负数 = 该路径不支持此 UI 模式） */
+    @JvmStatic
+    fun ancDevFromUi(path: Int, ui: Int): Int = when (path) {
+        ANC_PATH_ANC_V2 -> when (ui) { 0 -> 0; 1 -> 1; 3 -> 3; else -> 1 }
+        ANC_PATH_ANC_V1 -> if (ui == 0) 0 else 1
+        else -> when (ui) { 0 -> 1; 1 -> 2; 2 -> 4; 3 -> 3; else -> -1 } // AudioCuration
+    }
 }
