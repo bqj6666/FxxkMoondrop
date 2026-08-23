@@ -36,11 +36,6 @@ jobs:
       - name: CI 环境适配（移除本机 ARM64 qemu aapt2 override）
         run: sed -i '/aapt2FromMavenOverride/d' gradle.properties
 
-      - name: apksigner 路径适配（build.gradle.kts 硬编码 /workspace/sdk → 软链到 runner SDK）
-        run: |
-          mkdir -p /workspace/sdk/build-tools/34.0.0
-          ln -sf "$ANDROID_HOME/build-tools/34.0.0/apksigner" /workspace/sdk/build-tools/34.0.0/apksigner
-
       - name: 还原签名密钥（仓库 Secrets：KEYSTORE_B64 + FXXK_KEYPASS，未配置则跳过）
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}

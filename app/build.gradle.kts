@@ -122,13 +122,17 @@ val postEdf by tasks.registering(Exec::class) {
     val edfDir = file("src/main/META-INF/xposed")
     val ksPass = providers.environmentVariable("FXXK_KEYPASS")
         .orElse(providers.gradleProperty("fxxkKeypass")).getOrElse("")
+    // apksigner 路径：CI（ANDROID_HOME 已设）用 runner SDK；本机（未设）回退 /workspace/sdk
+    val apksigner = System.getenv("ANDROID_HOME")
+        ?.let { "$it/build-tools/34.0.0/apksigner" }
+        ?: "/workspace/sdk/build-tools/34.0.0/apksigner"
     doFirst {
         commandLine(
             "python3", "$rootDir/tools/post_edf.py",
             apk.get().asFile.absolutePath,
             "$edfDir/scope.list", "$edfDir/ascope.list",
             "$rootDir/app2.keystore", ksPass,
-            "/workspace/sdk/build-tools/34.0.0/apksigner"
+            apksigner
         )
     }
 }
