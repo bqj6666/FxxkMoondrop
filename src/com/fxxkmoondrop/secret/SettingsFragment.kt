@@ -17,6 +17,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -215,7 +216,6 @@ class SettingsFragment : Fragment() {
                 "切到后台自动隐藏主界面（不驻留最近任务）", swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("bg_hide", checked).commit()
-            toast(if (checked) "✅ 已开启后台隐藏：切后台自动隐藏主界面" else "已关闭后台隐藏")
         }
 
         // ── 启动自动监听 ──
@@ -225,7 +225,6 @@ class SettingsFragment : Fragment() {
                 "启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("auto_service", checked).commit()
-            toast(if (checked) "✅ 已开启：连接耳机自动直连 GAIA" else "已关闭：连接耳机自动直连 GAIA")
         }
 
         // ── Google 弹窗（Fast Pair）──
@@ -235,12 +234,61 @@ class SettingsFragment : Fragment() {
                 "连接时使用谷歌半屏配对弹窗（含电量与降噪控制）；关闭则用应用自带弹窗", swGp, null)
         swGp.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean(PopupGate.CFG_FASTPAIR_POPUP, checked).commit()
-            toast(if (checked) "✅ 已开启：连接时使用 Google 弹窗" else "已关闭：连接时使用应用自带弹窗")
+        }
+
+        // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
+        val swWind = makeTintedSwitch()
+        swWind.isChecked = getSP().getBoolean("show_wind", true)
+        val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_ac_unit, "显示抗风噪按钮",
+                "在弹窗和主界面显示抗风噪模式；关闭后仅显示 关闭/降噪/透传", swWind, null)
+        swWind.setOnCheckedChangeListener { _, checked ->
+            getSP().edit().putBoolean("show_wind", checked).commit()
         }
 
         // 行为区分组卡片
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowGp))
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowGp, rowWind))
         box.addView(spacer(dp(14)))
+
+                // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "ANC 按钮映射"))
+        val ancMapHint = TextView(requireContext())
+        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。GA2 官方编码 1=关/2=降噪/3=透传/4=抗风；若按钮效果错位，请按实际效果自行匹配。"
+        ancMapHint.textSize = 12f
+        ancMapHint.setTextColor(pal.onVariant)
+        ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
+        box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
+        val ancMapNames = arrayOf("关闭", "降噪", "透传", "抗风")
+        val ancMapDefaults = intArrayOf(1, 2, 3, 4)
+        val ancMapRows = ArrayList<View>()
+        for (i in 0..3) {
+            val et = EditText(requireContext())
+            et.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            et.setText(getSP().getInt("anc_map_" + i, ancMapDefaults[i]).toString())
+            et.textSize = 15f
+            et.gravity = Gravity.CENTER
+            et.setPadding(dp(8), dp(4), dp(8), dp(4))
+            val etBg = GradientDrawable()
+            etBg.shape = GradientDrawable.RECTANGLE
+            etBg.setStroke(dp(1), pal.outline)
+            etBg.setColor(pal.surface)
+            etBg.setCornerRadius(dp(8).toFloat())
+            et.background = etBg
+            et.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val v = s?.toString()?.trim()?.toIntOrNull()
+                    if (v != null && v in 0..5) {
+                        getSP().edit().putInt("anc_map_" + i, v).commit()
+                    }
+                }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+            ancMapRows.add(M3Ui.listRow(requireActivity(), pal, 0, ancMapNames[i],
+                    "发送的设备码（GA2 默认 " + ancMapDefaults[i] + "）", et, null))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, *ancMapRows.toTypedArray()))
+        box.addView(spacer(dp(10)))
+
 
         // ── 模拟测试（alpha2.3 从主页迁入；真实耳机连接时禁用）──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, "模拟测试"))

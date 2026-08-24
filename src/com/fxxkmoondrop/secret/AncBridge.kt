@@ -19,6 +19,8 @@ class AncBridge {
         /** alpha1.20: 跨进程模式状态同步（应用 -> GMS 弹窗高亮；GMS -> 应用请求当前值） */
         const val ACTION_FP_MODE_STATE = "com.fxxkmoondrop.secret.FASTPAIR_MODE_STATE"
         const val ACTION_FP_MODE_REQUEST = "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST"
+        /** alpha2.22: app -> GMS 广播 ANC 能力状态（驱动弹窗降噪按钮三态） */
+        const val ACTION_FP_ANC_STATUS = "com.fxxkmoondrop.secret.FASTPAIR_ANC_STATUS"
 
         /** 广播用 Context（由 MainActivity / HeadsetDetectService 绑定，取 applicationContext） */
         @Volatile
@@ -49,6 +51,21 @@ class AncBridge {
             }
         }
 
+        /** alpha2.22: 广播 ANC 能力状态给 GMS（驱动弹窗降噪按钮三态）。
+         *  status: 0=探测中 1=有ANC 2=无ANC/截断 */
+        @JvmStatic
+        fun sendAncStatus(status: Int) {
+            val c = sCtx ?: return
+            try {
+                val i = Intent(ACTION_FP_ANC_STATUS)
+                i.putExtra("status", status)
+                i.setPackage("com.google.android.gms")
+                c.sendBroadcast(i)
+            } catch (t: Throwable) {
+                Log.w(TAG, "sendAncStatus fail: $t")
+            }
+        }
+
         /** 获取当前缓存的 ANC 模式（-1 表示未知） */
         @JvmStatic
         fun getCurrentMode(): Int = currentMode
@@ -76,6 +93,7 @@ class AncBridge {
             Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
+            val prevMode = currentMode
             notifyAncMode(mode)
             GaiaBleClient.getInstance().setAncMode(mode, object : GaiaBleClient.AncControlCallback {
                 override fun onAncModeResult(m: Int) {
@@ -83,7 +101,10 @@ class AncBridge {
                 }
 
                 override fun onAncError(message: String) {
-                    Log.w(TAG, "setAncMode error: $message")
+                    // alpha2.22: 发送被拒（能力未就绪/无ANC/不支持）时回滚乐观高亮，
+                    // 让用户明确看到按钮没真正生效，避免"假高亮"误导
+                    Log.w(TAG, "setAncMode error: $message -> rollback highlight")
+                    notifyAncMode(prevMode)
                 }
             })
         }

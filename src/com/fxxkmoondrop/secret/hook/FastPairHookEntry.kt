@@ -17,6 +17,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
@@ -163,8 +164,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                                     if (it != null) {
                                         val bl = it.getIntExtra(EXTRA_BATTERY_LEFT, -1)
                                         val br = it.getIntExtra(EXTRA_BATTERY_RIGHT, -1)
-                                        if (bl >= 0) sBatteryLeft = bl
-                                        if (br >= 0) sBatteryRight = br
+                                        // alpha2.26.6: 无条件覆盖（含 -1），防止上次弹窗(如模拟连接 86/72)
+                                        // 的渲染进程静态字段残留，导致真实弹窗显示旧模拟电量
+                                        sBatteryLeft = bl
+                                        sBatteryRight = br
                                         XposedBridge.log("[FastPairHook] battery from intent: L=" + sBatteryLeft + " R=" + sBatteryRight)
                                     }
                                 } catch (t: Throwable) {
@@ -495,15 +498,50 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         try {
             val act = sHalfSheetActivity ?: return
             val decor = act.window.decorView
-            for (m in 0..2) {
+            for (m in 0..3) {
                 val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
                 var bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg")
                 if (bgV == null) bgV = holder
                 bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
+                // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
+                try {
+                    bgV.alpha = 0.4f
+                    bgV.animate().alpha(1f).setDuration(160).start()
+                } catch (_: Throwable) { }
             }
             XposedBridge.log("[FastPairHook] mode highlight -> " + mode)
         } catch (t: Throwable) {
             XposedBridge.log("[FastPairHook] mode highlight fail: " + t)
+        }
+    }
+
+    /** alpha2.22: 按 ANC 能力状态驱动弹窗降噪按钮三态：
+     *  0=探测中 -> 禁用一个 mode 按钮(置灰不可点，防误发)
+     *  1=有ANC  -> 启用并恢复
+     *  2=无ANC/截断 -> 隐藏整条 mode bar（不显示不支持的控件，符合跨机型适配） */
+    private fun applyAncAvailability(status: Int) {
+        try {
+            sAncStatus = status
+            val act = sHalfSheetActivity ?: return
+            val decor = act.window.decorView
+            val bar = decor.findViewWithTag<android.view.View>("fxxk_mode_bar") ?: return
+            // alpha2.26.7: 恢复函数头注释语义——status=2(无ANC/截断) 隐藏整条 mode bar（不显示不支持的控件，跨机型适配）
+            if (status == 2) {
+                bar.visibility = android.view.View.GONE
+                XposedBridge.log("[FastPairHook] ANC availability -> 2 (no ANC), mode bar hidden")
+                return
+            }
+            bar.visibility = android.view.View.VISIBLE
+            val enabled = status == 1
+            for (m in 0..3) {
+                val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
+                holder.isEnabled = enabled
+                holder.alpha = if (enabled) 1f else 0.4f
+            }
+            XposedBridge.log("[FastPairHook] ANC availability -> " + status +
+                    (if (enabled) " enabled" else " disabled"))
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] applyAncAvailability fail: " + t)
         }
     }
 
@@ -534,13 +572,38 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             bar.addView(buildModeItem(act, MODE_OFF, "关闭"))
             bar.addView(buildModeItem(act, MODE_ANC, "降噪"))
             bar.addView(buildModeItem(act, MODE_TRANS, "透传"))
+            // alpha2.26.3: 用户可选隐藏抗风噪按钮。修复：用 act.applicationContext
+            // 现场创建模块 context 读 SP，不依赖 sModCtx（GMS 早期可能为 null 导致不生效）。
+            var showWind = true
+            try {
+                // alpha2.26.5: 跨 UID 读模块私有 SP 会失败（createPackageContext 只能读 assets），
+                // 改用 exported ContentProvider（模块进程由系统拉起读取，可靠）。
+                val cur = act.applicationContext.contentResolver.query(
+                        Uri.parse("content://com.fxxkmoondrop.secret.prefs/show_wind"),
+                        null, null, null, null)
+                if (cur != null) {
+                    try {
+                        if (cur.moveToFirst()) {
+                            showWind = cur.getInt(cur.getColumnIndexOrThrow("_value")) == 1
+                        }
+                    } finally {
+                        cur.close()
+                    }
+                }
+            } catch (t: Throwable) {
+                XposedBridge.log("[FastPairHook] show_wind provider read fail: " + t)
+            }
+            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, "抗风"))
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
             lp.topMargin = 2050 // 图标(1660-2000)与确定按钮(2370)之间
             (decor as android.view.ViewGroup).addView(bar, lp)
-            XposedBridge.log("[FastPairHook] mode buttons injected (关闭/降噪/透传)")
+            // alpha2.22: 注入时按已知能力状态应用三态（初始 sAncStatus=0 探测中 -> 禁用，防误发）
+            applyAncAvailability(sAncStatus)
+            XposedBridge.log("[FastPairHook] mode buttons injected (关闭/降噪/透传" +
+                    (if (showWind) "/抗风" else "") + ")")
         } catch (t: Throwable) {
             XposedBridge.log("[FastPairHook] mode buttons fail: " + t)
         }
@@ -569,6 +632,12 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         holder.addView(iv, il)
         holder.setOnClickListener {
             XposedBridge.log("[FastPairHook] mode clicked: " + mode)
+            // alpha2.26.3: 点击缩放动画（Material 按压反馈：0.85 -> 回弹 1.0）
+            try {
+                holder.animate().scaleX(0.85f).scaleY(0.85f).setDuration(90).withEndAction {
+                    holder.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                }.start()
+            } catch (_: Throwable) { }
             // alpha1.21: 点击立即乐观高亮（应用回发 MODE_STATE 仍会校准）
             sLastMode = mode
             applyModeHighlight(mode)
@@ -675,6 +744,14 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     c.drawPath(wv, p)
                 }
             }
+            MODE_WIND -> { // 抗风：旋风/三弧线
+                val rect3 = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
+                c.drawArc(rect3, 70f, 220f, false, p)
+                val rect4 = android.graphics.RectF(cx - ir*0.7f, cy - ir*0.7f, cx + ir*0.7f, cy + ir*0.7f)
+                c.drawArc(rect4, 90f, 200f, false, p)
+                val rect5 = android.graphics.RectF(cx - ir*0.4f, cy - ir*0.4f, cx + ir*0.4f, cy + ir*0.4f)
+                c.drawArc(rect5, 110f, 180f, false, p)
+            }
             MODE_TRANS -> { // 透传：耳朵（双 C 弧 + 耳道圆点）
                 val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
                 c.drawArc(rect, 60f, 240f, false, p)
@@ -750,6 +827,8 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         val br = intent.getStringExtra(EXTRA_BATTERY_RIGHT)
                         if (br != null) sBatteryRight = br.toInt()
                         else sBatteryRight = sDataProvider?.getBatteryRight() ?: -1 // alpha1.14fix3
+                        // alpha2.26.7: 同步重置模式高亮残留——模拟连接的乐观高亮不得带入真实弹窗
+                        sLastMode = -1
                     } catch (t: Throwable) {
                         XposedBridge.log("[FastPairHook] battery extra parse fail: " + t)
                     }
@@ -823,7 +902,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 override fun onReceive(context: Context, intent: Intent) {
                     try {
                         val mode = intent.getIntExtra(EXTRA_MODE, -1)
-                        if (mode < 0 || mode > 2) return
+                        if (mode < 0 || mode > 3) return
                         sLastMode = mode
                         XposedBridge.log("[FastPairHook] MODE_STATE received, mode=" + mode)
                         applyModeHighlight(mode)
@@ -836,6 +915,25 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             XposedBridge.log("[FastPairHook] mode state receiver registered")
         } catch (t: Throwable) {
             XposedBridge.log("[FastPairHook] mode state receiver fail: " + t)
+        }
+        // alpha2.22: 应用广播 ANC 能力状态 -> 驱动弹窗降噪按钮三态
+        try {
+            val ancF = IntentFilter(ACTION_ANC_STATUS)
+            val ancStatusReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val st = intent.getIntExtra(EXTRA_ANC_STATUS, 0)
+                        XposedBridge.log("[FastPairHook] ANC_STATUS received, status=" + st)
+                        applyAncAvailability(st)
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] ANC_STATUS handle fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(ancStatusReceiver, ancF, exportedFlag)
+            XposedBridge.log("[FastPairHook] ANC status receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] ANC status receiver fail: " + t)
         }
         // ** alpha1.32: 应用请求 LE 扫描 -> GMS 侧 receiver **
         try {
@@ -1143,8 +1241,14 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         /** alpha1.20: 弹窗按钮高亮双向同步 */
         const val ACTION_MODE_STATE = "com.fxxkmoondrop.secret.FASTPAIR_MODE_STATE"
         const val ACTION_MODE_REQUEST = "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST"
+        /** alpha2.22: app -> GMS 广播 ANC 能力状态，驱动弹窗降噪按钮三态 */
+        const val ACTION_ANC_STATUS = "com.fxxkmoondrop.secret.FASTPAIR_ANC_STATUS"
+        const val EXTRA_ANC_STATUS = "status"
         @JvmField @Volatile
         var sLastMode = -1 // 最近一次收到的模式状态（-1=未知/不高亮）
+        /** alpha2.22: 最近一次 ANC 能力状态 0=探测中 1=有ANC 2=无ANC/截断；默认0保守禁用 */
+        @JvmField @Volatile
+        var sAncStatus = 0
 
         /** 【对接广播】弹窗点击"确定"后发出（extra: device_name），应用监听后执行真实连接 */
         const val ACTION_CONNECTED = "com.fxxkmoondrop.secret.FASTPAIR_CONNECTED"
@@ -1177,7 +1281,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         @JvmField @Volatile
         var sHalfSheetActivity: android.app.Activity? = null
         /** alpha1.14fix2: ACL 自动弹窗延迟——等 GAIA 连接+电量就绪，ACL 仅作兜底 */
-        const val ACL_POSTSHOW_DELAY_MS = 40000L
+        const val ACL_POSTSHOW_DELAY_MS = 2000L // alpha2.26.3: 2s 即弹（GAIA 后台并行连接）
         /** 弹窗重复保护：距上次显示不足该时长则跳过兜底弹窗 */
         const val ACL_REPEAT_GUARD_MS = 60000L
         @JvmField @Volatile
@@ -1204,6 +1308,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         const val MODE_OFF = 0
         const val MODE_ANC = 1
         const val MODE_TRANS = 2
+        const val MODE_WIND = 3
 
         @JvmField @Volatile
         var sLeScanning = false

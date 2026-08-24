@@ -227,7 +227,6 @@ class SettingsActivity : Activity() {
                 "切到后台自动隐藏主界面（不驻留最近任务）", swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("bg_hide", checked).commit()
-            toast(if (checked) "✅ 已开启后台隐藏：切后台自动隐藏主界面" else "已关闭后台隐藏")
         }
 
         // ── 启动自动监听 ──
@@ -243,7 +242,6 @@ class SettingsActivity : Activity() {
                 "启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("auto_service", checked).commit()
-            toast(if (checked) "✅ 已开启：连接耳机自动直连 GAIA" else "已关闭：连接耳机自动直连 GAIA")
         }
 
         // ── Google 弹窗（Fast Pair）──
@@ -259,7 +257,6 @@ class SettingsActivity : Activity() {
                 "连接时使用谷歌半屏配对弹窗（含电量与降噪控制）；关闭则用应用自带弹窗", swGp, null)
         swGp.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean(PopupGate.CFG_FASTPAIR_POPUP, checked).commit()
-            toast(if (checked) "✅ 已开启：连接时使用 Google 弹窗" else "已关闭：连接时使用应用自带弹窗")
         }
 
         // 行为区分组卡片

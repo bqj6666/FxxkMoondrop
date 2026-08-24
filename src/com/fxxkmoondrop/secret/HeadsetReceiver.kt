@@ -29,8 +29,10 @@ class HeadsetReceiver : BroadcastReceiver() {
         }
 
         // alpha1.20: GMS 弹窗请求当前降噪模式 -> 回发 MODE_STATE（驱动弹窗按钮高亮）
+        // alpha2.22: 一并回发 ANC 能力状态，驱动弹窗降噪按钮三态
         if (AncBridge.ACTION_FP_MODE_REQUEST == action) {
             AncBridge.sendModeState()
+            AncBridge.sendAncStatus(GaiaBleClient.getInstance().ancCapabilityStatus())
             Log.i(TAG, "fastpair mode request -> answered")
             return
         }

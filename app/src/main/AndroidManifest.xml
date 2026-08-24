@@ -44,6 +44,12 @@
 
         <activity android:name=".PopupActivity" android:exported="false" />
 
+        <!-- alpha2.26.5: 跨进程配置读取（GMS FastPair 弹窗进程查模块设置） -->
+        <provider
+            android:name=".PrefsProvider"
+            android:authorities="com.fxxkmoondrop.secret.prefs"
+            android:exported="true" />
+
         <service
             android:name=".HeadsetDetectService"
             android:exported="false"

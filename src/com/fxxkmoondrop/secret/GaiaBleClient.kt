@@ -75,6 +75,12 @@ class GaiaBleClient private constructor() {
 
     /** alpha2.14: 设备型号/版本字符串（GET_VARIANT / GET_APP_VERSION 响应） */
     @Volatile private var deviceInfo = ""
+    /** alpha2.22: 能力探测是否已完成（含"探测完成但无ANC/截断"的终态；不含是否支持ANC） */
+    @Volatile private var capabilityProbeDone = false
+    /** alpha2.22: 能力位图是否截断/不完整（A1：截断时不据此选择ANC路径） */
+    @Volatile private var capabilityProbeTruncated = false
+    /** alpha2.22: 能力位图未回时主动发 AudioCuration 只读探测（靠设备真实回包定路径，不硬编码型号） */
+    @Volatile private var ancAcProbeActive = false
     private val handler = Handler(Looper.getMainLooper())
 
     // alpha1.4: BLE 扫描解析 LE 地址（独立 LE 身份地址设备，bonded 列表只有 BR/EDR 地址）
@@ -190,6 +196,8 @@ class GaiaBleClient private constructor() {
         const val F_AUDIO_CURATION = 0x08
         const val CMD_AC_GET_MODE = 0x03
         const val CMD_AC_SET_MODE = 0x04
+        const val CMD_AC_GET_SWITCH_CONF = 0x29
+        const val CMD_AC_SET_SWITCH_CONF = 0x2A
         const val TYPE_COMMAND = 0
         const val TYPE_NOTIFICATION = 1
         const val TYPE_RESPONSE = 2
@@ -213,6 +221,9 @@ class GaiaBleClient private constructor() {
 
         @JvmField @Volatile
         var cachedLeAddress: String? = null // 上次成功解析的 LE 地址
+        // alpha2.22: cachedLe 绑定的设备名，用于多台水月雨切换时判断是否属于同一台耳机
+        @JvmField @Volatile
+        var cachedLeName: String? = null
 
         /** 模拟连接模式：无耳机时 UI 测试用（静态，跨组件共享） */
         @JvmField @Volatile
@@ -417,43 +428,49 @@ class GaiaBleClient private constructor() {
                 device = adapter.getRemoteDevice(resolved)
                 addr = resolved
                 Log.d(TAG, "using resolved LE address " + addr)
-            } else {
-                // alpha2.20: 构建候选队列：缓存 LE 地址 → bonded 主地址 → 已知备用 LE 地址
-                val cand2 = candidates
-                if (cand2 == null || cand2.isEmpty()) {
-                    buildCandidates(addr)
-                    // alpha2.20: buildCandidates 仅重建数组，需把 addr/device 指到
-                    // 首位候选（已学习 LE 地址），否则仍会连到 bonded 主地址白等超时。
-                    if (cachedLeAddress != null && candidates != null && candidates!!.isNotEmpty()) {
-                        val le = cachedLeAddress!!.uppercase()
-                        val first = candidates!![0]
-                        if (first != null && first.equals(le, true) && !addr.equals(le, true)) {
-                            addr = le
-                            device = adapter.getRemoteDevice(le)
-                            Log.d(TAG, "buildCandidates->le first " + addr)
+                } else {
+                    // alpha2.22: cachedLe 绑定设备名——多台水月雨切换时，只有当前目标设备
+                    // 与缓存所属设备名一致才优先用 cachedLe（避免串扰到上一台耳机的地址）。
+                    // cachedLeName 为空时兼容旧缓存（无名字信息，视为可用）。
+                    val targetName = device?.name
+                    val canUseCachedLe = cachedLeAddress != null &&
+                            (cachedLeName == null || cachedLeName.equals(targetName, ignoreCase = true))
+                    // alpha2.20: 构建候选队列：缓存 LE 地址 → bonded 主地址 → 已知备用 LE 地址
+                    val cand2 = candidates
+                    if (cand2 == null || cand2.isEmpty()) {
+                        buildCandidates(addr)
+                        // alpha2.20: buildCandidates 仅重建数组，需把 addr/device 指到
+                        // 首位候选（已学习 LE 地址），否则仍会连到 bonded 主地址白等超时。
+                        if (canUseCachedLe && candidates != null && candidates!!.isNotEmpty()) {
+                            val le = cachedLeAddress!!.uppercase()
+                            val first = candidates!![0]
+                            if (first != null && first.equals(le, true) && !addr.equals(le, true)) {
+                                addr = le
+                                device = adapter.getRemoteDevice(le)
+                                Log.d(TAG, "buildCandidates->le first " + addr)
+                            }
+                        }
+                    } else {
+                        // alpha2.20: 存在已学习 LE 地址时，强制把它提到首位并重置 idx，
+                        // 避免复用残留 candidateIdx 连到 bonded 主地址（GA2 双模机白等 12s 超时轮换）。
+                        var start = candidateIdx
+                        if (canUseCachedLe) {
+                            val le = cachedLeAddress!!.uppercase()
+                            val reordered = LinkedHashSet<String>()
+                            reordered.add(le)
+                            for (c in cand2) { if (c != null) reordered.add(c.uppercase()) }
+                            candidates = reordered.toTypedArray()
+                            start = 0
+                        }
+                        if (start >= candidates!!.size) start = 0
+                        val target = candidates!![start]
+                        if (target != null && !target.equals(addr, ignoreCase = true)) {
+                            device = adapter.getRemoteDevice(target)
+                            addr = target
+                            Log.d(TAG, "using candidate[" + start + "] " + addr)
                         }
                     }
-                } else {
-                    // alpha2.20: 存在已学习 LE 地址时，强制把它提到首位并重置 idx，
-                    // 避免复用残留 candidateIdx 连到 bonded 主地址（GA2 双模机白等 12s 超时轮换）。
-                    var start = candidateIdx
-                    if (cachedLeAddress != null) {
-                        val le = cachedLeAddress!!.uppercase()
-                        val reordered = LinkedHashSet<String>()
-                        reordered.add(le)
-                        for (c in cand2) { if (c != null) reordered.add(c.uppercase()) }
-                        candidates = reordered.toTypedArray()
-                        start = 0
-                    }
-                    if (start >= candidates!!.size) start = 0
-                    val target = candidates!![start]
-                    if (target != null && !target.equals(addr, ignoreCase = true)) {
-                        device = adapter.getRemoteDevice(target)
-                        addr = target
-                        Log.d(TAG, "using candidate[" + start + "] " + addr)
-                    }
                 }
-            }
             deviceAddress = addr
             // alpha2.17: DUAL 设备 bonded 无独立 LE 条目 -> 启动按名称扫描发现真实 LE 地址（自愈闭环）
             if (cachedLeAddress == null && resolved == null && !scanning) {
@@ -747,6 +764,7 @@ class GaiaBleClient private constructor() {
             deviceAddress = leAddress
             connected = false
             cachedLeAddress = leAddress
+            cachedLeName = device.name
             try {
                 context?.getSharedPreferences("cfg", 0)
                         ?.edit()?.putString("gaia_le_addr", leAddress)?.commit()
@@ -775,6 +793,8 @@ class GaiaBleClient private constructor() {
             connected = false
             // alpha1.18: 扫描命中即锁定该候选
             cachedLeAddress = leAddress
+            // alpha2.22: 记录候选对应设备名（多机切换防串扰）
+            cachedLeName = device.name
             saveLeAddrFile(leAddress)
             candidates = arrayOf(leAddress.uppercase())
             candidateIdx = 0
@@ -787,9 +807,15 @@ class GaiaBleClient private constructor() {
 
     /** 扫描失败/超时后回退到原地址连接 */
     private fun retryConnect() {
-        // alpha2.21: 重试优先已学习 LE 地址（缓存即正确 GAIA 通道），无缓存才回退候选首项/原地址
+        // alpha2.21: 重试优先已学习 LE 地址；alpha2.22: 绑定设备名后仅同机才优先用 cachedLe
         var addr: String? = null
-        if (cachedLeAddress != null) addr = cachedLeAddress
+        if (cachedLeAddress != null) {
+            val useCached = cachedLeName == null ||
+                    deviceAddress == null || cachedLeName.equals(
+                            deviceAddress.let { runCatching { BluetoothAdapter.getDefaultAdapter()
+                                    ?.getRemoteDevice(it)?.name }.getOrNull() }, ignoreCase = true)
+            if (useCached) addr = cachedLeAddress
+        }
         if (addr == null && candidates != null && candidates!!.isNotEmpty()) addr = candidates!![0]
         if (addr == null) addr = deviceAddress
         if (addr == null) return
@@ -872,6 +898,7 @@ class GaiaBleClient private constructor() {
     @Synchronized
     private fun clearCachedLe() {
         cachedLeAddress = null
+        cachedLeName = null
         try {
             context?.getSharedPreferences("cfg", 0)
                     ?.edit()?.remove("gaia_le_addr")?.commit()
@@ -920,6 +947,9 @@ class GaiaBleClient private constructor() {
         // （修复 ancPath 永远停留在 -1 导致降噪控制"时好时坏"、切后台后失联）
         featureProbeSent = false
         ancPath = GaiaCommands.ANC_PATH_UNKNOWN
+        // alpha2.22: 断开后一并重置能力探测终态，使每次重连都重新标记
+        capabilityProbeDone = false
+        capabilityProbeTruncated = false
     }
 
     /** 请求左右耳电量 */
@@ -939,16 +969,49 @@ class GaiaBleClient private constructor() {
             cb?.onAncModeResult(if (m >= 0) m else 1)
             return
         }
-        // alpha2.14: 按能力探测结果选择 ANC 查询路径（未知时回退 AudioCuration，兼容 GA2）
+        // alpha2.14: 按能力探测结果选择 ANC 查询路径
+        // alpha2.22: 仅真正探测到 AudioCuration 才按其读；UNKNOWN(未就绪/无ANC) 不当作 AudioCuration
         when (ancPath) {
             GaiaCommands.ANC_PATH_ANC_V2 ->
                 writeCommand(FEATURE_ANC_V2, CMD_GET_CURRENT_MODE, ByteArray(0))
             GaiaCommands.ANC_PATH_ANC_V1 ->
                 writeCommand(FEATURE_ANC_V1, CMD_ANC1_GET_ANC_STATE, ByteArray(0))
-            else -> writeCommand(F_AUDIO_CURATION, CMD_AC_GET_MODE, ByteArray(0))
+            GaiaCommands.ANC_PATH_AUDIO_CURATION ->
+                // alpha2.26: 对齐装机版权威逻辑（fxxk_alpha226 反编译实测）：AudioCuration 读当前模式用
+                // cmd=3(GET_CURRENT_MODE)，返回 Mode 单字节可被 parseAncMode 正确解析（原 cmd=41 是字节流）。
+                writeCommand(F_AUDIO_CURATION, CMD_AC_GET_MODE, ByteArray(0))
+            else -> {
+                // alpha2.26.7: UNKNOWN(未就绪/无ANC/截断) 不当作 AudioCuration，不发送查询（铁律）
+                cb?.onAncError("ANC 能力未就绪")
+            }
         }
     }
 
+    /** alpha2.22: 能力探测状态（供弹窗/主界面决定降噪按钮三态）。
+     *  0=探测中(probe sent 但未响应/未完成) 1=有ANC能力(path!=UNKNOWN) 2=探测完成但无ANC或位图截断。 */
+    fun ancCapabilityStatus(): Int {
+        return when {
+            !capabilityProbeDone -> 0            // 探测中
+            ancPath != GaiaCommands.ANC_PATH_UNKNOWN -> 1  // 有ANC
+            else -> 2                             // 探测完成但无ANC/截断
+        }
+    }
+
+
+    /** alpha2.26.2: 读取用户自定义 ANC 按钮映射（UI模式->设备码）。
+     *  SP cfg: anc_map_0(关)/anc_map_1(降噪)/anc_map_2(透传)/anc_map_3(抗风)。
+     *  默认官方 AudioCuration 1-based 编码 1/2/3/4；用户可在设置页自行匹配。
+     *  index = UI 模式(0..3)，value = 设备码(0..5)；非法值回退官方默认。 */
+    private fun readAncMap(): IntArray {
+        val sp = context?.getSharedPreferences("cfg", 0)
+        val def = intArrayOf(1, 2, 3, 4)
+        val map = IntArray(4)
+        for (i in 0..3) {
+            val v = sp?.getInt("anc_map_" + i, def[i]) ?: def[i]
+            map[i] = if (v in 0..5) v else def[i]
+        }
+        return map
+    }
     /** 设置 ANC 模式（入参为 UI 模式：0=关闭 1=降噪 2=透传 3=抗风 4=自适应）
      *  alpha2.14: 按能力探测结果映射到对应协议路径（AudioCuration / ANC V2 / ANC V1） */
     fun setAncMode(mode: Int, cb: AncControlCallback?) {
@@ -957,21 +1020,28 @@ class GaiaBleClient private constructor() {
             cb?.onAncModeResult(mode) // 模拟链路：直接回显 UI 模式
             return
         }
-        val dev = GaiaCommands.ancDevFromUi(ancPath, mode)
+        // alpha2.26.7: 移除 UNKNOWN→AudioCuration 强转；UNKNOWN 时 ancDevFromUi 返回 -1，
+        // 自然走下方"能力未就绪不发送"拦截（恢复原设计语义，防误发错命令）
+        val path = ancPath
+        val dev = GaiaCommands.ancDevFromUi(path, mode, readAncMap())
         if (dev < 0) {
-            Log.w(TAG, "setAncMode: mode " + mode + " unsupported on path " + ancPath)
-            cb?.onAncError("该设备不支持此模式")
+            // alpha2.22: 区分"能力未就绪/无ANC"与"该路径不支持此UI模式"，均不发送，防误发错命令
+            val reason = if (ancPath == GaiaCommands.ANC_PATH_UNKNOWN)
+                "ANC 能力尚未就绪或无 ANC 能力" else "该设备不支持此模式"
+            Log.w(TAG, "setAncMode: mode " + mode + " not allowed on path " + ancPath)
+            cb?.onAncError(reason)
             return
         }
         Log.d(TAG, "setAncMode ui=" + mode + " path=" + ancPath + " dev=" + dev)
-        when (ancPath) {
+        when (path) {
             GaiaCommands.ANC_PATH_ANC_V2 ->
                 writeCommand(FEATURE_ANC_V2, CMD_SET_CURRENT_MODE, byteArrayOf(dev.toByte()))
             GaiaCommands.ANC_PATH_ANC_V1 ->
                 writeCommand(FEATURE_ANC_V1, CMD_ANC1_SET_ANC_STATE, byteArrayOf(dev.toByte()))
-            else ->
+            GaiaCommands.ANC_PATH_AUDIO_CURATION ->
                 // AudioCuration(V1)：GA2 实证 setMode 有效但设备通常不回 ACK（乐观更新已由 AncBridge 负责）
                 writeCommand(F_AUDIO_CURATION, CMD_AC_SET_MODE, byteArrayOf(dev.toByte()))
+            else -> Log.w(TAG, "setAncMode: no write, path=" + ancPath)
         }
     }
 
@@ -1176,6 +1246,8 @@ class GaiaBleClient private constructor() {
                 if (okAddr != null) {
                     everConnected = true
                     cachedLeAddress = okAddr
+                    // alpha2.22: 记录成功连接设备的名称，作为 cachedLe 归属（多机切换防串扰）
+                    cachedLeName = runCatching { g.getDevice()?.name }.getOrNull()
                     candidates = arrayOf(okAddr.uppercase())
                     candidateIdx = 0
                     attemptCount = 0
@@ -1192,6 +1264,13 @@ class GaiaBleClient private constructor() {
                         featureProbeSent = true
                         writeCommand(FEATURE_BASIC, CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
                         writeCommand(FEATURE_BASIC, CMD_GET_VARIANT, ByteArray(0))
+                        // alpha2.26.3: 能力探测并行化——不等 2s 超时，立即并行发 AudioCuration
+                        // cmd=41 回退探测。GA2 不回能力位图，立即探测立即确认路径（控制就绪提速 ~2s）；
+                        // QCC 系以能力位图回包为准，AC 回包仅在 ancPath==UNKNOWN 时生效，不会覆盖。
+                        if (!ancAcProbeActive) {
+                            ancAcProbeActive = true
+                            writeCommand(F_AUDIO_CURATION, CMD_AC_GET_SWITCH_CONF, ByteArray(0))
+                        }
                         // alpha2.19: 探测超时自愈——若 2 秒内 ancPath 仍未知（响应丢失），
                         // 说明设备未回复能力位图，主动重发一次，避免 ancPath 卡死在 -1
                         handler.postDelayed({
@@ -1199,6 +1278,20 @@ class GaiaBleClient private constructor() {
                                 Log.w(TAG, "capability probe timeout, re-send GET_SUPPORTED_FEATURES")
                                 writeCommand(FEATURE_BASIC, CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
                                 writeCommand(FEATURE_BASIC, CMD_GET_VARIANT, ByteArray(0))
+                                if (!ancAcProbeActive) {
+                                    ancAcProbeActive = true
+                                    Log.w(TAG, "capability probe still unknown, re-probe AudioCuration path")
+                                    writeCommand(F_AUDIO_CURATION, CMD_AC_GET_SWITCH_CONF, ByteArray(0))
+                                }
+                                // 回退探测也超时无响应 -> 判定为无 ANC 能力（终态，避免弹窗一直显示"探测中"）
+                                handler.postDelayed({
+                                    if (connected && ancPath == GaiaCommands.ANC_PATH_UNKNOWN) {
+                                        Log.w(TAG, "AudioCuration probe also unanswered -> mark no ANC")
+                                        ancAcProbeActive = false
+                                        capabilityProbeDone = true
+                                        try { AncBridge.sendAncStatus(ancCapabilityStatus()) } catch (_: Exception) { }
+                                    }
+                                }, 3000)
                             }
                         }, 2000)
                     }
@@ -1274,10 +1367,14 @@ class GaiaBleClient private constructor() {
     /** 解析 GAIA V3 数据包 */
     private fun handlePacket(value: ByteArray) {
         try {
+            Log.d(TAG, "RX raw " + AppLog.hex(value))   // alpha2.24: 打印所有收到的原始字节（不过滤）
             AppLog.d(TAG, "GAIA RX " + AppLog.hex(value))
             val vendor = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
             val cmdValue = ((value[2].toInt() and 0xFF) shl 8) or (value[3].toInt() and 0xFF)
-            if (vendor != GAIA_VENDOR) return
+            if (vendor != GAIA_VENDOR) {
+                Log.w(TAG, "RX non-gaia vendor=0x" + Integer.toHexString(vendor) + " raw=" + AppLog.hex(value))
+                return
+            }
             val feature = (cmdValue shr 9) and 0x7F
             val type = (cmdValue shr 7) and 0x03
             val command = cmdValue and 0x7F
@@ -1290,10 +1387,23 @@ class GaiaBleClient private constructor() {
                 parseBatteryLevels(payload)
             } else if (feature == FEATURE_BASIC && command == CMD_GET_SUPPORTED_FEATURES) {
                 // alpha2.14: 能力位图 -> ANC 路径
+                // alpha2.22(A1): 位图被截断时能力不完整，不据此选路径，保持未知并标记；
+                //               截断=无法确定性判定ANC能力 -> 宁降级为无ANC(隐藏按钮)也不误发错命令
+                val truncated = GaiaCommands.isFeaturePayloadTruncated(payload)
+                capabilityProbeTruncated = truncated
                 val feats = GaiaCommands.parseSupportedFeatures(payload)
-                ancPath = GaiaCommands.ancPathFrom(feats)
+                if (truncated) {
+                    ancPath = GaiaCommands.ANC_PATH_UNKNOWN
+                    Log.w(TAG, "capability payload truncated (len=" +
+                            (payload?.size ?: 0) + "), keep ANC unknown")
+                } else {
+                    ancPath = GaiaCommands.ancPathFrom(feats)
+                }
+                capabilityProbeDone = true
+                // alpha2.22: 广播能力状态给 GMS 弹窗（驱动降噪按钮三态：启用/禁用/隐藏）
+                try { AncBridge.sendAncStatus(ancCapabilityStatus()) } catch (_: Exception) { }
                 Log.d(TAG, "capabilities: " + feats.sorted().joinToString(",") +
-                        " -> ancPath=" + ancPath)
+                        " truncated=" + truncated + " -> ancPath=" + ancPath)
             } else if (feature == FEATURE_BASIC &&
                     (command == CMD_GET_VARIANT || command == CMD_GET_APP_VERSION)) {
                 try {
@@ -1303,9 +1413,39 @@ class GaiaBleClient private constructor() {
                 } catch (_: Exception) { }
             } else if ((feature == FEATURE_ANC_V2 || feature == F_AUDIO_CURATION) &&
                     (command == CMD_GET_CURRENT_MODE || command == CMD_SET_CURRENT_MODE ||
+                            command == CMD_AC_GET_SWITCH_CONF || command == CMD_AC_SET_SWITCH_CONF ||
                             command == 0x01)) {
                 // 0x01 = notification MODE_CHANGE（AudioCuration/ANC_V2 均为 cmd=1）
-                parseAncMode(payload)
+                // alpha2.22: 能力位图未回且我们主动探测过 AudioCuration，此时收到 AudioCuration 探测响应，
+                // 即确认设备走 AudioCuration 路径（靠协议回包判定，不硬编码型号）。回退设 path 后广播状态。
+                if (ancAcProbeActive && ancPath == GaiaCommands.ANC_PATH_UNKNOWN) {
+                    // alpha2.24: 根据回包的 feature 确定 ANC 路径——GA2 走 ANC_V2(0x20)（官方 QTI V3AncV2Plugin 证实），
+                    // 也兼容 AudioCuration(0x08)。不硬编码型号，靠真实回包的 feature 判定。
+                    var probeOk = false
+                    if (feature == FEATURE_ANC_V2 && (command == CMD_GET_CURRENT_MODE || command == CMD_SET_CURRENT_MODE || command == 0x01)) {
+                        ancPath = GaiaCommands.ANC_PATH_ANC_V2
+                        probeOk = true
+                        Log.d(TAG, "ANC_V2 probe answered -> path=ANC_V2")
+                    } else if (feature == F_AUDIO_CURATION && (command == CMD_AC_GET_SWITCH_CONF || command == CMD_AC_GET_MODE)) {
+                        ancPath = GaiaCommands.ANC_PATH_AUDIO_CURATION
+                        probeOk = true
+                        Log.d(TAG, "AudioCuration probe answered -> path=AUDIO_CURATION")
+                    }
+                    if (probeOk) {
+                        ancAcProbeActive = false
+                        capabilityProbeDone = true
+                        try { AncBridge.sendAncStatus(ancCapabilityStatus()) } catch (_: Exception) { }
+                    }
+                }
+                // alpha2.23: cmd=41(GET_CURRENT_ANC_SWITCH_CONF)/cmd=42 返回的是 settledActions 字节流，
+                // 与 cmd=3 的 Mode 单字节语义不同。在实测确认映射前，仅记录原始字节做证据，
+                // 不调用 parseAncMode（避免用 V1 映射误判降噪状态，造成错误高亮）。
+                if (command == CMD_AC_GET_SWITCH_CONF || command == CMD_AC_SET_SWITCH_CONF) {
+                    Log.d(TAG, "ANC switch conf RX cmd=0x" + Integer.toHexString(command) +
+                            " payload=" + payload.contentToString() + " hex=" + AppLog.hex(payload))
+                } else {
+                    parseAncMode(payload)
+                }
             } else if (feature == FEATURE_ANC_V1 &&
                     (command == CMD_ANC1_GET_ANC_STATE || command == CMD_ANC1_SET_ANC_STATE)) {
                 parseAncMode(payload)
@@ -1335,7 +1475,9 @@ class GaiaBleClient private constructor() {
         if (payload.isEmpty()) return
         val dev = payload[0].toInt() and 0xFF
         // alpha2.14: 按 ANC 路径映射（ANC V2: 0关/1降噪/3抗风；ANC V1: 0关/1开；AC: 1关/2降噪/4透传/3抗风）
-        val mode = GaiaCommands.ancUiFromDev(ancPath, dev)
+        val path = if (ancPath == GaiaCommands.ANC_PATH_UNKNOWN)
+            GaiaCommands.ANC_PATH_AUDIO_CURATION else ancPath
+        val mode = GaiaCommands.ancUiFromDev(path, dev, readAncMap())
         Log.d(TAG, "anc mode path=" + ancPath + " dev=" + dev + " ui=" + mode)
         if (mode >= 0) {
             ancCallback?.let { cb ->

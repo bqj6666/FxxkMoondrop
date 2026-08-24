@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.19**（versionCode 236） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.26.1**（versionCode 244） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair 风格卡片**（设备名 + 电量 + 降噪模式），并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**（单一 APK 一体打包），同时内置可直接运行的应用主体。
 
@@ -120,7 +120,14 @@ alpha_src/
 
 ## 版本历史
 
-- **alpha2.19**（当前）：修复降噪控制“时好时坏”——能力探测标志永不重置导致 `ancPath` 卡死在 -1，现改为断连与每次新 GATT 会话均重置并超时自愈重发
+- **alpha2.26**（当前）：降噪控制重构后按钮错乱修复——AudioCuration 路径改为恒等映射（ancDevFromUi/ancUiFromDev 对齐 fxxk_alpha226 装机版），`fetchAncMode` 真正改用 `cmd=3(GET_MODE)`（此前文档已写但源码实为 cmd=41），官方面板/主界面补齐第 4 模式「抗风」
+- **alpha2.25**：能力探测回退 cmd=41→3——`fetchAncMode` 的 AudioCuration 路径改读 `cmd=3(GET_MODE)`（GA2 对 cmd=41 回包不稳），已装机验证
+- **alpha2.24**：官方 App 逆向证据落地——GA2 走 ANC_V2(0x20)，按回包 feature 判定 ANC 路径不硬编码型号
+- **alpha2.23**：降噪刷新「跳回关闭」修复——ANC 路径恒等映射 + ancPath 显式化 + 降噪读取改用 cmd=41(GET_CURRENT_ANC_SWITCH_CONF)
+- **alpha2.22**：取消乐观更新 + 官方高通协议(AudioCuration)落地——能力位图截断检测、能力探测终态、主动只读探测、ANC 三态广播、cachedLe 绑设备名防串扰
+- **alpha2.21**：连接锁到已学习 LE 地址，GA2 开盖 1.8s 秒连不再 12s 超时轮换
+- **alpha2.20**：已学习 LE 地址优先于 bonded 主地址，避免拿 PUBLIC 地址走 LE 后台等广播
+- **alpha2.19**：修复降噪控制“时好时坏”——能力探测标志永不重置导致 `ancPath` 卡死在 -1，现改为断连与每次新 GATT 会话均重置并超时自愈重发
 - **alpha2.18**：修复"耳机已断开仍显示已连接"的假连接问题（陈旧缓存作废 / 双地址自我反馈防护）
 - **alpha2.17**：修复 GA2（DUAL）连接不上——按名称扫描真实 LE 地址，实现自愈闭环
 - **alpha2.16**：接入 9ECA0000 完整协议客户端（音源切换 / EQ / MIC / SN），全链路运行日志

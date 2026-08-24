@@ -126,6 +126,8 @@ object GaiaCommands {
     const val C_AC_V7_GET_ADVERSE_ACOUSTIC_HANDLER_SUPPORT = 38
     const val C_AC_V7_GET_ADVERSE_ACOUSTIC_HANDLER_STATE = 39
     const val C_AC_V7_SET_ADVERSE_ACOUSTIC_HANDLER_STATE = 40
+    const val C_AC_V7_GET_CURRENT_ANC_SWITCH_CONF = 41
+    const val C_AC_V7_SET_ANC_SWITCH_CONF = 42
 
     // ============================================================
     // 6. GESTURE_CONFIGURATION(11)：触控手势自定义
@@ -195,11 +197,14 @@ object GaiaCommands {
     // ANC V2 模式（官方 AncV2Handler 常量）
     const val ANC2_MODE_OFF = 0
     const val ANC2_MODE_ON = 1
+    const val ANC2_MODE_TRANSPARENT = 2
     const val ANC2_MODE_ANTI_WIND = 3
+    const val ANC2_MODE_ADAPTIVE = 4
+    const val ANC2_MODE_LIVE = 5
 
     // ANC 开关配置字段（SWITCH_CONF payload 顺序）
     @JvmField
-    val ANC2_SWITCH_CONF_FIELDS = arrayOf("STATE", "ANC_ON", "ANC_OFF", "TP", "ORDER")
+    val ANC2_SWITCH_CONF_FIELDS = arrayOf("TP", "ORDER", "STATE", "ANC_ON", "ANC_OFF")
 
     // ANC V1 状态
     const val ANC1_STATE_DISABLE = 0
@@ -571,6 +576,14 @@ object GaiaCommands {
         return features
     }
 
+    /** alpha2.22: 能力位图是否被截断（payload 长度非 4 的倍数，末尾 feature word 会丢失）。
+     *  截断时该能力不完整，不应据此选择 ANC 路径（A1 健壮性）。 */
+    @JvmStatic
+    fun isFeaturePayloadTruncated(payload: ByteArray?): Boolean {
+        val p = payload ?: return false
+        return p.size % 4 != 0
+    }
+
     /** 由能力集合推导 ANC 路径（优先级：AudioCuration > ANC V2 > ANC V1 > 未知） */
     @JvmStatic
     fun ancPathFrom(features: Set<Int>): Int = when {
@@ -580,19 +593,33 @@ object GaiaCommands {
         else -> ANC_PATH_UNKNOWN
     }
 
-    /** 设备模式 -> UI 模式（0关 1降噪 2透传 3抗风；按 ANC 路径区分语义） */
+    /** 设备模式 -> UI 模式（0关 1降噪 2透传 3抗风；按 ANC 路径区分语义）。
+     *  alpha2.26.2: AudioCuration 官方编码为 1-based（1=关/2=降噪/3=透传/4=抗风），
+     *  不再硬编码恒等映射；custom 为用户自定义映射（index=UI模式，value=设备码）。 */
     @JvmStatic
-    fun ancUiFromDev(path: Int, dev: Int): Int = when (path) {
-        ANC_PATH_ANC_V2 -> when (dev) { 0 -> 0; 1 -> 1; 3 -> 3; else -> -1 }
+    fun ancUiFromDev(path: Int, dev: Int, custom: IntArray? = null): Int = when (path) {
+        ANC_PATH_ANC_V2 -> if (dev in 0..5) dev else -1    // ANC_V2 恒等映射（官方 AncV2Handler 0-5 直传）
         ANC_PATH_ANC_V1 -> if (dev == 0) 0 else 1
-        else -> when (dev) { 1 -> 0; 2 -> 1; 4 -> 2; 3 -> 3; else -> -1 } // AudioCuration
+        ANC_PATH_AUDIO_CURATION -> {
+            val map = custom ?: DEFAULT_ANC_MAP
+            map.indexOf(dev)
+        }
+        else -> -1 // ANC_PATH_UNKNOWN：无ANC
     }
 
-    /** UI 模式 -> 设备模式（负数 = 该路径不支持此 UI 模式） */
+    /** UI 模式 -> 设备模式（负数 = 该路径不支持此 UI 模式）。custom 同上，null 用官方默认。 */
     @JvmStatic
-    fun ancDevFromUi(path: Int, ui: Int): Int = when (path) {
-        ANC_PATH_ANC_V2 -> when (ui) { 0 -> 0; 1 -> 1; 3 -> 3; else -> 1 }
+    fun ancDevFromUi(path: Int, ui: Int, custom: IntArray? = null): Int = when (path) {
+        ANC_PATH_ANC_V2 -> if (ui in 0..5) ui else -1     // 恒等映射；超范围返回 -1（禁止发送）
         ANC_PATH_ANC_V1 -> if (ui == 0) 0 else 1
-        else -> when (ui) { 0 -> 1; 1 -> 2; 2 -> 4; 3 -> 3; else -> -1 } // AudioCuration
+        ANC_PATH_AUDIO_CURATION -> {
+            val map = custom ?: DEFAULT_ANC_MAP
+            if (ui in 0..3) map[ui] else -1
+        }
+        else -> -1 // ANC_PATH_UNKNOWN：能力未就绪/无ANC，禁止发送
     }
+
+    /** alpha2.26.2: AudioCuration 官方默认映射（1=关/2=降噪/3=透传/4=抗风）。
+     *  GA2 实测：发 1 得关、发 2 得降噪——恒等(0,1,2,3)整体错位 +1，官方枚举为 1-based。 */
+    private val DEFAULT_ANC_MAP = intArrayOf(1, 2, 3, 4)
 }

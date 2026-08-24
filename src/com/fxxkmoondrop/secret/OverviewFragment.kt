@@ -68,6 +68,7 @@ class OverviewFragment : Fragment() {
     private var battRowShown = false // alpha2.8: 电量行当前视觉状态（驱动出现/消失动画）
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
+    private var ancWindCol: View? = null // alpha2.26.2: 抗风按钮列（用户可选隐藏）
     private var ancMode = -1
     @Volatile private var moonProcState = "未知"
     private val autoRefreshHandler = Handler(Looper.getMainLooper())
@@ -271,12 +272,19 @@ class OverviewFragment : Fragment() {
         root.addView(spacer(dp(8)))
 
         // alpha1.20: 弹窗同款三按钮（圆形按钮 + 图标 + 小字），高亮=当前模式（与 Google 弹窗一致）
-        ancBtns = arrayOfNulls(3)
-        ancLabels = arrayOfNulls(3)
+        ancBtns = arrayOfNulls(4)
+        ancLabels = arrayOfNulls(4)
         val ancRow = LinearLayout(requireContext())
         ancRow.orientation = LinearLayout.HORIZONTAL
         ancRow.gravity = Gravity.CENTER
-        for (m in 0..2) {
+        // alpha2.26.2: Material Experience —— M3 圆角卡片容器（card 色 + 28dp 圆角）
+        ancRow.setPadding(dp(10), dp(12), dp(10), dp(12))
+        val ancCardBg = GradientDrawable()
+        ancCardBg.shape = GradientDrawable.RECTANGLE
+        ancCardBg.setColor(cardColor)
+        ancCardBg.setCornerRadius(dp(28).toFloat())
+        ancRow.background = ancCardBg
+        for (m in 0..3) {
             val fm = m
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
@@ -303,6 +311,7 @@ class OverviewFragment : Fragment() {
                 updateAncStatus()
             }
             ancBtns!![m] = holder
+            if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             val sz = dp(60)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(dp(2)))
@@ -319,6 +328,10 @@ class OverviewFragment : Fragment() {
         ancBtnRow = ancRow
         root.addView(ancBtnRow, lp(false))
         ancBtnRow!!.visibility = View.VISIBLE // alpha2.7: 始终显示，未连接时按钮禁用
+        // alpha2.26.2: 按用户设置应用抗风按钮可见性
+        val showWindInit = requireContext().getSharedPreferences("cfg", 0)
+                .getBoolean("show_wind", true)
+        ancWindCol?.visibility = if (showWindInit) View.VISIBLE else View.GONE
 
         root.addView(spacer(dp(8)))
 
@@ -719,6 +732,12 @@ class OverviewFragment : Fragment() {
         } catch (_: Exception) { }
         updateStatus()
         refreshAnc()
+        // alpha2.26.2: 每次回到前台按最新设置应用抗风按钮可见性（设置页切换后返回即时生效）
+        try {
+            val sw = requireContext().getSharedPreferences("cfg", 0)
+                    .getBoolean("show_wind", true)
+            ancWindCol?.visibility = if (sw) View.VISIBLE else View.GONE
+        } catch (_: Exception) { }
         // alpha1.11: 前台自动刷新耳机信息（30 秒一次）
         autoRefreshHandler.removeCallbacks(autoRefreshRunnable)
         autoRefreshHandler.postDelayed(autoRefreshRunnable, AUTO_REFRESH_MS)
@@ -1015,6 +1034,8 @@ class OverviewFragment : Fragment() {
     private val modeRequestReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             AncBridge.sendModeState()
+            // alpha2.22: 一并回发 ANC 能力状态，驱动弹窗降噪按钮三态
+            AncBridge.sendAncStatus(GaiaBleClient.getInstance().ancCapabilityStatus())
         }
     }
 
@@ -1058,6 +1079,14 @@ class OverviewFragment : Fragment() {
                 dot.style = android.graphics.Paint.Style.FILL
                 dot.color = color
                 c.drawCircle(cx + ir * 0.10f, cy + ir * 0.14f, px * 0.05f, dot)
+            }
+            3 -> { // 抗风：旋风/三弧线
+                val rect3 = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
+                c.drawArc(rect3, 70f, 220f, false, p)
+                val rect4 = android.graphics.RectF(cx - ir*0.7f, cy - ir*0.7f, cx + ir*0.7f, cy + ir*0.7f)
+                c.drawArc(rect4, 90f, 200f, false, p)
+                val rect5 = android.graphics.RectF(cx - ir*0.4f, cy - ir*0.4f, cx + ir*0.4f, cy + ir*0.4f)
+                c.drawArc(rect5, 110f, 180f, false, p)
             }
         }
         return android.graphics.drawable.BitmapDrawable(resources, bmp)
