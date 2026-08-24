@@ -619,7 +619,8 @@ object GaiaCommands {
         else -> -1 // ANC_PATH_UNKNOWN：能力未就绪/无ANC，禁止发送
     }
 
-    /** alpha2.26.2: AudioCuration 官方默认映射（1=关/2=降噪/3=透传/4=抗风）。
-     *  GA2 实测：发 1 得关、发 2 得降噪——恒等(0,1,2,3)整体错位 +1，官方枚举为 1-based。 */
+    /** alpha2.26.9: AudioCuration 名义默认映射（1=关/2=降噪/3=透传/4=抗风），仅作回退。
+     *  实际生效映射由 AncProfileLib 按设备名解析——如梦回二/Golden Ages 2 实测 1=关/2=降/3=抗风/4=透传。
+     *  用户自定义（SP anc_map_custom=1）优先级最高。仅 GAIA 路径使用，9ECA 蓝讯系不参与。 */
     private val DEFAULT_ANC_MAP = intArrayOf(1, 2, 3, 4)
 }

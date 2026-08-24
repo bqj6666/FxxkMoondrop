@@ -1288,7 +1288,10 @@ class OverviewFragment : Fragment() {
 
     private val gaiaUiCallback = object : GaiaBleClient.Callback {
         override fun onConnected(address: String) {
-            requireActivity().runOnUiThread {
+            if (!isAdded) return
+            val act = activity ?: return
+            act.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
                 moonProcState = serviceState()
                 ancMode = AncBridge.getCurrentMode()
                 updateAncStatus()
@@ -1302,7 +1305,10 @@ class OverviewFragment : Fragment() {
         }
 
         override fun onDisconnected(address: String) {
-            requireActivity().runOnUiThread {
+            if (!isAdded) return
+            val act = activity ?: return
+            act.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
                 moonProcState = serviceState()
                 updateAncStatus()
                 updateBatteryStatus()
@@ -1310,7 +1316,10 @@ class OverviewFragment : Fragment() {
         }
 
         override fun onBatteryLevel(batteryId: Int, level: Int) {
-            requireActivity().runOnUiThread {
+            if (!isAdded) return
+            val act = activity ?: return
+            act.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
                 val addr = GaiaBleClient.getInstance().deviceAddress
                 if (addr != null) BatteryStore.setGaiaLevel(addr, batteryId, level)
                 updateBatteryStatus()
@@ -1318,13 +1327,18 @@ class OverviewFragment : Fragment() {
         }
 
         override fun onAncMode(mode: Int) {
-            requireActivity().runOnUiThread {
+            if (!isAdded) return
+            val act = activity ?: return
+            act.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
                 ancMode = mode
                 updateAncStatus()
             }
         }
 
         override fun onError(message: String) {
+            // alpha2.26.8: Fragment 已 detach 时只记日志，不触碰 UI
+            if (!isAdded) return
         }
     }
 

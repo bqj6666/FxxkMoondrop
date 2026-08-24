@@ -6,6 +6,41 @@
 
 ---
 
+## alpha2.26.9（2026-08-24，versionCode 252）——ANC 型号档案库 AncProfileLib
+
+- **背景**：GA2（梦回二）官方 App 实测设备码 **1=关闭 / 2=降噪 / 3=抗风 / 4=透传**，与 AudioCuration 名义编码（1=关/2=降/3=透/4=抗）中 3、4 顺序相反，默认映射导致透传与抗风互串。
+- **新增 `AncProfileLib.kt` 型号档案库**：按设备名自动匹配实测映射（`GOLDEN AGES 2` → UI[关,降,透,抗] = dev[1,2,4,3]），每次连接自动套用；未实测型号回退 AC 名义默认映射。
+- **生效优先级**：用户自定义（设置页编辑即标记 `anc_map_custom=1`）> 型号档案 > 默认映射。
+- **协议隔离**：档案库仅 GAIA AudioCuration 路径（ancPath=8）生效；蓝讯/中科 9ECA（BleSourceSwitch）无任何 ANC 逻辑，绝不混用。
+- 连接日志打印 `connected name=xxx ancProfile=...` 可实时验证档案命中；设置页自定义映射显示「当前生效」设备码。
+- **验证**：编译 BUILD SUCCESSFUL；已打包签名装机 vc252。
+
+## alpha2.26.8（2026-08-24，versionCode 251）——连接修复装机
+
+- `leAddrVerified`：仅扫描确认过的 LE 地址才持久化，防 DUAL 设备 BR/EDR 地址误存为 LE 导致直连 GATT 超时；连接成功先刷新 GATT 缓存再发现服务（对齐官方 App refreshDeviceCache）。
+- 真机听感验证：AC 1-based 映射（关/降/透）全部正确。
+
+## alpha2.26.7（2026-08-24，versionCode 250）——回退 UNKNOWN→AudioCuration 违规链
+
+- 全量审查发现 3 处把 `ANC_PATH_UNKNOWN` 当 AudioCuration 误发跨路径命令，违反「未知/未就绪绝不当特定能力」铁律；全部回退为不发送并提示原因。
+
+## alpha2.26.6（2026-08-24，versionCode 249）——弹窗电量模拟残留修复
+
+## alpha2.26.5（2026-08-24，versionCode 248）——弹窗抗风按钮可隐藏 + 去开关 toast
+
+## alpha2.26.4（2026-08-24，versionCode 247）——连接链路提速 + 弹窗按钮恢复
+
+## alpha2.26.3（2026-08-24，versionCode 246）——抗风按钮可隐藏 + Material Experience 界面
+
+## alpha2.26.2（2026-08-24，versionCode 245）——ANC 按钮映射可配置化
+
+- 设置页新增自定义降噪按钮设备码（0-5）编辑，SP cfg `anc_map_0..3` 覆盖默认映射。
+- 默认映射按 GA2 实测改为 AC 1-based `[1,2,3,4]`。
+
+## alpha2.26 / alpha2.26.1（2026-08-24，versionCode 243/244）——降噪控制重构按钮错乱修复
+
+- AudioCuration 路径映射对齐 fxxk_alpha226 装机版；`fetchAncMode` 真正改用 `cmd=3(GET_MODE)`（此前文档已写但源码实为 cmd=41）；官方面板/主界面补齐第 4 模式「抗风」。
+
 ## alpha2.25（2026-08-24，versionCode 242 / versionName alpha2.25）——能力探测回退 cmd=41→3
 
 - **背景**：alpha2.24 起降噪探测定为「能力位图未回时主动发 AudioCuration 只读探测定路径」，并按官方 App 逆向改用 `cmd=41(GET_CURRENT_ANC_SWITCH_CONF)` 读 GA2 降噪；实测 GA2 对 cmd=41 回包不稳，导致 `fetchAncMode` 读降噪路径判定不理想。

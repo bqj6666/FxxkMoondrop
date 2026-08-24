@@ -252,13 +252,13 @@ class SettingsFragment : Fragment() {
                 // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, "ANC 按钮映射"))
         val ancMapHint = TextView(requireContext())
-        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。GA2 官方编码 1=关/2=降噪/3=透传/4=抗风；若按钮效果错位，请按实际效果自行匹配。"
+        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。GA2（梦回二）实测 1=关/2=降噪/3=抗风/4=透传，连接该型号自动套用档案；其他型号走默认映射。手动修改即自定义并优先生效。"
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
         val ancMapNames = arrayOf("关闭", "降噪", "透传", "抗风")
-        val ancMapDefaults = intArrayOf(1, 2, 3, 4)
+        val ancMapDefaults = GaiaBleClient.getInstance().getEffectiveAncMap()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
             val et = EditText(requireContext())
@@ -277,14 +277,15 @@ class SettingsFragment : Fragment() {
                 override fun afterTextChanged(s: android.text.Editable?) {
                     val v = s?.toString()?.trim()?.toIntOrNull()
                     if (v != null && v in 0..5) {
-                        getSP().edit().putInt("anc_map_" + i, v).commit()
+                        getSP().edit().putInt("anc_map_" + i, v)
+                                .putInt("anc_map_custom", 1).commit()
                     }
                 }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
             ancMapRows.add(M3Ui.listRow(requireActivity(), pal, 0, ancMapNames[i],
-                    "发送的设备码（GA2 默认 " + ancMapDefaults[i] + "）", et, null))
+                    "发送的设备码（当前生效 " + ancMapDefaults[i] + "）", et, null))
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *ancMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))

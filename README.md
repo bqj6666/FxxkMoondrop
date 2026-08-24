@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.26.1**（versionCode 244） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.26.9**（versionCode 252） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair 风格卡片**（设备名 + 电量 + 降噪模式），并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**（单一 APK 一体打包），同时内置可直接运行的应用主体。
 
@@ -12,7 +12,8 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 
 ## 功能
 
-- **蓝牙监听 + GAIA 直连**：自研 `GaiaBleClient`，BLE GATT 直连耳机，读取左右耳电量，控制降噪（关闭 / 降噪 / 透传）
+- **蓝牙监听 + GAIA 直连**：自研 `GaiaBleClient`，BLE GATT 直连耳机，读取左右耳电量，控制降噪（关闭 / 降噪 / 透传 / 抗风）
+- **ANC 型号档案库**：`AncProfileLib` 按设备名自动套用实测设备码映射（如 GA2 实测 1=关/2=降/3=抗风/4=透传），未实测型号回退默认映射；设置页可自定义映射优先生效
 - **FastPairHook（LSPosed 模块，注入 Google Play 服务）**：借道 GMS 的 BLE 扫描能力动态发现耳机 LE 地址并推送给应用
 - **自愈闭环**：无缓存 → REQ 扫描 → GMS 推送 → 连接成功写回文件 / SP → 下次秒连；地址变化自动重新发现（**地址全动态发现、零硬编码**）
 - **两种弹窗模式**：Google Fast Pair 半屏弹窗（默认，注入 GMS 的 HalfSheetActivity）/ 应用自带悬浮卡片（不依赖 Xposed，应用主体仍可独立运行）
@@ -64,7 +65,7 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 
 | 状态 | 耳机型号 | 主控 / 协议 | 依据 |
 |---|---|---|---|
-| ✅ 已实测 | 梦回2 / Golden Ages 2（GA2） | TWS-01 定制 SoC（GAIA） | 实机验证通过 |
+| ✅ 已实测 | 梦回2 / Golden Ages 2（GA2） | TWS-01 定制 SoC（GAIA） | 实机验证通过（ANC 设备码 1=关/2=降/3=抗风/4=透传 已入库） |
 | 🟢 理论上支持 | 爱丽丝 ALICE | QCC5151（GAIA） | 芯片理论支持 |
 | 🟢 理论上支持 | 火花 SPARKS | QCC3040（GAIA） | 芯片理论支持 |
 | 🟢 理论上支持 | 旅行者 VOYAGER（颈挂） | QCC5144（GAIA） | 芯片理论支持 |
@@ -120,7 +121,11 @@ alpha_src/
 
 ## 版本历史
 
-- **alpha2.26**（当前）：降噪控制重构后按钮错乱修复——AudioCuration 路径改为恒等映射（ancDevFromUi/ancUiFromDev 对齐 fxxk_alpha226 装机版），`fetchAncMode` 真正改用 `cmd=3(GET_MODE)`（此前文档已写但源码实为 cmd=41），官方面板/主界面补齐第 4 模式「抗风」
+- **alpha2.26.9**（当前）：ANC 型号档案库 `AncProfileLib`——GA2 实测 1=关/2=降噪/3=抗风/4=透传，按设备名自动套用；未实测型号回退默认映射；自定义映射优先生效（仅 GAIA 路径，9ECA 蓝讯系不混用）
+- **alpha2.26.8**：连接修复——仅扫描确认的 LE 地址才持久化，连接成功先刷新 GATT 缓存（对齐官方 refreshDeviceCache）
+- **alpha2.26.7**：回退 UNKNOWN→AudioCuration 违规链——「未知/未就绪」不再误发跨路径命令
+- **alpha2.26.2**：ANC 按钮映射可配置化——设置页自定义设备码（0-5），默认 AC 1-based [1,2,3,4]
+- **alpha2.26**：降噪控制重构后按钮错乱修复——`fetchAncMode` 真正改用 `cmd=3(GET_MODE)`，官方面板/主界面补齐第 4 模式「抗风」
 - **alpha2.25**：能力探测回退 cmd=41→3——`fetchAncMode` 的 AudioCuration 路径改读 `cmd=3(GET_MODE)`（GA2 对 cmd=41 回包不稳），已装机验证
 - **alpha2.24**：官方 App 逆向证据落地——GA2 走 ANC_V2(0x20)，按回包 feature 判定 ANC 路径不硬编码型号
 - **alpha2.23**：降噪刷新「跳回关闭」修复——ANC 路径恒等映射 + ancPath 显式化 + 降噪读取改用 cmd=41(GET_CURRENT_ANC_SWITCH_CONF)
