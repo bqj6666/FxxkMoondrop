@@ -11,7 +11,8 @@
 - **背景**：真机抓包发现 GA2 固件 **GET_MODE(cmd=3) 读回值**是 0-based 直传（0=关/1=降/2=透/3=抗），与 **SET_MODE(cmd=4) 的 1-based 枚举**（1=关/2=降/4=透/3=抗）是两套编码；旧代码用 SET 映射 indexOf 反查读回值，读到 0 时解析失败（ui=-1）导致按钮状态卡死。
 - **实测证据**：SET [2]→读回[1]、SET [4]→读回[2]、读回稳定 [2,1,0,0]（payload[0]=mode 值，官方 Mode.java 同解析）。
 - **改动**：`AncProfileLib.Profile` 增加独立 `getMap` 字段（GA2: [0,1,2,3]）+ `resolveGetMap()`；`GaiaCommands.ancUiFromDev` 支持档案 getMap，未命中档案/自定义映射回退 indexOf 反查（不影响其他机型）；`GaiaBleClient.readAncGetMap()` 传入解析。
-- **验证**：编译 BUILD SUCCESSFUL，scope 注入 VERIFY OK，vc253 已装机。
+- **验证**：编译 BUILD SUCCESSFUL，scope 注入 VERIFY OK，vc253 已装机；四按钮 SET→读回→UI 全链路实测闭环。
+- **其他**：设置页 ANC 映射提示精简（移除 GA2 实测文案）；诊断日志扩充——LogCollector 新增「ANC 映射状态」小节（设备名/档案/生效 SET 映射）、GaiaBleClient 补 AppLog（ancSetMap/ancGetMap/ancModeParse），logcat 抓取 600→1000 行。
 
 ## alpha2.26.9（2026-08-24，versionCode 252）——ANC 型号档案库 AncProfileLib
 
