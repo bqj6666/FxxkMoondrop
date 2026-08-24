@@ -597,12 +597,17 @@ object GaiaCommands {
      *  alpha2.26.2: AudioCuration 官方编码为 1-based（1=关/2=降噪/3=透传/4=抗风），
      *  不再硬编码恒等映射；custom 为用户自定义映射（index=UI模式，value=设备码）。 */
     @JvmStatic
-    fun ancUiFromDev(path: Int, dev: Int, custom: IntArray? = null): Int = when (path) {
+    fun ancUiFromDev(path: Int, dev: Int, custom: IntArray? = null, getMap: IntArray? = null): Int = when (path) {
         ANC_PATH_ANC_V2 -> if (dev in 0..5) dev else -1    // ANC_V2 恒等映射（官方 AncV2Handler 0-5 直传）
         ANC_PATH_ANC_V1 -> if (dev == 0) 0 else 1
         ANC_PATH_AUDIO_CURATION -> {
-            val map = custom ?: DEFAULT_ANC_MAP
-            map.indexOf(dev)
+            // alpha2.26.9: 型号档案可提供独立的 GET 映射（如 GA2 固件读回 0=关/1=降/2=透传/3=抗风，0-based 直传）
+            if (getMap != null) {
+                if (dev in getMap.indices) getMap[dev] else -1
+            } else {
+                val map = custom ?: DEFAULT_ANC_MAP
+                map.indexOf(dev)
+            }
         }
         else -> -1 // ANC_PATH_UNKNOWN：无ANC
     }

@@ -1040,12 +1040,30 @@ class GaiaBleClient private constructor() {
             m
         } else null
         val map = AncProfileLib.resolve(connectedDeviceName, custom)
+        val src = if (custom != null) "custom" else if (AncProfileLib.matchedProfileName(connectedDeviceName) != "默认") "profile" else "default"
+        AppLog.d(TAG, "ancSetMap src=" + src + " map=" + map.contentToString() +
+                " profile=" + AncProfileLib.matchedProfileName(connectedDeviceName))
         // 防御：档案/自定义数据异常时回退默认，绝不发送非法设备码
         return if (map.any { it !in 0..5 }) AncProfileLib.DEFAULT_MAP else map
     }
 
+    /** alpha2.26.9: GET 方向（设备码 -> UI 模式）映射。型号档案可提供与 SET 不同的 getMap
+     *  （如 GA2 固件读回 0=关/1=降/2=透传/3=抗风，0-based 直传）；
+     *  用户自定义 SET 映射或未命中档案时返回 null（parseAncMode 回退 map.indexOf 反查）。 */
+    private fun readAncGetMap(): IntArray? {
+        val sp = context?.getSharedPreferences("cfg", 0)
+        val customSet = (sp?.getInt("anc_map_custom", 0) ?: 0) == 1
+        val m = AncProfileLib.resolveGetMap(connectedDeviceName, customSet)
+        AppLog.d(TAG, "ancGetMap " + (m?.contentToString() ?: "null(fallback indexOf)") +
+                " customSet=" + customSet)
+        return m
+    }
+
     /** alpha2.26.9: 公开当前生效映射（设置页初始化展示用；未连接/未知型号=默认映射） */
     fun getEffectiveAncMap(): IntArray = readAncMap()
+
+    /** alpha2.26.11: 公开当前连接设备名（诊断日志/映射状态导出用） */
+    fun getConnectedDeviceName(): String? = connectedDeviceName
     /** 设置 ANC 模式（入参为 UI 模式：0=关闭 1=降噪 2=透传 3=抗风 4=自适应）
      *  alpha2.14: 按能力探测结果映射到对应协议路径（AudioCuration / ANC V2 / ANC V1） */
     fun setAncMode(mode: Int, cb: AncControlCallback?) {
@@ -1552,8 +1570,9 @@ class GaiaBleClient private constructor() {
         // alpha2.14: 按 ANC 路径映射（ANC V2: 0关/1降噪/3抗风；ANC V1: 0关/1开；AC: 1关/2降噪/4透传/3抗风）
         val path = if (ancPath == GaiaCommands.ANC_PATH_UNKNOWN)
             GaiaCommands.ANC_PATH_AUDIO_CURATION else ancPath
-        val mode = GaiaCommands.ancUiFromDev(path, dev, readAncMap())
+        val mode = GaiaCommands.ancUiFromDev(path, dev, readAncMap(), readAncGetMap())
         Log.d(TAG, "anc mode path=" + ancPath + " dev=" + dev + " ui=" + mode)
+        AppLog.d(TAG, "ancModeParse path=" + ancPath + " dev=" + dev + " ui=" + mode)
         if (mode >= 0) {
             ancCallback?.let { cb ->
                 handler.post {

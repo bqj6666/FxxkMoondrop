@@ -165,6 +165,18 @@ class LogCollector {
             sb.append("GMS 版本: ").append(appVersion(ctx, "com.google.android.gms")).append('\n')
             sb.append("Moondrop 官方 App: ")
                     .append(appVersion(ctx, "com.moondroplab.moondrop.moondrop_app")).append('\n')
+            // alpha2.26.11: ANC 映射状态（SET/GET 生效映射 + 档案匹配 + SP 自定义），
+            // 供其他型号适配诊断（抓官方 App 对比设备码时必看）
+            sb.append("---- ANC 映射状态 ----\n")
+            try {
+                val client = GaiaBleClient.getInstance()
+                sb.append("设备名: ").append(client.getConnectedDeviceName() ?: "(未连接)").append('\n')
+                sb.append("匹配档案: ").append(AncProfileLib.matchedProfileName(client.getConnectedDeviceName())).append('\n')
+                sb.append("生效 SET 映射(UI[关,降,透,抗]->dev): ")
+                        .append(client.getEffectiveAncMap().contentToString()).append('\n')
+            } catch (e: Exception) {
+                sb.append("ANC 映射读取失败: ").append(e).append('\n')
+            }
             sb.append("---- 应用设置 (cfg) ----\n")
             try {
                 val sp = ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE)
@@ -235,14 +247,14 @@ class LogCollector {
         // ── 05 logcat 尾部 ──
         private fun buildLogcat(): String {
             val sb = StringBuilder()
-            sb.append("==== logcat (tail 600) ====\n")
+            sb.append("==== logcat (tail 1000) ====\n")
             try {
-                val p = Runtime.getRuntime().exec("logcat -d -t 600")
+                val p = Runtime.getRuntime().exec("logcat -d -t 1000")
                 val r = BufferedReader(InputStreamReader(p.inputStream))
                 var n = 0
                 while (true) {
                     val line = r.readLine() ?: break
-                    if (n >= 700) break
+                    if (n >= 1200) break
                     sb.append(line).append('\n')
                     n++
                 }

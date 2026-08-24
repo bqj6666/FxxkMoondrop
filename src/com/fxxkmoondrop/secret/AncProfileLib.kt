@@ -22,14 +22,15 @@ object AncProfileLib {
     /** 默认映射：AC 名义编码 1=关 / 2=降噪 / 3=透传 / 4=抗风。未实测型号回退用。 */
     val DEFAULT_MAP: IntArray = intArrayOf(1, 2, 3, 4)
 
-    private class Profile(val nameKey: String, val map: IntArray)
+    private class Profile(val nameKey: String, val map: IntArray, val getMap: IntArray? = null)
 
     /** 型号档案表：设备名关键字（大写匹配，contains）→ 实测设备码映射。
      *  新型号实测确认后按同样格式追加；未实测型号一律走 DEFAULT_MAP。 */
     private val PROFILES: List<Profile> = listOf(
-        // 梦回二 / Golden Ages 2 —— 2026-08-24 用户官方 App 实测：
-        // 1=关闭 2=降噪 3=抗风 4=透传（UI[关,降,透,抗] → dev[1,2,4,3]）
-        Profile("GOLDEN AGES 2", intArrayOf(1, 2, 4, 3))
+        // 梦回二 / Golden Ages 2 —— 2026-08-24 官方 App 抓包 + 08-25 真机双向实测：
+        // SET（UI[关,降,透,抗] → dev）：1=关闭 2=降噪 4=透传 3=抗风
+        // GET（dev → UI）：0=关闭 1=降噪 2=透传 3=抗风 —— 固件读回是 0-based 直传，与 SET 枚举不同！
+        Profile("GOLDEN AGES 2", intArrayOf(1, 2, 4, 3), intArrayOf(0, 1, 2, 3))
     )
 
     /**
@@ -46,6 +47,23 @@ object AncProfileLib {
             }
         }
         return DEFAULT_MAP
+    }
+
+    /**
+     * 解析 GET 方向（设备码 → UI 模式）映射。
+     * @param deviceName 当前连接设备名
+     * @param customSet 用户是否自定义了 SET 映射；自定义时 GET 枚举不可知，返回 null 回退 indexOf 反查
+     * @return 型号档案的 getMap（dev 下标 → UI 值）；无档案/未知型号返回 null
+     */
+    fun resolveGetMap(deviceName: String?, customSet: Boolean): IntArray? {
+        if (customSet) return null
+        val n = deviceName?.uppercase()?.trim()
+        if (!n.isNullOrEmpty()) {
+            for (p in PROFILES) {
+                if (n.contains(p.nameKey)) return p.getMap
+            }
+        }
+        return null
     }
 
     /** 当前连接命中的档案名（调试/设置页展示用）；未命中返回 "默认" */

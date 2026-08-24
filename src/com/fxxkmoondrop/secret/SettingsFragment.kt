@@ -252,7 +252,7 @@ class SettingsFragment : Fragment() {
                 // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, "ANC 按钮映射"))
         val ancMapHint = TextView(requireContext())
-        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。GA2（梦回二）实测 1=关/2=降噪/3=抗风/4=透传，连接该型号自动套用档案；其他型号走默认映射。手动修改即自定义并优先生效。"
+        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。"
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
