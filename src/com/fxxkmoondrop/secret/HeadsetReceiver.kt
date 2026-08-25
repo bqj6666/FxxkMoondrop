@@ -21,7 +21,7 @@ class HeadsetReceiver : BroadcastReceiver() {
         // alpha1.15: FastPair 弹窗里的三模式按钮回调
         if (ACTION_FP_MODE == action) {
             val mode = i.getIntExtra(EXTRA_FP_MODE, -1)
-            if (mode in 0..2) {
+            if (mode in 0..5) {
                 AncBridge.setAncMode(mode)
                 Log.i(TAG, "fastpair mode change -> $mode")
             }
@@ -66,6 +66,13 @@ class HeadsetReceiver : BroadcastReceiver() {
             if (address != null && level >= 0) {
                 BatteryStore.set(address, level)
                 Log.i(TAG, "battery $name ($address) = $level%")
+                // alpha2.27: 同步刷新 GMS 弹窗电量显示
+                try {
+                    val bi = Intent(com.fxxkmoondrop.secret.hook.FastPairHookEntry.ACTION_BATTERY_UPDATE)
+                    bi.putExtra("sys", level)
+                    bi.setPackage(com.fxxkmoondrop.secret.hook.FastPairHookEntry.PKG_GMS)
+                    c.sendBroadcast(bi)
+                } catch (_: Throwable) { }
             }
             return
         }

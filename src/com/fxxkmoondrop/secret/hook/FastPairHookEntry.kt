@@ -378,32 +378,60 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         return bmp
     }
 
-    /** 电量显示：直接写入 GMS 原生 subhead TextView */
+    /** alpha2.27: 电量显示——支持部分显示 + 系统电量兜底 + GAIA 回包后自动刷新 */
     private fun injectBatteryOverlay(act: android.app.Activity) {
         try {
-            if (sBatteryLeft < 0 || sBatteryRight < 0) return
+            sBatteryOverlayActivity = act
             val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
             val sub = if (subId != 0) act.window.decorView.findViewById<android.view.View>(subId) else null
-            if (sub is android.widget.TextView) {
-                val tv = sub
-                tv.text = "左耳 " + sBatteryLeft + "%  ·  右耳 " + sBatteryRight + "%"
-                // alpha1.36: 电量文字随深浅色自适应
-                val batNight = (tv.resources.configuration.uiMode and
-                        android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                        android.content.res.Configuration.UI_MODE_NIGHT_YES
-                tv.setTextColor(if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
-                tv.visibility = android.view.View.VISIBLE
-                XposedBridge.log("[FastPairHook] battery on subhead: L=" + sBatteryLeft + " R=" + sBatteryRight)
-                // v0.7: 连接按钮文字 -> "确定"
-                val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
-                val btnV = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
-                if (btnV is android.widget.TextView) {
-                    btnV.text = "确定"
-                    XposedBridge.log("[FastPairHook] central_btn text -> 确定")
+            if (sub !is android.widget.TextView) return
+            val tv = sub
+            val l = sBatteryLeft
+            val r = sBatteryRight
+            val sys = sBatterySysLevel
+            val text: String = when {
+                l >= 0 && r >= 0 -> "左耳 " + l + "%  ·  右耳 " + r + "%"
+                l >= 0 -> "左耳 " + l + "%"
+                r >= 0 -> "右耳 " + r + "%"
+                sys >= 0 -> "耳机电量 " + sys + "%"
+                else -> {
+                    XposedBridge.log("[FastPairHook] battery not ready yet, will retry on update")
+                    return
                 }
+            }
+            tv.text = text
+            val batNight = (tv.resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+            tv.setTextColor(if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
+            tv.visibility = android.view.View.VISIBLE
+            XposedBridge.log("[FastPairHook] battery on subhead: L=" + l + " R=" + r + " sys=" + sys)
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            val btnV = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
+            if (btnV is android.widget.TextView) {
+                btnV.text = "确定"
             }
         } catch (t: Throwable) {
             XposedBridge.log("[FastPairHook] battery overlay fail: " + t)
+        }
+    }
+
+    /** alpha2.27: GAIA 电量回包后刷新弹窗 */
+    fun refreshBatteryOverlay(left: Int, right: Int) {
+        val act = sBatteryOverlayActivity ?: return
+        if (left >= 0) sBatteryLeft = left
+        if (right >= 0) sBatteryRight = right
+        Handler(Looper.getMainLooper()).post {
+            try { injectBatteryOverlay(act) } catch (_: Throwable) { }
+        }
+    }
+
+    /** alpha2.27: 系统蓝牙电量广播更新、由广播接收器调用） */
+    fun setSystemBattery(level: Int) {
+        sBatterySysLevel = level
+        val act = sBatteryOverlayActivity ?: return
+        Handler(Looper.getMainLooper()).post {
+            try { injectBatteryOverlay(act) } catch (_: Throwable) { }
         }
     }
 
@@ -967,8 +995,77 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             }
             ctx.registerReceiver(pingReceiver, pingF, exportedFlag)
             XposedBridge.log("[FastPairHook] ping receiver registered")
+    
+        // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
+        try {
+            val battF = IntentFilter(ACTION_BATTERY_UPDATE)
+            val battReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val l = intent.getIntExtra("left", -1)
+                        val r = intent.getIntExtra("right", -1)
+                        val sys = intent.getIntExtra("sys", -1)
+                        if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
+                        if (sys >= 0) setSystemBattery(sys)
+                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(battReceiver, battF, exportedFlag)
+            XposedBridge.log("[FastPairHook] battery update receiver registered")
         } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
+        }
+    } catch (t: Throwable) {
             XposedBridge.log("[FastPairHook] ping receiver fail: " + t)
+    
+        // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
+        try {
+            val battF = IntentFilter(ACTION_BATTERY_UPDATE)
+            val battReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val l = intent.getIntExtra("left", -1)
+                        val r = intent.getIntExtra("right", -1)
+                        val sys = intent.getIntExtra("sys", -1)
+                        if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
+                        if (sys >= 0) setSystemBattery(sys)
+                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(battReceiver, battF, exportedFlag)
+            XposedBridge.log("[FastPairHook] battery update receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
+        }
+    }
+
+        // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
+        try {
+            val battF = IntentFilter(ACTION_BATTERY_UPDATE)
+            val battReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    try {
+                        val l = intent.getIntExtra("left", -1)
+                        val r = intent.getIntExtra("right", -1)
+                        val sys = intent.getIntExtra("sys", -1)
+                        if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
+                        if (sys >= 0) setSystemBattery(sys)
+                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                    } catch (t: Throwable) {
+                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                    }
+                }
+            }
+            ctx.registerReceiver(battReceiver, battF, exportedFlag)
+            XposedBridge.log("[FastPairHook] battery update receiver registered")
+        } catch (t: Throwable) {
+            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
         }
     }
 
@@ -1243,6 +1340,8 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         const val ACTION_MODE_REQUEST = "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST"
         /** alpha2.22: app -> GMS 广播 ANC 能力状态，驱动弹窗降噪按钮三态 */
         const val ACTION_ANC_STATUS = "com.fxxkmoondrop.secret.FASTPAIR_ANC_STATUS"
+        /** alpha2.27: app -> GMS 广播电量更新（左耳/右耳/系统值） */
+        const val ACTION_BATTERY_UPDATE = "com.fxxkmoondrop.secret.FASTPAIR_BATTERY_UPDATE"
         const val EXTRA_ANC_STATUS = "status"
         @JvmField @Volatile
         var sLastMode = -1 // 最近一次收到的模式状态（-1=未知/不高亮）
@@ -1294,6 +1393,11 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         var sBatteryLeft = -1
         @JvmField @Volatile
         var sBatteryRight = -1
+        /** alpha2.27: GAIA 电量回包后刷新弹窗 */
+        @JvmField @Volatile
+        var sBatteryOverlayActivity: android.app.Activity? = null
+        @JvmField @Volatile
+        var sBatterySysLevel = -1
         /*** central_btn 资源 id（运行时解析后缓存） */
         @JvmField @Volatile
         var sCentralBtnId = 0

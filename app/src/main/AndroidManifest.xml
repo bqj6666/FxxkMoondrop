@@ -3,8 +3,8 @@
 <!-- 版本号参数化：alpha2.12 / 228，由 build_m3.py 替换 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.fxxkmoondrop.secret"
-    android:versionCode="228"
-    android:versionName="alpha2.12">
+    android:versionCode="254"
+    android:versionName="alpha2.27">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
