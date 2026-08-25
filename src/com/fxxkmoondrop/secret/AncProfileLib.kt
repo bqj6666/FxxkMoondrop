@@ -56,7 +56,9 @@ object AncProfileLib {
      * @return 型号档案的 getMap（dev 下标 → UI 值）；无档案/未知型号返回 null
      */
     fun resolveGetMap(deviceName: String?, customSet: Boolean): IntArray? {
-        if (customSet) return null
+        // alpha2.30: GET 映射由固件决定，与用户自定义 SET 映射无关。
+        // 即使 customSet=true，只要设备匹配型号档案就用档案 getMap。
+        // 仅当无匹配档案时返回 null（回退 indexOf）。
         val n = deviceName?.uppercase()?.trim()
         if (!n.isNullOrEmpty()) {
             for (p in PROFILES) {

@@ -863,6 +863,8 @@ class GaiaBleClient private constructor() {
     private fun readAncGetMap(): IntArray? {
         val sp = context?.getSharedPreferences("cfg", 0)
         val customSet = (sp?.getInt("anc_map_custom", 0) ?: 0) == 1
+        Log.d(GaiaConstants.TAG, "readAncGetMap devName=" + connectedDeviceName +
+                " customSet=" + customSet + " ctx=" + (context != null))
         val m = AncProfileLib.resolveGetMap(connectedDeviceName, customSet)
         AppLog.d(GaiaConstants.TAG, "ancGetMap " + (m?.contentToString() ?: "null(fallback indexOf)") +
                 " customSet=" + customSet)
