@@ -827,6 +827,9 @@ class GaiaBleClient private constructor() {
             cb?.onAncModeResult(if (m >= 0) m else 1)
             return
         }
+        Log.d(GaiaConstants.TAG, "fetchAncMode path=" + probe.ancPath +
+                " devName=" + connectedDeviceName +
+                " profile=" + AncProfileLib.matchedProfileName(connectedDeviceName))
         when (probe.ancPath) {
             GaiaCommands.ANC_PATH_ANC_V2 ->
                 writeCommand(GaiaConstants.FEATURE_ANC_V2, GaiaConstants.CMD_GET_CURRENT_MODE, ByteArray(0))
@@ -965,6 +968,10 @@ class GaiaBleClient private constructor() {
                     connectedDeviceName = scanHits.firstOrNull {
                         it.device.address.equals(g.device?.address, true)
                     }?.scanRecord?.deviceName
+                }
+                // alpha2.29: fallback to scan-cached name (direct reconnect may have null g.device.name)
+                if (connectedDeviceName.isNullOrEmpty()) {
+                    connectedDeviceName = cachedLeName
                 }
                 Log.d(GaiaConstants.TAG, "connected name=" + connectedDeviceName +
                         " ancProfile=" + AncProfileLib.matchedProfileName(connectedDeviceName))

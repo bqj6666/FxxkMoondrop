@@ -129,8 +129,12 @@ class GaiaPacketHandler(
         val dev = payload[0].toInt() and 0xFF
         val path = if (probe.ancPath == GaiaCommands.ANC_PATH_UNKNOWN)
             GaiaCommands.ANC_PATH_AUDIO_CURATION else probe.ancPath
-        val mode = GaiaCommands.ancUiFromDev(path, dev, ancMapProvider(), ancGetMapProvider())
-        Log.d(TAG, "anc mode path=" + probe.ancPath + " dev=" + dev + " ui=" + mode)
+        val setMap = ancMapProvider()
+        val getMap = ancGetMapProvider()
+        val mode = GaiaCommands.ancUiFromDev(path, dev, setMap, getMap)
+        Log.d(TAG, "anc mode path=" + probe.ancPath + " dev=" + dev + " ui=" + mode +
+                " setMap=" + setMap.contentToString() +
+                " getMap=" + (getMap?.contentToString() ?: "null"))
         AppLog.d(TAG, "ancModeParse path=" + probe.ancPath + " dev=" + dev + " ui=" + mode)
         if (mode >= 0) {
             ancCallbackProvider()?.let { cb ->
