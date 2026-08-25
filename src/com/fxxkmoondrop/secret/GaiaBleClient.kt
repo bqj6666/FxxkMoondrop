@@ -328,12 +328,9 @@ class GaiaBleClient private constructor() {
                 } else {
                     advanceCandidate()
                 }
-                disconnectInternal()
             } else {
                 return true
             }
-        } else if (!connected && gatt != null) {
-            disconnectInternal()
         }
         disconnectInternal()
         try {
@@ -413,76 +410,6 @@ class GaiaBleClient private constructor() {
     }
 
     @Synchronized
-    private fun startScanForLe(target: BluetoothDevice): Boolean {
-        try {
-            if (scanning) return true
-            val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter == null || !adapter.isEnabled) return false
-            leScanner = adapter.bluetoothLeScanner
-            if (leScanner == null) return false
-            val targetName = target.name
-            val settings = ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-            scanCallback = object : ScanCallback() {
-                override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    if (scanning && result != null && result.device != null) {
-                        var n = result.scanRecord?.deviceName
-                        if (n == null) n = result.device.name
-                        val addr = result.device.address
-                        Log.d(GaiaConstants.TAG, "scan result: " + addr + " name=" + n)
-                        AppLog.d("Scan", "hit " + addr + " name=" + n + " rssi=" + result.rssi)
-                        var match = false
-                        if (n != null && targetName != null) {
-                            match = n == targetName ||
-                                    (n.lowercase().contains("moondrop") &&
-                                            targetName.lowercase().contains("moondrop"))
-                        }
-                        val ta = target.address
-                        if (!match && ta.length == 17 && addr.length == 17 &&
-                                ta.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)) {
-                            match = true
-                        }
-                        if (match) {
-                            stopScan()
-                            cachedLeAddress = addr
-                            try {
-                                if (context != null) {
-                                    context!!.getSharedPreferences("cfg", 0)
-                                            .edit().putString("gaia_le_addr", addr).commit()
-                                    saveLeAddrFile(addr)
-                                    Log.d(GaiaConstants.TAG, "LE address cached: " + addr)
-                                }
-                            } catch (_: Exception) { }
-                            doConnectLe(result)
-                        }
-                    }
-                }
-                override fun onScanFailed(errorCode: Int) {
-                    Log.w(GaiaConstants.TAG, "scan failed code=" + errorCode)
-                    stopScan()
-                    retryConnect()
-                }
-            }
-            scanning = true
-            leScanner!!.startScan(null, settings, scanCallback)
-            handler.postDelayed(scanTimeout, 25000)
-            return true
-        } catch (e: SecurityException) {
-            Log.e(GaiaConstants.TAG, "scan permission denied", e)
-            scanning = false
-            scanCallback = null
-            leScanner = null
-            return false
-        } catch (e: Exception) {
-            Log.e(GaiaConstants.TAG, "scan start failed", e)
-            scanning = false
-            scanCallback = null
-            leScanner = null
-            return false
-        }
-    }
-
-    @Synchronized
     private fun prefixMatchesBonded(address: String?): Boolean {
         return try {
             val adapter = BluetoothAdapter.getDefaultAdapter()
@@ -533,36 +460,48 @@ class GaiaBleClient private constructor() {
         } catch (_: Exception) { }
     }
 
+    /** alpha2.28: unified BLE scan (merged startScanForLe + startGenericScan) */
     @Synchronized
-    private fun startGenericScan() {
+    private fun startLeScan(
+            matcher: (String?, String, ScanResult) -> Boolean,
+            onHitImmediate: Boolean,
+            timeoutMs: Long,
+            onScanDone: () -> Unit
+    ): Boolean {
         try {
-            if (scanning) return
+            if (scanning) return true
             val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter == null || !adapter.isEnabled) return
+            if (adapter == null || !adapter.isEnabled) return false
             leScanner = adapter.bluetoothLeScanner
-            if (leScanner == null) return
-            scanHits.clear()
+            if (leScanner == null) return false
             val settings = ScanSettings.Builder()
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
             scanCallback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    if (result == null || result.device == null || result.device.address == null) return
+                    if (!scanning || result == null || result.device == null) return
                     var n = result.scanRecord?.deviceName
                     if (n == null) n = result.device.name
                     val addr = result.device.address
-                    Log.d(GaiaConstants.TAG, "radio: " + addr + " name=" + (n ?: "<null>") + " rssi=" + result.rssi)
-                    var hit = false
-                    if (!n.isNullOrEmpty() && DeviceMatcher.isMoondrop(n)) {
-                        hit = true
-                    } else if (n.isNullOrEmpty()) {
-                        if (addr.length >= 14 && prefixMatchesBonded(addr)) hit = true
+                    if (matcher(n, addr, result)) {
+                        if (onHitImmediate) {
+                            stopScan()
+                            cachedLeAddress = addr
+                            try {
+                                if (context != null) {
+                                    context!!.getSharedPreferences("cfg", 0)
+                                            .edit().putString("gaia_le_addr", addr).commit()
+                                    saveLeAddrFile(addr)
+                                    Log.d(GaiaConstants.TAG, "LE address cached: " + addr)
+                                }
+                            } catch (_: Exception) { }
+                            doConnectLe(result)
+                        } else {
+                            scanHits.add(result)
+                        }
                     }
-                    if (!hit) return
-                    Log.d(GaiaConstants.TAG, "generic scan hit: " + addr + " name=" + n + " rssi=" + result.rssi)
-                    scanHits.add(result)
                 }
                 override fun onScanFailed(errorCode: Int) {
-                    Log.w(GaiaConstants.TAG, "generic scan failed code=" + errorCode)
+                    Log.w(GaiaConstants.TAG, "scan failed code=" + errorCode)
                     stopScan()
                     retryConnect()
                 }
@@ -572,14 +511,80 @@ class GaiaBleClient private constructor() {
             handler.postDelayed({
                 if (!scanning) return@postDelayed
                 stopScan()
-                Log.d(GaiaConstants.TAG, "generic scan done, hits=" + scanHits.size)
-                connectFromScanHits()
-            }, GaiaConstants.SCAN_DURATION_MS)
-            Log.d(GaiaConstants.TAG, "generic moondrop scan started")
+                onScanDone()
+            }, timeoutMs)
+            return true
+        } catch (e: SecurityException) {
+            Log.e(GaiaConstants.TAG, "scan permission denied", e)
+            scanning = false
+            scanCallback = null
+            leScanner = null
+            return false
         } catch (e: Exception) {
-            Log.e(GaiaConstants.TAG, "generic scan start failed", e)
-            retryConnect()
+            Log.e(GaiaConstants.TAG, "scan start failed", e)
+            scanning = false
+            scanCallback = null
+            leScanner = null
+            if (!onHitImmediate) retryConnect()
+            return false
         }
+    }
+
+    /** Scan for LE address by target device name/prefix (connect on first hit) */
+    @Synchronized
+    private fun startScanForLe(target: BluetoothDevice): Boolean {
+        val targetName = target.name
+        val ta = target.address
+        return startLeScan(
+                matcher = { n, addr, _ ->
+                    var match = false
+                    if (n != null && targetName != null) {
+                        match = n == targetName ||
+                                (n.lowercase().contains("moondrop") &&
+                                        targetName.lowercase().contains("moondrop"))
+                    }
+                    if (!match && ta.length == 17 && addr.length == 17 &&
+                            ta.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)) {
+                        match = true
+                    }
+                    if (match) {
+                        Log.d(GaiaConstants.TAG, "scan result: " + addr + " name=" + n)
+                        AppLog.d("Scan", "hit " + addr + " name=" + n + " rssi=0")
+                    }
+                    match
+                },
+                onHitImmediate = true,
+                timeoutMs = 25000,
+                onScanDone = { retryConnect() }
+        )
+    }
+
+    /** Generic Moondrop device scan (collect all hits, pick best on timeout) */
+    @Synchronized
+    private fun startGenericScan() {
+        scanHits.clear()
+        val ok = startLeScan(
+                matcher = { n, addr, result ->
+                    var hit = false
+                    if (!n.isNullOrEmpty() && DeviceMatcher.isMoondrop(n)) {
+                        hit = true
+                    } else if (n.isNullOrEmpty()) {
+                        if (addr.length >= 14 && prefixMatchesBonded(addr)) hit = true
+                    }
+                    if (hit) {
+                        Log.d(GaiaConstants.TAG, "generic scan hit: " + addr + " name=" + n + " rssi=" + result.rssi)
+                    }
+                    hit
+                },
+                onHitImmediate = false,
+                timeoutMs = GaiaConstants.SCAN_DURATION_MS,
+                onScanDone = {
+                    Log.d(GaiaConstants.TAG, "generic scan done, hits=" + scanHits.size)
+                    connectFromScanHits()
+                }
+        )
+        if (ok) Log.d(GaiaConstants.TAG, "generic moondrop scan started")
+        else retryConnect()
     }
 
     @Synchronized
@@ -720,7 +725,7 @@ class GaiaBleClient private constructor() {
             if (a == null || connected) return@postDelayed
             synchronized(this) { disconnectInternal() }
             connect(context!!, a)
-        }, 60000)
+        }, 15000)
     }
 
     @Synchronized
@@ -888,20 +893,13 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    /** alpha2.28: writeCommand delegates to sendGaia (single write path) */
     @Synchronized
     private fun writeCommand(feature: Int, command: Int, payload: ByteArray) {
-        val g = gatt
-        val ch = cmdChar
-        if (g == null || ch == null) { callback?.onError("GAIA 未连接"); return }
-        try {
-            val packet = GaiaCommands.v3Packet(feature, command, payload)
-            ch.value = packet
-            ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            g.writeCharacteristic(ch)
-            Log.d(GaiaConstants.TAG, "TX feature=0x" + Integer.toHexString(feature) +
-                    " cmd=0x" + Integer.toHexString(command) + " " + payload.contentToString())
-        } catch (e: SecurityException) { Log.e(GaiaConstants.TAG, "write permission denied", e)
-        } catch (e: Exception) { Log.e(GaiaConstants.TAG, "write failed", e) }
+        val packet = GaiaCommands.v3Packet(feature, command, payload)
+        Log.d(GaiaConstants.TAG, "TX feature=0x" + Integer.toHexString(feature) +
+                " cmd=0x" + Integer.toHexString(command) + " " + payload.contentToString())
+        sendGaia(packet)
     }
 
     @Synchronized

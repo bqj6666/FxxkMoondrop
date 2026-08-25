@@ -184,14 +184,18 @@ class SettingsFragment : Fragment() {
                 "收集设备信息与运行日志，导出 ZIP（含隐私声明）",
                 M3Ui.chevron(requireActivity(), pal.onVariant)) { showLogDialog() }
         val iconState = TextView(requireContext())
-        iconState.text = if (iconCustomExists()) "已自定义" else "默认"
         iconState.textSize = 13f
         iconState.setTextColor(pal.primary)
         iconState.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        iconCustomExistsAsync { exists ->
+            iconState.text = if (exists) "已自定义" else "默认"
+        }
         val rowIcon = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, "弹窗图标",
                 "Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", iconState) {
-            iconState.text = if (iconCustomExists()) "已自定义" else "默认"
-            showIconDialog(iconCustomExists())
+            iconCustomExistsAsync { exists ->
+                iconState.text = if (exists) "已自定义" else "默认"
+                showIconDialog(exists)
+            }
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon))
 
@@ -494,17 +498,9 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showRootWarnDialog(sw: MaterialSwitch) {
-        val d = android.app.Dialog(requireContext())
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(28), dp(28), dp(20))
-        val title = TextView(requireContext())
-        title.text = "⚠️  权限风险警告"
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
+        val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(requireContext(), "⚠️  权限风险警告", pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
         val msg = TextView(requireContext())
         msg.text = "开启后将使用 Root 权限执行系统命令：\n" +
@@ -532,15 +528,6 @@ class SettingsFragment : Fragment() {
             applyRootProtect(true)
         })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        if (d.window != null) {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.setCornerRadius(dp(28).toFloat())
-            dbg.setStroke(dp(1), 0x14000000)
-            d.window!!.setBackgroundDrawable(dbg)
-            d.window!!.setLayout((resources.displayMetrics.widthPixels * 0.84f).toInt(), -2)
-        }
         d.setCancelable(false)
         d.show()
     }
@@ -598,18 +585,10 @@ class SettingsFragment : Fragment() {
 
     /** Material 风格确认弹窗（深浅色自适应，pal 色板），ok 回调在主线程。 */
     private fun showMaterialConfirm(t: String, m: String, okText: String, onOk: Runnable) {
-        val d = android.app.Dialog(requireContext())
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(30), dp(28), dp(22))
-        val title = TextView(requireContext())
-        title.text = t
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
+        val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(requireContext(), t, pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
         val msg = TextView(requireContext())
         msg.text = m
         msg.textSize = 14f
@@ -623,30 +602,14 @@ class SettingsFragment : Fragment() {
         btnRow.addView(spacer(dp(10)))
         btnRow.addView(makeMaterialTextButton(okText, pal.primary) { d.dismiss(); onOk.run() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        if (d.window != null) {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.setCornerRadius(dp(28).toFloat())
-            d.window!!.setBackgroundDrawable(dbg)
-            d.window!!.setLayout((resources.displayMetrics.widthPixels * 0.84f).toInt(), -2)
-        }
         d.show()
     }
 
     private fun showSimpleDialog(t: String, m: String) {
-        val d = android.app.Dialog(requireContext())
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(30), dp(28), dp(22))
-        val title = TextView(requireContext())
-        title.text = t
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
+        val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(requireContext(), t, pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
         val msg = TextView(requireContext())
         msg.text = m
         msg.textSize = 14f
@@ -658,14 +621,6 @@ class SettingsFragment : Fragment() {
         btnRow.gravity = Gravity.END
         btnRow.addView(makeMaterialTextButton("知道了", pal.primary) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        if (d.window != null) {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.setCornerRadius(dp(28).toFloat())
-            d.window!!.setBackgroundDrawable(dbg)
-            d.window!!.setLayout((resources.displayMetrics.widthPixels * 0.84f).toInt(), -2)
-        }
         d.show()
     }
 
@@ -675,31 +630,19 @@ class SettingsFragment : Fragment() {
         return r != null && r.contains("CUSTOM")
     }
 
-    private fun showIconDialog(custom: Boolean) {
-        val dlg = android.app.Dialog(requireContext())
-        val win = dlg.window
-        if (win != null) {
-            win.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0x00000000))
-            win.setDimAmount(0.5f)
-        }
-        val accent = pal.primary
-        val card = LinearLayout(requireContext())
-        card.orientation = LinearLayout.VERTICAL
-        val cardBg = GradientDrawable()
-        cardBg.setColor(pal.card)
-        cardBg.setCornerRadius(dp(28).toFloat())
-        cardBg.setStroke(dp(1), (accent and 0x00FFFFFF) or 0x33000000)
-        card.background = cardBg
-        card.elevation = dp(16).toFloat()
-        card.setPadding(dp(24), dp(22), dp(24), dp(24))
+    private fun iconCustomExistsAsync(callback: (Boolean) -> Unit) {
+        Thread {
+            val exists = iconCustomExists()
+            requireActivity().runOnUiThread { callback(exists) }
+        }.start()
+    }
 
-        val head = TextView(requireContext())
-        head.text = "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）"
-        head.textSize = 22f
-        head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        head.setTextColor(accent)
-        head.gravity = Gravity.CENTER_HORIZONTAL
-        card.addView(head, LinearLayout.LayoutParams(-1, -2))
+    private fun showIconDialog(custom: Boolean) {
+        val accent = pal.primary
+        val (dlg, card) = M3Ui.materialDialog(requireContext(), accent, pal.card)
+        card.addView(M3Ui.dialogTitle(requireContext(),
+                "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）", accent),
+                LinearLayout.LayoutParams(-1, -2))
         card.addView(spacer(dp(10)))
 
         val items = if (custom) arrayOf("从相册选择", "恢复默认图标") else arrayOf("从相册选择")

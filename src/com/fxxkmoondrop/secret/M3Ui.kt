@@ -132,6 +132,44 @@ class M3Ui {
             return g
         }
 
+        /** alpha2.28: 统一 MaterialCardView 弹窗构建器（与 Google 弹窗同风格）
+         *  @return Pair<Dialog, LinearLayout(body)> — body 用于添加内容 */
+        @JvmStatic
+        fun materialDialog(c: Context, accent: Int, cardColor: Int): Pair<android.app.Dialog, LinearLayout> {
+            val dlg = android.app.Dialog(c)
+            val win = dlg.window
+            if (win != null) {
+                win.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0x00000000))
+                win.setDimAmount(0.5f)
+            }
+            val density = c.resources.displayMetrics.density
+            val card = MaterialCardView(c)
+            card.setRadius(28 * density)
+            card.setCardBackgroundColor(cardColor)
+            card.setStrokeColor((accent and 0x00FFFFFF) or 0x33000000)
+            card.setStrokeWidth((1.5f * density).toInt())
+            card.setCardElevation(16 * density)
+            val body = LinearLayout(c)
+            body.orientation = LinearLayout.VERTICAL
+            body.setPadding(dp(c, 24), dp(c, 22), dp(c, 24), dp(c, 24))
+            card.addView(body, android.widget.FrameLayout.LayoutParams(-1, -2))
+            dlg.setContentView(card)
+            win?.setLayout((c.resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
+            return Pair(dlg, body)
+        }
+
+        /** alpha2.28: 弹窗标题 TextView（统一字号/字重/颜色） */
+        @JvmStatic
+        fun dialogTitle(c: Context, text: String, color: Int): TextView {
+            val tv = TextView(c)
+            tv.text = text
+            tv.textSize = 22f
+            tv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            tv.setTextColor(color)
+            tv.gravity = Gravity.CENTER_HORIZONTAL
+            return tv
+        }
+
         /** M3 列表导航行：官方 MaterialCardView 卡片 + Material Icons 图标（无底）+ 标题/副标题 + chevron（LSPosed 同款） */
         @JvmStatic
         fun navRow(act: Activity, pal: ThemeUtil.Palette,

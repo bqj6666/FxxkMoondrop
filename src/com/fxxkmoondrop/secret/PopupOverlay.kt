@@ -288,16 +288,19 @@ object PopupOverlay {
         // alpha1.5: 仅真实耳机连接时显示（模拟连接不显示，降噪控制不跟随模拟态）
         val realHeadset = mac != null && !SIM_MAC.equals(mac, ignoreCase = true)
         if (realHeadset) {
-            ancPopupBtns = arrayOfNulls(3)
-            ancPopupLabels = arrayOfNulls(3)
+            // alpha2.28: 4 按钮（加抗风），跟随 show_wind 设置
+            val showWind = c.getSharedPreferences("cfg", 0).getBoolean("show_wind", true)
+            val ancCount = if (showWind) 4 else 3
+            ancPopupBtns = arrayOfNulls(4)
+            ancPopupLabels = arrayOfNulls(4)
             popupAccent = accent
             popupTextColor = textMain
             val ancRow = LinearLayout(c)
             ancRow.orientation = LinearLayout.HORIZONTAL
             ancRow.gravity = Gravity.CENTER
-            val ancEmoji = arrayOf("🔇", "🎧", "👂")
-            val ancNames = arrayOf("关闭", "降噪", "透传")
-            for (m in 0..2) {
+            val ancEmoji = arrayOf("🔇", "🎧", "👂", "🌬️")
+            val ancNames = arrayOf("关闭", "降噪", "透传", "抗风")
+            for (m in 0 until ancCount) {
                 val fm = m
                 val col = LinearLayout(c)
                 col.orientation = LinearLayout.VERTICAL

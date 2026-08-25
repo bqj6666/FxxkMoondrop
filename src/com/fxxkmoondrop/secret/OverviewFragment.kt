@@ -34,6 +34,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import android.os.SystemClock
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -68,9 +69,13 @@ class OverviewFragment : Fragment() {
     private var battRowShown = false // alpha2.8: 电量行当前视觉状态（驱动出现/消失动画）
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
-    private var ancWindCol: View? = null // alpha2.26.2: 抗风按钮列（用户可选隐藏）
+    private var ancWindCol: View? = null
+    @Volatile private var lastRefreshAncMs = 0L  // alpha2.28: refreshAnc 节流 // alpha2.26.2: 抗风按钮列（用户可选隐藏）
     private var ancMode = -1
+    // alpha2.28: ANC icon bitmap cache (4 modes x 2 colors = 8 slots)
+    private var ancIconCache: Array<android.graphics.drawable.Drawable?>? = null
     @Volatile private var moonProcState = "未知"
+    @Volatile private var cachedHasRoot: Boolean? = null // alpha2.28: cache root check result
     private val autoRefreshHandler = Handler(Looper.getMainLooper())
 
     /** alpha1.36: HeadsetGate 异步补扫命中后推送 MAC（非阻塞链路闭环；onResume 注册 onStop 注销） */
@@ -88,7 +93,8 @@ class OverviewFragment : Fragment() {
 
     private val autoRefreshRunnable = object : Runnable {
         override fun run() {
-            refreshAnc(false)
+            // alpha2.28: autoRefresh only fetches ANC mode; battery is polled by HeadsetDetectService every 30s
+            refreshAnc(false, skipBattery = true)
             autoRefreshHandler.postDelayed(this, AUTO_REFRESH_MS)
         }
     }
@@ -117,6 +123,7 @@ class OverviewFragment : Fragment() {
         containerColor = container
         surfaceColor = surface
         onVariantColor = onVariant
+        ancIconCache = null // alpha2.28: invalidate icon cache on theme change
         cardSurfaceColor = cardColor
         var statusBarH = 0
         val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
@@ -752,8 +759,18 @@ class OverviewFragment : Fragment() {
     }
 
     private fun iconCustomExists(): Boolean {
+        // alpha2.28: still sync but fast (test -f is ~50ms on su)
         val r = runRoot("test -f " + GMS_ICON_PATH + " && echo CUSTOM")
         return r != null && r.contains("CUSTOM")
+    }
+
+    /** alpha2.28: async version for UI callers */
+    private fun iconCustomExistsAsync(callback: (Boolean) -> Unit) {
+        Thread {
+            val r = runRoot("test -f " + GMS_ICON_PATH + " && echo CUSTOM")
+            val exists = r != null && r.contains("CUSTOM")
+            requireActivity().runOnUiThread { callback(exists) }
+        }.start()
     }
 
     // ── alpha1.14fix5: 弹窗图标选择 → Material experience 卡片（与权限弹窗同风格）──
@@ -928,21 +945,10 @@ class OverviewFragment : Fragment() {
 
     // ── Root 强力保活 ──
     private fun showRootWarnDialog(sw: PillSwitch) {
-        val d = Dialog(requireContext())
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(28), dp(28), dp(20))
-
-        // 标题：大号 + 加粗（Material 3 弹窗标题）
-        val title = TextView(requireContext())
-        title.text = "权限风险警告"
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(onSurfaceColor)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-
+        val (d, box) = M3Ui.materialDialog(requireContext(), primaryColor, cardSurfaceColor)
+        box.addView(M3Ui.dialogTitle(requireContext(), "权限风险警告", onSurfaceColor),
+                LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
-
         val msg = TextView(requireContext())
         msg.text = "开启后将使用 Root 权限执行系统命令：\n" +
                 "• 将本应用加入系统电池优化白名单（防 Doze 杀后台）\n" +
@@ -955,10 +961,7 @@ class OverviewFragment : Fragment() {
         msg.setTextColor(onVariantColor)
         msg.setLineSpacing(dp(3).toFloat(), 1.3f)
         box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-
         box.addView(spacer(dp(24)))
-
-        // 按钮行：Material 文字按钮，右下对齐
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
@@ -972,24 +975,23 @@ class OverviewFragment : Fragment() {
             applyRootProtect(true)
         })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-
-        d.setContentView(box)
-        d.window?.let {
-            val dbg = GradientDrawable()
-            dbg.setColor(cardSurfaceColor)
-            dbg.cornerRadius = dp(28).toFloat()
-            dbg.setStroke(dp(1), 0x14000000)
-            it.setBackgroundDrawable(dbg)
-            it.setLayout((resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
-            it.setWindowAnimations(android.R.style.Animation_Dialog)
-        }
+        d.window?.setWindowAnimations(android.R.style.Animation_Dialog)
         d.setCancelable(false)
         d.show()
     }
 
+    /** alpha2.28: cached root check (first call on background thread, result cached) */
     private fun hasRoot(): Boolean {
-        val out = runRoot("id")
-        return out != null && out.contains("uid=0")
+        cachedHasRoot?.let { return it }
+        // Run on background thread to avoid blocking UI
+        val latch = java.util.concurrent.CountDownLatch(1)
+        Thread {
+            val out = runRoot("id")
+            cachedHasRoot = out != null && out.contains("uid=0")
+            latch.countDown()
+        }.start()
+        try { latch.await(2000, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) { }
+        return cachedHasRoot ?: false
     }
 
     private fun runRoot(cmd: String): String? {
@@ -1041,6 +1043,12 @@ class OverviewFragment : Fragment() {
 
     /** alpha1.20: 主界面模式按钮图标（与 Google 弹窗同款绘制：电源/波浪/耳朵），颜色动态 */
     private fun buildMainModeIcon(mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable {
+        // alpha2.28: use cache (key = mode*2 + (color==white?1:0))
+        val cacheKey = mode * 2 + (if (color == 0xFFFFFFFF.toInt()) 1 else 0)
+        val cache = ancIconCache
+        if (cache != null && cacheKey < cache.size) {
+            cache[cacheKey]?.let { return it }
+        }
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -1089,15 +1097,23 @@ class OverviewFragment : Fragment() {
                 c.drawArc(rect5, 110f, 180f, false, p)
             }
         }
-        return android.graphics.drawable.BitmapDrawable(resources, bmp)
+        val drawable = android.graphics.drawable.BitmapDrawable(resources, bmp)
+        // alpha2.28: store in cache
+        if (ancIconCache == null) ancIconCache = arrayOfNulls(8)
+        if (cacheKey < 8) ancIconCache!![cacheKey] = drawable
+        return drawable
     }
 
     private fun refreshAnc() {
-        refreshAnc(true)
+        refreshAnc(true, force = true)
     }
 
-    /** alpha1.11: showToast=false 供自动刷新调用（未连接时不打扰） */
-    private fun refreshAnc(showToast: Boolean) {
+    /** alpha1.11: showToast=false 供自动刷新调用（未连接时不打扰）
+     *  alpha2.28: 加 3 秒节流，防止 onResume/广播/autoRefresh 短时间内重复触发 forceReconnect */
+    private fun refreshAnc(showToast: Boolean, skipBattery: Boolean = false, force: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastRefreshAncMs < 3000) return
+        lastRefreshAncMs = now
         val gaia = GaiaBleClient.getInstance()
         val conn = gaia.isConnected()
         ancMode = AncBridge.getCurrentMode()
@@ -1106,7 +1122,7 @@ class OverviewFragment : Fragment() {
         updateBatteryStatus()
         if (conn) {
             AncBridge.fetchAncMode()
-            gaia.fetchBatteryLevels()
+            if (!skipBattery) gaia.fetchBatteryLevels()
         } else {
             val mac = HeadsetGate.getConnectedMac(requireContext())
             if (mac != null) {
@@ -1416,44 +1432,22 @@ class OverviewFragment : Fragment() {
     }
 
     private fun showSimpleDialog(t: String, m: String) {
-        val d = Dialog(requireContext())
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(30), dp(28), dp(22))
-
-        val title = TextView(requireContext())
-        title.text = t
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(onSurfaceColor)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-
-        box.addView(spacer(dp(12)))
-
+        val (d, box) = M3Ui.materialDialog(requireContext(), primaryColor, cardSurfaceColor)
+        box.addView(M3Ui.dialogTitle(requireContext(), t, onSurfaceColor),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
         val msg = TextView(requireContext())
         msg.text = m
         msg.textSize = 14f
-        msg.setTextColor(onContainerColor)
-        msg.alpha = 0.85f
+        msg.setTextColor(onVariantColor)
         msg.setLineSpacing(dp(2).toFloat(), 1.25f)
         box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-
-        box.addView(spacer(dp(22)))
-
+        box.addView(spacer(dp(20)))
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
         btnRow.addView(makeSmallButton("知道了", true) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-
-        d.setContentView(box)
-        d.window?.let {
-            val dbg = GradientDrawable()
-            dbg.setColor(cardSurfaceColor)
-            dbg.cornerRadius = dp(28).toFloat()
-            it.setBackgroundDrawable(dbg)
-            it.setLayout((resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
-        }
         d.show()
     }
 

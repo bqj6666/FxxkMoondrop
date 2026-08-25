@@ -182,7 +182,9 @@ class SettingsActivity : Activity() {
                 "收集设备信息与运行日志，导出 ZIP（含隐私声明）",
                 M3Ui.chevron(this, pal.onVariant), { showLogDialog() })
         val iconState = TextView(this)
-        iconState.text = if (iconCustomExists()) "已自定义" else "默认"
+        iconCustomExistsAsync { exists ->
+            iconState.text = if (exists) "已自定义" else "默认"
+        }
         iconState.textSize = 13f
         iconState.setTextColor(pal.primary)
         iconState.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -476,17 +478,9 @@ class SettingsActivity : Activity() {
     }
 
     private fun showRootWarnDialog(sw: com.google.android.material.materialswitch.MaterialSwitch) {
-        val d = android.app.Dialog(this)
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(this)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(28), dp(28), dp(20))
-        val title = TextView(this)
-        title.text = "⚠️  权限风险警告"
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
+        val (d, box) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(this, "⚠️  权限风险警告", pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
         val msg = TextView(this)
         msg.text = "开启后将使用 Root 权限执行系统命令：\n" +
@@ -514,15 +508,6 @@ class SettingsActivity : Activity() {
             applyRootProtect(true)
         })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        d.window?.let {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.cornerRadius = dp(28).toFloat()
-            dbg.setStroke(dp(1), 0x14000000)
-            it.setBackgroundDrawable(dbg)
-            it.setLayout((resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
-        }
         d.setCancelable(false)
         d.show()
     }
@@ -577,18 +562,10 @@ class SettingsActivity : Activity() {
 
     /** Material 风格确认弹窗（深浅色自适应，pal 色板），ok 回调在主线程。 */
     private fun showMaterialConfirm(t: String, m: String, okText: String, onOk: Runnable) {
-        val d = android.app.Dialog(this)
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(this)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(30), dp(28), dp(22))
-        val title = TextView(this)
-        title.text = t
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
+        val (d, box) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(this, t, pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
         val msg = TextView(this)
         msg.text = m
         msg.textSize = 14f
@@ -605,30 +582,14 @@ class SettingsActivity : Activity() {
             onOk.run()
         })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        d.window?.let {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.cornerRadius = dp(28).toFloat()
-            it.setBackgroundDrawable(dbg)
-            it.setLayout((resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
-        }
         d.show()
     }
 
     private fun showSimpleDialog(t: String, m: String) {
-        val d = android.app.Dialog(this)
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(this)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(28), dp(30), dp(28), dp(22))
-        val title = TextView(this)
-        title.text = t
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
+        val (d, box) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        box.addView(M3Ui.dialogTitle(this, t, pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
         val msg = TextView(this)
         msg.text = m
         msg.textSize = 14f
@@ -640,14 +601,6 @@ class SettingsActivity : Activity() {
         btnRow.gravity = Gravity.END
         btnRow.addView(makeMaterialTextButton("知道了", pal.primary) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.setContentView(box)
-        d.window?.let {
-            val dbg = GradientDrawable()
-            dbg.setColor(pal.card)
-            dbg.cornerRadius = dp(28).toFloat()
-            it.setBackgroundDrawable(dbg)
-            it.setLayout((resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
-        }
         d.show()
     }
 
@@ -657,30 +610,19 @@ class SettingsActivity : Activity() {
         return r != null && r.contains("CUSTOM")
     }
 
-    private fun showIconDialog(custom: Boolean) {
-        val dlg = android.app.Dialog(this)
-        dlg.window?.let {
-            it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0x00000000))
-            it.setDimAmount(0.5f)
-        }
-        val accent = pal.primary
-        val card = LinearLayout(this)
-        card.orientation = LinearLayout.VERTICAL
-        val cardBg = GradientDrawable()
-        cardBg.setColor(pal.card)
-        cardBg.cornerRadius = dp(28).toFloat()
-        cardBg.setStroke(dp(1), (accent and 0x00FFFFFF) or 0x33000000)
-        card.background = cardBg
-        card.elevation = dp(16).toFloat()
-        card.setPadding(dp(24), dp(22), dp(24), dp(24))
+    private fun iconCustomExistsAsync(callback: (Boolean) -> Unit) {
+        Thread {
+            val exists = iconCustomExists()
+            runOnUiThread { callback(exists) }
+        }.start()
+    }
 
-        val head = TextView(this)
-        head.text = "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）"
-        head.textSize = 22f
-        head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        head.setTextColor(accent)
-        head.gravity = Gravity.CENTER_HORIZONTAL
-        card.addView(head, LinearLayout.LayoutParams(-1, -2))
+    private fun showIconDialog(custom: Boolean) {
+        val accent = pal.primary
+        val (dlg, card) = M3Ui.materialDialog(this, accent, pal.card)
+        card.addView(M3Ui.dialogTitle(this,
+                "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）", accent),
+                LinearLayout.LayoutParams(-1, -2))
         card.addView(spacer(dp(10)))
 
         val items = if (custom) arrayOf("从相册选择", "恢复默认图标") else arrayOf("从相册选择")
@@ -735,8 +677,6 @@ class SettingsActivity : Activity() {
         btnRow.gravity = Gravity.END
         btnRow.addView(makeMaterialTextButton("取消", accent) { dlg.dismiss() })
         card.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        dlg.setContentView(card)
-        dlg.window?.setLayout((resources.displayMetrics.widthPixels * 0.85).toInt(), -2)
         dlg.show()
     }
 
