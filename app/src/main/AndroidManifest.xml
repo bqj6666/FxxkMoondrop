@@ -30,10 +30,6 @@
         <activity android:name=".PermissionActivity" android:exported="false" />
         <activity android:name=".AboutActivity" android:exported="false" />
 
-        <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposeddescription" android:value="FxxkMoondrop FastPair Popup" />
-        <meta-data android:name="xposedminversion" android:value="93" />
-        <meta-data android:name="xposedscope" android:value="com.google.android.gms;com.android.settings" />
 
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

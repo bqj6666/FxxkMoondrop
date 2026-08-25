@@ -11,8 +11,8 @@ android {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 26
         targetSdk = 36
-        versionCode = 257
-        versionName = "alpha2.30"
+        versionCode = 258
+        versionName = "alpha2.31"
     }
 
     signingConfigs {
@@ -54,6 +54,7 @@ android {
 
     packaging {
         resources {
+            merges += "META-INF/xposed/*"
             excludes += setOf(
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE*",
@@ -110,7 +111,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Xposed API：仅编译期（运行时由 LSPosed 提供）
-    compileOnly(files("$rootDir/xposed-api-stub.jar"))
+    compileOnly("io.github.libxposed:api:102.0.0")
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
     testImplementation("junit:junit:4.13.2")
@@ -150,6 +151,5 @@ val postEdf by tasks.registering(Exec::class) {
 }
 tasks.configureEach {
     if (name == "assembleRelease") {
-        finalizedBy(postEdf)
     }
 }

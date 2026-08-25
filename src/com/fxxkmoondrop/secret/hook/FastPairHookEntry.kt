@@ -22,15 +22,13 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
 import com.fxxkmoondrop.secret.DeviceMatcher
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.callbacks.XC_LoadPackage
+import com.fxxkmoondrop.secret.HookHelper
+import android.util.Log
+import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class FastPairHookEntry : IXposedHookLoadPackage {
+class FastPairHookEntry {
 
     /** 【数据对接接口】本模块不内置任何模拟/占位数据。真实数据由外部注入，两条通道：
      * 1. 【推荐·跨进程】ACTION_TRIGGER 广播（device_name/battery_left/battery_right/icon_path）
@@ -49,115 +47,110 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         fun getIconBytes(): ByteArray?
     }
 
-    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        if (PKG_GMS != lpparam.packageName) return
-        sGmsCl = lpparam.classLoader
-        XposedBridge.log("[FastPairHook] GMS loaded, classLoader=" + lpparam.classLoader)
+    fun onGmsLoaded(module: XposedModule, cl: ClassLoader) {
+        sGmsCl = cl
+        sModule = module
+        Log.d(TAG, "[FastPairHook] GMS loaded, classLoader=" + cl)
 
         // alpha1.14fix4: 拿模块自身 context（读取内置默认图标 assets）
         try {
-            val app = XposedHelpers.callStaticMethod(
+            val app = HookHelper.callStaticMethod(
                     Class.forName("android.app.ActivityThread"), "currentApplication")
             if (app is Context) {
                 sModCtx = app.createPackageContext("com.fxxkmoondrop.secret",
                         Context.CONTEXT_IGNORE_SECURITY)
-                XposedBridge.log("[FastPairHook] mod ctx ready: " + sModCtx)
+                Log.d(TAG, "[FastPairHook] mod ctx ready: " + sModCtx)
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] mod ctx init fail: " + t)
+            Log.d(TAG, "[FastPairHook] mod ctx init fail: " + t)
         }
 
         // 1. 注册广播接收器：手动触发 + 蓝牙连接自动触发
         try {
-            registerReceiverWhenReady(lpparam.classLoader)
+            registerReceiverWhenReady(cl)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] register receiver failed: " + t)
+            Log.d(TAG, "[FastPairHook] register receiver failed: " + t)
         }
 
         // 2. hook dtes.f：真实配对弹窗 UI 设置时改写设备名
         try {
-            val dtesClass = XposedHelpers.findClass("dtes", lpparam.classLoader)
-            XposedHelpers.findAndHookMethod(dtesClass, "f", Context::class.java,
-                    Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            try {
-                                val dtok = XposedHelpers.getObjectField(param.thisObject, "c")
-                                if (dtok != null) {
-                                    // 【数据对接】仅当数据源提供了名称才改写，否则保持 GMS 原生流程
-                                    val name = sDataProvider?.getDeviceName()
-                                    if (!name.isNullOrEmpty()) {
-                                        XposedHelpers.setObjectField(dtok, "l", name)
-                                        XposedHelpers.setObjectField(dtok, "i", name)
-                                        XposedBridge.log("[FastPairHook] (dtes.f) set name -> " + name)
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] dtes.f hook err: " + t)
-                            }
+            val dtesClass = Class.forName("dtes", true, cl)
+            val m = dtesClass.getDeclaredMethod("f", Context::class.java,
+                    Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            module.hook(m).intercept { chain ->
+                try {
+                    val dtok = HookHelper.getObjectField(chain.thisObject, "c")
+                    if (dtok != null) {
+                        val name = sDataProvider?.getDeviceName()
+                        if (!name.isNullOrEmpty()) {
+                            HookHelper.setObjectField(dtok, "l", name)
+                            HookHelper.setObjectField(dtok, "i", name)
+                            Log.d(TAG, "[FastPairHook] (dtes.f) set name -> " + name)
                         }
-                    })
-            XposedBridge.log("[FastPairHook] dtes.f hooked")
+                    }
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] dtes.f hook err: " + t)
+                }
+                chain.proceed()
+            }
+            Log.d(TAG, "[FastPairHook] dtes.f hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook dtes.f failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook dtes.f failed: " + t)
         }
 
         // 3. hook dthi.O(ImageView, dtok)：弹窗图片注入（原图为 dtok.h 字节，为空时替换）
         try {
-            val dthiClass = XposedHelpers.findClass("dthi", lpparam.classLoader)
-            val dtokClass = XposedHelpers.findClass("dtok", lpparam.classLoader)
-            XposedHelpers.findAndHookMethod(dthiClass, "O", ImageView::class.java, dtokClass,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val iv = param.args[0] as? ImageView ?: return
-                                val bmp = loadOrDrawIcon() ?: return
-                                // 主线程直接设置（dthi.O 本身在 UI 线程）
-                                iv.setImageBitmap(bmp)
-                                XposedBridge.log("[FastPairHook] (dthi.O) icon injected")
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] dthi.O icon inject fail: " + t)
-                            }
-                        }
-                    })
-            XposedBridge.log("[FastPairHook] dthi.O hooked")
+            val dthiClass = Class.forName("dthi", true, cl)
+            val dtokClass = Class.forName("dtok", true, cl)
+            val m = dthiClass.getDeclaredMethod("O", ImageView::class.java, dtokClass)
+            module.hook(m).intercept { chain ->
+                chain.proceed()
+                try {
+                    val iv = chain.args[0] as? ImageView ?: return@intercept null
+                    val bmp = loadOrDrawIcon() ?: return@intercept null
+                    iv.setImageBitmap(bmp)
+                    Log.d(TAG, "[FastPairHook] (dthi.O) icon injected")
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] dthi.O icon inject fail: " + t)
+                }
+            }
+            Log.d(TAG, "[FastPairHook] dthi.O hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook dthi.O failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook dthi.O failed: " + t)
         }
 
         // 4. hook dthi.q(ImageView, dtok, boolean)：HalfSheetModuleFragment 图片渲染主入口
         try {
-            val dthiClass = XposedHelpers.findClass("dthi", lpparam.classLoader)
-            val dtokClass = XposedHelpers.findClass("dtok", lpparam.classLoader)
-            XposedHelpers.findAndHookMethod(dthiClass, "q", ImageView::class.java, dtokClass,
-                    Boolean::class.javaPrimitiveType,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val iv = param.args[0] as? ImageView ?: return
-                                val bmp = loadOrDrawIcon() ?: return
-                                iv.setImageBitmap(bmp)
-                                XposedBridge.log("[FastPairHook] (dthi.q) icon injected")
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] dthi.q icon inject fail: " + t)
-                            }
-                        }
-                    })
-            XposedBridge.log("[FastPairHook] dthi.q hooked")
+            val dthiClass = Class.forName("dthi", true, cl)
+            val dtokClass = Class.forName("dtok", true, cl)
+            val m = dthiClass.getDeclaredMethod("q", ImageView::class.java, dtokClass,
+                    Boolean::class.javaPrimitiveType)
+            module.hook(m).intercept { chain ->
+                chain.proceed()
+                try {
+                    val iv = chain.args[0] as? ImageView ?: return@intercept null
+                    val bmp = loadOrDrawIcon() ?: return@intercept null
+                    iv.setImageBitmap(bmp)
+                    Log.d(TAG, "[FastPairHook] (dthi.q) icon injected")
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] dthi.q icon inject fail: " + t)
+                }
+            }
+            Log.d(TAG, "[FastPairHook] dthi.q hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook dthi.q failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook dthi.q failed: " + t)
         }
 
         // 5. hook 框架层 Activity.onResume：HalfSheet 弹窗出现时注入图标
         try {
-            XposedHelpers.findAndHookMethod(android.app.Activity::class.java, "onResume",
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val act = param.thisObject as? android.app.Activity ?: return
-                                val cname = act.javaClass.name
-                                if (!cname.contains("HalfSheet")) return
-                                sHalfSheetActivity = act
+            val m = android.app.Activity::class.java.getDeclaredMethod("onResume")
+            module.hook(m).intercept { chain ->
+                chain.proceed()
+                try {
+                    val act = chain.thisObject as? android.app.Activity ?: return@intercept null
+                    val cname = act.javaClass.name
+                    if (!cname.contains("HalfSheet")) return@intercept null
+                    sHalfSheetActivity = act
                                 // 从 Intent 同步模拟电量（渲染进程与触发进程静态字段不共享）
                                 try {
                                     val it = act.intent
@@ -168,12 +161,12 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                                         // 的渲染进程静态字段残留，导致真实弹窗显示旧模拟电量
                                         sBatteryLeft = bl
                                         sBatteryRight = br
-                                        XposedBridge.log("[FastPairHook] battery from intent: L=" + sBatteryLeft + " R=" + sBatteryRight)
+                                        Log.d(TAG, "[FastPairHook] battery from intent: L=" + sBatteryLeft + " R=" + sBatteryRight)
                                     }
                                 } catch (t: Throwable) {
-                                    XposedBridge.log("[FastPairHook] intent battery fail: " + t)
+                                    Log.d(TAG, "[FastPairHook] intent battery fail: " + t)
                                 }
-                                XposedBridge.log("[FastPairHook] HalfSheet onResume: " + cname)
+                                Log.d(TAG, "[FastPairHook] HalfSheet onResume: " + cname)
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     try {
                                         injectIconIntoTree(act.window.decorView)
@@ -184,73 +177,70 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                                         if (sLastMode >= 0) applyModeHighlight(sLastMode)
                                         sendModeRequest()
                                     } catch (t: Throwable) {
-                                        XposedBridge.log("[FastPairHook] inject fail: " + t)
+                                        Log.d(TAG, "[FastPairHook] inject fail: " + t)
                                     }
                                 }, 400)
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] onResume inject fail: " + t)
-                            }
-                        }
-                    })
-            XposedBridge.log("[FastPairHook] Activity.onResume hooked")
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] onResume inject fail: " + t)
+                }
+            }
+            Log.d(TAG, "[FastPairHook] Activity.onResume hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook Activity.onResume failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook Activity.onResume failed: " + t)
         }
 
         // 5.5. hook 框架层 Activity.onDestroy：HalfSheet 弹窗关闭时通知应用
         try {
-            XposedHelpers.findAndHookMethod(android.app.Activity::class.java, "onDestroy",
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val act = param.thisObject as? android.app.Activity ?: return
-                                if (!act.javaClass.name.contains("HalfSheet")) return
-                                if (act !== sHalfSheetActivity) return
-                                sHalfSheetActivity = null
-                                val ctx = sAppContext
-                                if (ctx != null) {
-                                    val i = Intent(ACTION_FP_SHEET_CLOSED)
-                                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    ctx.sendBroadcast(i)
-                                    XposedBridge.log("[FastPairHook] half sheet closed -> sim restore signal")
-                                }
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] onDestroy hook fail: " + t)
-                            }
-                        }
-                    })
-            XposedBridge.log("[FastPairHook] Activity.onDestroy hooked")
+            val m = android.app.Activity::class.java.getDeclaredMethod("onDestroy")
+            module.hook(m).intercept { chain ->
+                chain.proceed()
+                try {
+                    val act = chain.thisObject as? android.app.Activity ?: return@intercept null
+                    if (!act.javaClass.name.contains("HalfSheet")) return@intercept null
+                    if (act !== sHalfSheetActivity) return@intercept null
+                    sHalfSheetActivity = null
+                    val ctx = sAppContext
+                    if (ctx != null) {
+                        val i = Intent(ACTION_FP_SHEET_CLOSED)
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        ctx.sendBroadcast(i)
+                        Log.d(TAG, "[FastPairHook] half sheet closed -> sim restore signal")
+                    }
+                    null
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] onDestroy hook fail: " + t)
+                }
+            }
+            Log.d(TAG, "[FastPairHook] Activity.onDestroy hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook Activity.onDestroy failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook Activity.onDestroy failed: " + t)
         }
 
         // 6. hook View.performClick：捕捉 central_btn（连接按钮）点击 -> 接管连接流程
         try {
-            XposedHelpers.findAndHookMethod(android.view.View::class.java, "performClick",
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            try {
-                                val v = param.thisObject as? android.view.View ?: return
-                                val ctx = v.context ?: return
-                                if (sCentralBtnId == 0) {
-                                    sCentralBtnId = ctx.resources.getIdentifier("central_btn", "id", PKG_GMS)
-                                    XposedBridge.log("[FastPairHook] central_btn id resolved: " + sCentralBtnId)
-                                }
-                                if (sCentralBtnId != 0 && v.id == sCentralBtnId) {
-                                    // 拦截真实配对流程（setResult 阻止 GMS 监听器执行）
-                                    param.result = true
-                                    XposedBridge.log("[FastPairHook] central_btn click intercepted -> fake connect")
-                                    showConnectingUi()
-                                    startFakeConnectSequence()
-                                }
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] performClick hook err: " + t)
-                            }
-                        }
-                    })
-            XposedBridge.log("[FastPairHook] View.performClick hooked")
+            val m = android.view.View::class.java.getDeclaredMethod("performClick")
+            module.hook(m).intercept { chain ->
+                try {
+                    val v = chain.thisObject as? android.view.View ?: return@intercept chain.proceed()
+                    val ctx = v.context ?: return@intercept chain.proceed()
+                    if (sCentralBtnId == 0) {
+                        sCentralBtnId = ctx.resources.getIdentifier("central_btn", "id", PKG_GMS)
+                        Log.d(TAG, "[FastPairHook] central_btn id resolved: " + sCentralBtnId)
+                    }
+                    if (sCentralBtnId != 0 && v.id == sCentralBtnId) {
+                        Log.d(TAG, "[FastPairHook] central_btn click intercepted -> fake connect")
+                        showConnectingUi()
+                        startFakeConnectSequence()
+                        return@intercept true  // short-circuit: don't call original
+                    }
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] performClick hook err: " + t)
+                }
+                chain.proceed()
+            }
+            Log.d(TAG, "[FastPairHook] View.performClick hooked")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] hook View.performClick failed: " + t)
+            Log.d(TAG, "[FastPairHook] hook View.performClick failed: " + t)
         }
     }
 
@@ -268,9 +258,9 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
             lp.topMargin = 1660 // v0.8 上移缩小（原 1700/400），三模式按钮区 2050-2280
             (decor as android.view.ViewGroup).addView(iv, lp)
-            XposedBridge.log("[FastPairHook] icon overlay added")
+            Log.d(TAG, "[FastPairHook] icon overlay added")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] overlay fail: " + t)
+            Log.d(TAG, "[FastPairHook] overlay fail: " + t)
         }
     }
 
@@ -294,9 +284,9 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                             iv.requestLayout()
                         }
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] icon resize fail: " + t)
+                        Log.d(TAG, "[FastPairHook] icon resize fail: " + t)
                     }
-                    XposedBridge.log("[FastPairHook] tree icon injected into " + iv.id)
+                    Log.d(TAG, "[FastPairHook] tree icon injected into " + iv.id)
                 }
             }
         }
@@ -317,19 +307,19 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             if (f.exists() && f.length() > 0) {
                 val b = BitmapFactory.decodeFile(f.absolutePath)
                 if (b != null) {
-                    XposedBridge.log("[FastPairHook] icon from file: " + f.length() + "B")
+                    Log.d(TAG, "[FastPairHook] icon from file: " + f.length() + "B")
                     return b
                 }
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] icon file load fail: " + t)
+            Log.d(TAG, "[FastPairHook] icon file load fail: " + t)
         }
 
         // alpha1.14fix4: 软件自带默认图标（打包在模块 APK assets/ga2_icon.png）
         try {
             var ctx = sModCtx
             if (ctx == null) {
-                val app = XposedHelpers.callStaticMethod(
+                val app = HookHelper.callStaticMethod(
                         Class.forName("android.app.ActivityThread"), "currentApplication")
                 if (app is Context) {
                     ctx = app.createPackageContext("com.fxxkmoondrop.secret",
@@ -342,7 +332,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 try {
                     val b = BitmapFactory.decodeStream(input)
                     if (b != null) {
-                        XposedBridge.log("[FastPairHook] icon from builtin asset")
+                        Log.d(TAG, "[FastPairHook] icon from builtin asset")
                         return b
                     }
                 } finally {
@@ -350,7 +340,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 }
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] builtin asset load fail: " + t)
+            Log.d(TAG, "[FastPairHook] builtin asset load fail: " + t)
         }
         return drawDefaultIcon()
     }
@@ -395,7 +385,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 r >= 0 -> "右耳 " + r + "%"
                 sys >= 0 -> "耳机电量 " + sys + "%"
                 else -> {
-                    XposedBridge.log("[FastPairHook] battery not ready yet, will retry on update")
+                    Log.d(TAG, "[FastPairHook] battery not ready yet, will retry on update")
                     return
                 }
             }
@@ -405,14 +395,14 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
             tv.setTextColor(if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
             tv.visibility = android.view.View.VISIBLE
-            XposedBridge.log("[FastPairHook] battery on subhead: L=" + l + " R=" + r + " sys=" + sys)
+            Log.d(TAG, "[FastPairHook] battery on subhead: L=" + l + " R=" + r + " sys=" + sys)
             val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
             val btnV = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
             if (btnV is android.widget.TextView) {
                 btnV.text = "确定"
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] battery overlay fail: " + t)
+            Log.d(TAG, "[FastPairHook] battery overlay fail: " + t)
         }
     }
 
@@ -452,13 +442,13 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     // v0.7: 连接中 -> 按钮禁用（原生置灰样式），不再自绘转圈
                     val btn = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
                     if (btn != null) btn.isEnabled = false
-                    XposedBridge.log("[FastPairHook] connecting ui shown")
+                    Log.d(TAG, "[FastPairHook] connecting ui shown")
                 } catch (t: Throwable) {
-                    XposedBridge.log("[FastPairHook] connecting ui fail: " + t)
+                    Log.d(TAG, "[FastPairHook] connecting ui fail: " + t)
                 }
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] showConnectingUi fail: " + t)
+            Log.d(TAG, "[FastPairHook] showConnectingUi fail: " + t)
         }
     }
 
@@ -469,7 +459,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             try {
                 if (act != null && !act.isFinishing) {
                     act.finish()
-                    XposedBridge.log("[FastPairHook] fake connect: half sheet finished")
+                    Log.d(TAG, "[FastPairHook] fake connect: half sheet finished")
                 }
                 val i = Intent(ACTION_CONNECTED)
                 i.putExtra(EXTRA_DEVICE_NAME, sLastDeviceName)
@@ -477,10 +467,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 val ctx = sAppContext
                 if (ctx != null) {
                     ctx.sendBroadcast(i)
-                    XposedBridge.log("[FastPairHook] CONNECTED broadcast sent, name=" + sLastDeviceName)
+                    Log.d(TAG, "[FastPairHook] CONNECTED broadcast sent, name=" + sLastDeviceName)
                 }
             } catch (t: Throwable) {
-                XposedBridge.log("[FastPairHook] fake connect fail: " + t)
+                Log.d(TAG, "[FastPairHook] fake connect fail: " + t)
             }
         }, CONNECT_DELAY_MS)
     }
@@ -492,15 +482,15 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         try {
             val ctx = sAppContext
             if (ctx == null) {
-                XposedBridge.log("[FastPairHook] MODE_CHANGED skip: no app context")
+                Log.d(TAG, "[FastPairHook] MODE_CHANGED skip: no app context")
                 return
             }
             val i = Intent(ACTION_MODE_CHANGED)
             i.putExtra(EXTRA_MODE, mode)
             ctx.sendBroadcast(i)
-            XposedBridge.log("[FastPairHook] MODE_CHANGED sent, mode=" + mode)
+            Log.d(TAG, "[FastPairHook] MODE_CHANGED sent, mode=" + mode)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] MODE_CHANGED fail: " + t)
+            Log.d(TAG, "[FastPairHook] MODE_CHANGED fail: " + t)
         }
     }
 
@@ -509,15 +499,15 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         try {
             val ctx = sAppContext
             if (ctx == null) {
-                XposedBridge.log("[FastPairHook] MODE_REQUEST skip: no app context")
+                Log.d(TAG, "[FastPairHook] MODE_REQUEST skip: no app context")
                 return
             }
             val i = Intent(ACTION_MODE_REQUEST)
             i.setPackage(PKG_APP)
             ctx.sendBroadcast(i)
-            XposedBridge.log("[FastPairHook] MODE_REQUEST sent")
+            Log.d(TAG, "[FastPairHook] MODE_REQUEST sent")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] MODE_REQUEST fail: " + t)
+            Log.d(TAG, "[FastPairHook] MODE_REQUEST fail: " + t)
         }
     }
 
@@ -537,9 +527,9 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     bgV.animate().alpha(1f).setDuration(160).start()
                 } catch (_: Throwable) { }
             }
-            XposedBridge.log("[FastPairHook] mode highlight -> " + mode)
+            Log.d(TAG, "[FastPairHook] mode highlight -> " + mode)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] mode highlight fail: " + t)
+            Log.d(TAG, "[FastPairHook] mode highlight fail: " + t)
         }
     }
 
@@ -556,7 +546,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             // alpha2.26.7: 恢复函数头注释语义——status=2(无ANC/截断) 隐藏整条 mode bar（不显示不支持的控件，跨机型适配）
             if (status == 2) {
                 bar.visibility = android.view.View.GONE
-                XposedBridge.log("[FastPairHook] ANC availability -> 2 (no ANC), mode bar hidden")
+                Log.d(TAG, "[FastPairHook] ANC availability -> 2 (no ANC), mode bar hidden")
                 return
             }
             bar.visibility = android.view.View.VISIBLE
@@ -566,10 +556,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 holder.isEnabled = enabled
                 holder.alpha = if (enabled) 1f else 0.4f
             }
-            XposedBridge.log("[FastPairHook] ANC availability -> " + status +
+            Log.d(TAG, "[FastPairHook] ANC availability -> " + status +
                     (if (enabled) " enabled" else " disabled"))
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] applyAncAvailability fail: " + t)
+            Log.d(TAG, "[FastPairHook] applyAncAvailability fail: " + t)
         }
     }
 
@@ -584,7 +574,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             return android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(0x66FFFFFF.toInt()), g, g)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] highlight bg fail: " + t)
+            Log.d(TAG, "[FastPairHook] highlight bg fail: " + t)
             return buildCircleRipple(act)
         }
     }
@@ -619,7 +609,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     }
                 }
             } catch (t: Throwable) {
-                XposedBridge.log("[FastPairHook] show_wind provider read fail: " + t)
+                Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
             if (showWind) bar.addView(buildModeItem(act, MODE_WIND, "抗风"))
             val lp = android.widget.FrameLayout.LayoutParams(
@@ -630,10 +620,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             (decor as android.view.ViewGroup).addView(bar, lp)
             // alpha2.22: 注入时按已知能力状态应用三态（初始 sAncStatus=0 探测中 -> 禁用，防误发）
             applyAncAvailability(sAncStatus)
-            XposedBridge.log("[FastPairHook] mode buttons injected (关闭/降噪/透传" +
+            Log.d(TAG, "[FastPairHook] mode buttons injected (关闭/降噪/透传" +
                     (if (showWind) "/抗风" else "") + ")")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] mode buttons fail: " + t)
+            Log.d(TAG, "[FastPairHook] mode buttons fail: " + t)
         }
     }
 
@@ -659,7 +649,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         il.gravity = android.view.Gravity.CENTER
         holder.addView(iv, il)
         holder.setOnClickListener {
-            XposedBridge.log("[FastPairHook] mode clicked: " + mode)
+            Log.d(TAG, "[FastPairHook] mode clicked: " + mode)
             // alpha2.26.3: 点击缩放动画（Material 按压反馈：0.85 -> 回弹 1.0）
             try {
                 holder.animate().scaleX(0.85f).scaleY(0.85f).setDuration(90).withEndAction {
@@ -697,7 +687,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             val cv = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
             val tint = cv?.backgroundTintList
             val fill = tint?.defaultColor ?: 0x29FFFFFF.toInt() // 兜底：半透明白
-            XposedBridge.log("[FastPairHook] circle fill = 0x" + Integer.toHexString(fill) + " (from central tint=" + (tint != null) + ")")
+            Log.d(TAG, "[FastPairHook] circle fill = 0x" + Integer.toHexString(fill) + " (from central tint=" + (tint != null) + ")")
             val content = android.graphics.drawable.GradientDrawable()
             content.shape = android.graphics.drawable.GradientDrawable.OVAL
             content.setColor(fill)
@@ -709,7 +699,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             return android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(rippleColor), content, content)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] circle ripple fail: " + t)
+            Log.d(TAG, "[FastPairHook] circle ripple fail: " + t)
             val gd = android.graphics.drawable.GradientDrawable()
             gd.shape = android.graphics.drawable.GradientDrawable.OVAL
             gd.setColor(0x29FFFFFF.toInt())
@@ -731,7 +721,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 dst.letterSpacing = src.letterSpacing
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] central text style fail: " + t)
+            Log.d(TAG, "[FastPairHook] central text style fail: " + t)
         }
     }
 
@@ -799,37 +789,36 @@ class FastPairHookEntry : IXposedHookLoadPackage {
 
     private fun registerReceiverWhenReady(cl: ClassLoader) {
         try {
-            val atClass = XposedHelpers.findClass("android.app.ActivityThread", cl)
-            val at = XposedHelpers.callStaticMethod(atClass, "currentActivityThread")
+            val atClass = Class.forName("android.app.ActivityThread", true, cl)
+            val at = HookHelper.callStaticMethod(atClass, "currentActivityThread")
             if (at != null) {
-                val app = XposedHelpers.callMethod(at, "getApplication")
+                val app = HookHelper.callMethod(at, "getApplication")
                 if (app != null) {
-                    val ctx = XposedHelpers.callMethod(app, "getApplicationContext") as Context
+                    val ctx = HookHelper.callMethod(app, "getApplicationContext") as Context
                     doRegister(ctx, cl)
-                    XposedBridge.log("[FastPairHook] receiver registered via currentApplication")
+                    Log.d(TAG, "[FastPairHook] receiver registered via currentApplication")
                     return
                 }
             }
-            XposedBridge.log("[FastPairHook] application not ready yet")
+            Log.d(TAG, "[FastPairHook] application not ready yet")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] direct register path failed: " + t)
+            Log.d(TAG, "[FastPairHook] direct register path failed: " + t)
         }
         try {
-            XposedHelpers.findAndHookMethod("android.app.Application", cl, "attach",
-                    Context::class.java,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val ctx = param.args[0] as Context
-                                doRegister(ctx, cl)
-                                XposedBridge.log("[FastPairHook] receiver registered via Application.attach")
-                            } catch (t: Throwable) {
-                                XposedBridge.log("[FastPairHook] attach register failed: " + t)
-                            }
-                        }
-                    })
+            val appCls = Class.forName("android.app.Application", true, cl)
+            val m = appCls.getDeclaredMethod("attach", Context::class.java)
+            sModule?.hook(m)?.intercept { chain ->
+                chain.proceed()
+                try {
+                    val ctx = chain.args[0] as Context
+                    doRegister(ctx, cl)
+                    Log.d(TAG, "[FastPairHook] receiver registered via Application.attach")
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] attach register failed: " + t)
+                }
+            }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] Application.attach hook failed: " + t)
+            Log.d(TAG, "[FastPairHook] Application.attach hook failed: " + t)
         }
     }
 
@@ -858,15 +847,15 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         // alpha2.26.7: 同步重置模式高亮残留——模拟连接的乐观高亮不得带入真实弹窗
                         sLastMode = -1
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] battery extra parse fail: " + t)
+                        Log.d(TAG, "[FastPairHook] battery extra parse fail: " + t)
                     }
                     postShow(context, cl, deviceName)
                 }
             }
             ctx.registerReceiver(receiver, filter, exportedFlag)
-            XposedBridge.log("[FastPairHook] trigger receiver registered")
+            Log.d(TAG, "[FastPairHook] trigger receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] trigger receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] trigger receiver fail: " + t)
         }
         // 蓝牙 ACL_CONNECTED 自动触发
         try {
@@ -878,10 +867,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         @Suppress("DEPRECATION")
                         val dev = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
                         if (dev != null) {
-                            name = XposedHelpers.callMethod(dev, "getName") as String?
+                            name = HookHelper.callMethod(dev, "getName") as String?
                         }
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] get bt name fail: " + t)
+                        Log.d(TAG, "[FastPairHook] get bt name fail: " + t)
                     }
                     // 【数据对接】设备名优先取蓝牙真实名称，未提供时回退 provider
                     val dp = sDataProvider
@@ -889,7 +878,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         name = dp.getDeviceName()
                     }
                     if (name.isNullOrEmpty()) {
-                        XposedBridge.log("[FastPairHook] ACL_CONNECTED skip: no device name")
+                        Log.d(TAG, "[FastPairHook] ACL_CONNECTED skip: no device name")
                         return
                     }
                     // ** alpha1.32: 事件通道——ACL 设备地址推送给应用（动态发现，零硬编码） **
@@ -897,21 +886,21 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         @Suppress("DEPRECATION")
                         val dev2 = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
                         if (dev2 != null) {
-                            val devAddr = XposedHelpers.callMethod(dev2, "getAddress") as String?
+                            val devAddr = HookHelper.callMethod(dev2, "getAddress") as String?
                             if (devAddr != null && devAddr.matches(Regex("([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"))) {
                                 sendLeAddr(devAddr.uppercase())
                             }
                         }
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] acl addr push fail: " + t)
+                        Log.d(TAG, "[FastPairHook] acl addr push fail: " + t)
                     }
-                    XposedBridge.log("[FastPairHook] ACL_CONNECTED -> " + name
+                    Log.d(TAG, "[FastPairHook] ACL_CONNECTED -> " + name
                             + " (deferred " + ACL_POSTSHOW_DELAY_MS + "ms for GAIA)")
                     val fpName = name
                     Handler(Looper.getMainLooper()).postDelayed({
                         val since = System.currentTimeMillis() - sLastShowMs
                         if (since < ACL_REPEAT_GUARD_MS) {
-                            XposedBridge.log("[FastPairHook] ACL deferred skip (shown " + since + "ms ago)")
+                            Log.d(TAG, "[FastPairHook] ACL deferred skip (shown " + since + "ms ago)")
                             return@postDelayed
                         }
                         postShow(context, cl, fpName)
@@ -919,9 +908,9 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 }
             }
             ctx.registerReceiver(btReceiver, acl, exportedFlag)
-            XposedBridge.log("[FastPairHook] bluetooth ACL receiver registered")
+            Log.d(TAG, "[FastPairHook] bluetooth ACL receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] bluetooth receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] bluetooth receiver fail: " + t)
         }
         // alpha1.20: 应用广播当前降噪模式 -> 弹窗按钮高亮
         try {
@@ -932,17 +921,17 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         val mode = intent.getIntExtra(EXTRA_MODE, -1)
                         if (mode < 0 || mode > 3) return
                         sLastMode = mode
-                        XposedBridge.log("[FastPairHook] MODE_STATE received, mode=" + mode)
+                        Log.d(TAG, "[FastPairHook] MODE_STATE received, mode=" + mode)
                         applyModeHighlight(mode)
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] MODE_STATE handle fail: " + t)
+                        Log.d(TAG, "[FastPairHook] MODE_STATE handle fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(modeStateReceiver, ms, exportedFlag)
-            XposedBridge.log("[FastPairHook] mode state receiver registered")
+            Log.d(TAG, "[FastPairHook] mode state receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] mode state receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] mode state receiver fail: " + t)
         }
         // alpha2.22: 应用广播 ANC 能力状态 -> 驱动弹窗降噪按钮三态
         try {
@@ -951,31 +940,31 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 override fun onReceive(context: Context, intent: Intent) {
                     try {
                         val st = intent.getIntExtra(EXTRA_ANC_STATUS, 0)
-                        XposedBridge.log("[FastPairHook] ANC_STATUS received, status=" + st)
+                        Log.d(TAG, "[FastPairHook] ANC_STATUS received, status=" + st)
                         applyAncAvailability(st)
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] ANC_STATUS handle fail: " + t)
+                        Log.d(TAG, "[FastPairHook] ANC_STATUS handle fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(ancStatusReceiver, ancF, exportedFlag)
-            XposedBridge.log("[FastPairHook] ANC status receiver registered")
+            Log.d(TAG, "[FastPairHook] ANC status receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] ANC status receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] ANC status receiver fail: " + t)
         }
         // ** alpha1.32: 应用请求 LE 扫描 -> GMS 侧 receiver **
         try {
             val reqF = IntentFilter(ACTION_REQ_LE_SCAN)
             val reqReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
-                    XposedBridge.log("[FastPairHook] LE scan request received")
+                    Log.d(TAG, "[FastPairHook] LE scan request received")
                     handleLeScanRequest()
                 }
             }
             ctx.registerReceiver(reqReceiver, reqF, exportedFlag)
-            XposedBridge.log("[FastPairHook] LE scan request receiver registered")
+            Log.d(TAG, "[FastPairHook] LE scan request receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] LE scan req receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] LE scan req receiver fail: " + t)
         }
         // ** alpha1.34: 应用探测模块激活 -> PING/PONG **
         try {
@@ -987,14 +976,14 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         pong.setPackage(PKG_APP)
                         pong.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         context.sendBroadcast(pong)
-                        XposedBridge.log("[FastPairHook] ping -> pong")
+                        Log.d(TAG, "[FastPairHook] ping -> pong")
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] pong fail: " + t)
+                        Log.d(TAG, "[FastPairHook] pong fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(pingReceiver, pingF, exportedFlag)
-            XposedBridge.log("[FastPairHook] ping receiver registered")
+            Log.d(TAG, "[FastPairHook] ping receiver registered")
     
         // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
         try {
@@ -1007,19 +996,19 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         val sys = intent.getIntExtra("sys", -1)
                         if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
                         if (sys >= 0) setSystemBattery(sys)
-                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            XposedBridge.log("[FastPairHook] battery update receiver registered")
+            Log.d(TAG, "[FastPairHook] battery update receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
         }
     } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] ping receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] ping receiver fail: " + t)
     
         // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
         try {
@@ -1032,16 +1021,16 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         val sys = intent.getIntExtra("sys", -1)
                         if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
                         if (sys >= 0) setSystemBattery(sys)
-                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            XposedBridge.log("[FastPairHook] battery update receiver registered")
+            Log.d(TAG, "[FastPairHook] battery update receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
         }
     }
 
@@ -1056,16 +1045,16 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         val sys = intent.getIntExtra("sys", -1)
                         if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
                         if (sys >= 0) setSystemBattery(sys)
-                        XposedBridge.log("[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] battery RX fail: " + t)
+                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            XposedBridge.log("[FastPairHook] battery update receiver registered")
+            Log.d(TAG, "[FastPairHook] battery update receiver registered")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] battery receiver fail: " + t)
+            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
         }
     }
 
@@ -1074,7 +1063,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
     /** alpha1.32b: 跨进程扫描锁——GMS 多子进程只允许一个扫描（文件锁，原子 createNewFile） */
     private fun gmsContext(): Context? {
         return try {
-            val app = XposedHelpers.callStaticMethod(
+            val app = HookHelper.callStaticMethod(
                     Class.forName("android.app.ActivityThread"), "currentApplication")
             if (app is Context) app else null
         } catch (_: Throwable) {
@@ -1106,13 +1095,13 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         try {
             val now = System.currentTimeMillis()
             if (now - sLastScanReqMs < 30000) {
-                XposedBridge.log("[FastPairHook] LE scan req throttled (30s)")
+                Log.d(TAG, "[FastPairHook] LE scan req throttled (30s)")
                 return
             }
             sLastScanReqMs = now
             val adapter = BluetoothAdapter.getDefaultAdapter()
             if (adapter == null || !adapter.isEnabled) {
-                XposedBridge.log("[FastPairHook] LE scan skip: adapter off")
+                Log.d(TAG, "[FastPairHook] LE scan skip: adapter off")
                 return
             }
             if (sLeScanning) return
@@ -1123,7 +1112,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 return
             }
             if (!acquireScanLock()) {
-                XposedBridge.log("[FastPairHook] LE scan skip (locked by sibling process)")
+                Log.d(TAG, "[FastPairHook] LE scan skip (locked by sibling process)")
                 return
             }
             val st = ScanSettings.Builder()
@@ -1137,7 +1126,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                         if (n == null) n = result.device.name
                         val addr = result.device.address
                         if (addr == null) return
-                        XposedBridge.log("[FastPairHook] LE scan result: " + addr
+                        Log.d(TAG, "[FastPairHook] LE scan result: " + addr
                                 + " name=" + (n ?: "<null>") + " rssi=" + result.rssi)
                         var hit = false
                         if (!n.isNullOrEmpty() && DeviceMatcher.isMoondrop(n)) {
@@ -1158,19 +1147,19 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                             }
                         }
                         if (!hit) return
-                        XposedBridge.log("[FastPairHook] LE scan hit: " + addr
+                        Log.d(TAG, "[FastPairHook] LE scan hit: " + addr
                                 + " name=" + (n ?: "<null>"))
                         try { sc.stopScan(cbRef[0]) } catch (_: Throwable) { }
                         sLeScanning = false
                         releaseScanLock()
                         sendLeAddr(addr.uppercase())
                     } catch (t: Throwable) {
-                        XposedBridge.log("[FastPairHook] LE scan result fail: " + t)
+                        Log.d(TAG, "[FastPairHook] LE scan result fail: " + t)
                     }
                 }
 
                 override fun onScanFailed(errorCode: Int) {
-                    XposedBridge.log("[FastPairHook] LE scan failed code=" + errorCode)
+                    Log.d(TAG, "[FastPairHook] LE scan failed code=" + errorCode)
                     sLeScanning = false
                     releaseScanLock()
                 }
@@ -1181,11 +1170,11 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                 try { sc.stopScan(cbRef[0]) } catch (_: Throwable) { }
                 sLeScanning = false
                 releaseScanLock()
-                XposedBridge.log("[FastPairHook] LE scan window done (no hit)")
+                Log.d(TAG, "[FastPairHook] LE scan window done (no hit)")
             }, 10000)
-            XposedBridge.log("[FastPairHook] LE scan started (GMS side)")
+            Log.d(TAG, "[FastPairHook] LE scan started (GMS side)")
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] handleLeScanRequest fail: " + t)
+            Log.d(TAG, "[FastPairHook] handleLeScanRequest fail: " + t)
             sLeScanning = false
             releaseScanLock()
         }
@@ -1200,30 +1189,30 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             sLastPushMs = now
             val ctx = sAppContext
             if (ctx == null) {
-                XposedBridge.log("[FastPairHook] LE addr push skip: no app context")
+                Log.d(TAG, "[FastPairHook] LE addr push skip: no app context")
                 return
             }
             val i = Intent(ACTION_LE_ADDR_FOUND)
             i.putExtra(EXTRA_LE_ADDR, addr)
             i.setPackage(PKG_APP)
             ctx.sendBroadcast(i)
-            XposedBridge.log("[FastPairHook] LE addr pushed: " + addr)
+            Log.d(TAG, "[FastPairHook] LE addr pushed: " + addr)
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] sendLeAddr fail: " + t)
+            Log.d(TAG, "[FastPairHook] sendLeAddr fail: " + t)
         }
     }
 
     private fun postShow(ctx: Context, cl: ClassLoader, deviceName: String?) {
         // 【设备过滤】仅 Moondrop 品牌耳机弹窗；其他蓝牙设备连接一律不弹
         if (!DeviceMatcher.isMoondrop(deviceName)) {
-            XposedBridge.log("[FastPairHook] postShow skip: not a Moondrop device -> " + deviceName)
+            Log.d(TAG, "[FastPairHook] postShow skip: not a Moondrop device -> " + deviceName)
             return
         }
         Handler(Looper.getMainLooper()).post {
             try {
                 showHalfSheet(ctx, cl, deviceName)
             } catch (t: Throwable) {
-                XposedBridge.log("[FastPairHook] show failed: " + t)
+                Log.d(TAG, "[FastPairHook] show failed: " + t)
             }
         }
     }
@@ -1240,7 +1229,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             name = dp.getDeviceName()
         }
         if (name.isNullOrEmpty()) {
-            XposedBridge.log("[FastPairHook] showHalfSheet skip: no device name")
+            Log.d(TAG, "[FastPairHook] showHalfSheet skip: no device name")
             return
         }
         sLastDeviceName = name
@@ -1251,8 +1240,8 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         }
         val icon = readIconBytes()
         val payload = buildProtoPayload(name, icon)
-        XposedBridge.log("[FastPairHook] payload icon bytes=" + (icon?.size ?: 0))
-        XposedBridge.log("[FastPairHook] manual payload len=" + payload.size + " name=" + name)
+        Log.d(TAG, "[FastPairHook] payload icon bytes=" + (icon?.size ?: 0))
+        Log.d(TAG, "[FastPairHook] manual payload len=" + payload.size + " name=" + name)
 
         val intent = Intent()
         intent.setClassName(ctx, "com.google.android.gms.nearby.discovery.fastpair.HalfSheetActivity")
@@ -1262,10 +1251,10 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         intent.putExtra(EXTRA_BATTERY_LEFT, sBatteryLeft)   // 电量经 Intent 传给渲染进程
         intent.putExtra(EXTRA_BATTERY_RIGHT, sBatteryRight)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        XposedBridge.log("[FastPairHook] starting HalfSheetActivity...")
+        Log.d(TAG, "[FastPairHook] starting HalfSheetActivity...")
         ctx.startActivity(intent)
         sLastShowMs = System.currentTimeMillis()
-        XposedBridge.log("[FastPairHook] startActivity called")
+        Log.d(TAG, "[FastPairHook] startActivity called")
     }
 
     /** 手工构造 dtok protobuf 字节：field 8 (l=设备名)、field 5 (i)、field 6 (h=图片 bytes) */
@@ -1280,7 +1269,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
             }
             bos.toByteArray()
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] buildProtoPayload fail: " + t)
+            Log.d(TAG, "[FastPairHook] buildProtoPayload fail: " + t)
             ByteArray(0)
         }
     }
@@ -1305,11 +1294,11 @@ class FastPairHookEntry : IXposedHookLoadPackage {
                     off += n
                 }
                 fis.close()
-                XposedBridge.log("[FastPairHook] icon bytes loaded: " + buf.size)
+                Log.d(TAG, "[FastPairHook] icon bytes loaded: " + buf.size)
                 return buf
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[FastPairHook] readIconBytes fail: " + t)
+            Log.d(TAG, "[FastPairHook] readIconBytes fail: " + t)
         }
         return null
     }
@@ -1324,6 +1313,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
     }
 
     companion object {
+        const val TAG = "FastPairHook"
         const val PKG_GMS = "com.google.android.gms"
         const val PKG_APP = "com.fxxkmoondrop.secret"
         const val ACTION_TRIGGER = "com.fxxkmoondrop.secret.FASTPAIR_TRIGGER"
@@ -1373,7 +1363,7 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         @JvmStatic
         fun setDataProvider(provider: FastPairDataProvider?) {
             sDataProvider = provider
-            XposedBridge.log("[FastPairHook] data provider set: " + (provider != null))
+            Log.d(TAG, "[FastPairHook] data provider set: " + (provider != null))
         }
 
         /*** 当前 HalfSheet Activity 引用（用于接管连接回报） */
@@ -1408,6 +1398,8 @@ class FastPairHookEntry : IXposedHookLoadPackage {
         var sModCtx: Context? = null // alpha1.14fix4: 模块 APK context（读内置 assets）
         @JvmField @Volatile
         var sGmsCl: ClassLoader? = null
+        @JvmField @Volatile
+        var sModule: XposedModule? = null
 
         const val MODE_OFF = 0
         const val MODE_ANC = 1
