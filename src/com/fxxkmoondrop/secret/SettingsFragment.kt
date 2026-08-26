@@ -52,7 +52,6 @@ class SettingsFragment : Fragment() {
             PopupGate.clear(SIM_MAC, SIM_NAME)
         }
     }
-    private var simDiscBtn: MaterialButton? = null
     private var seedRow: LinearLayout? = null // alpha2.8: 种子颜色行（动态取色关闭时显示；出现/消失动画）
 
     override fun onCreateView(inflater: LayoutInflater, containerView: ViewGroup?,
@@ -409,15 +408,7 @@ class SettingsFragment : Fragment() {
         }
         simBox.addView(simConnBtn, LinearLayout.LayoutParams(-1, -2))
         simBox.addView(spacer(dp(10)))
-        simDiscBtn = makeM3Button("模拟断开 耳机", R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
-            // 模拟断开：退出 GAIA 模拟态 + 清模拟电量 + 弹窗（可重复点击）
-            simRestoreHandler.removeCallbacks(simRestoreRunnable)
-            GaiaBleClient.setSimConnected(false)
-            BatteryStore.clearGaia(SIM_MAC)
-            PopupGate.clear(SIM_MAC, SIM_NAME)
-            PopupGate.tryShowDisconnected(requireContext(), SIM_MAC, SIM_NAME)
-        }
-        simBox.addView(simDiscBtn, LinearLayout.LayoutParams(-1, -2))
+        // alpha2.38: 模拟断开按钮已移除（不再有断开弹窗，30s 自动恢复即可）
         box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
 
         sv.addView(box, FrameLayout.LayoutParams(-1, -2))
@@ -476,7 +467,6 @@ class SettingsFragment : Fragment() {
     private fun updateSimState() {
         val real = HeadsetGate.getConnectedMac(requireContext()) != null
         simConnBtn?.let { setSimEnabled(it, !real) }
-        simDiscBtn?.let { setSimEnabled(it, !real) }
     }
 
     private fun setSimEnabled(b: MaterialButton, en: Boolean) {
