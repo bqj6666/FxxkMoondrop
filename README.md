@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.7**（versionCode 267） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.8**（versionCode 268） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -21,6 +21,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
 - **Root 强力保活**、开机自启、后台隐藏（可选开关）
+- **布丁 PUDDING 适配**：基于 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档，支持 GAIA v4 over RFCOMM/SPP 连接，5 档降噪（关闭 / 自适应 / 通透 / 抗风 / 基础降噪）、三路电量（左耳 / 右耳 / 充电盒）、增益控制（低 / 中 / 高）、指示灯开关
 
 ## 软件截图
 
@@ -61,7 +62,12 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 ## 支持设备
 
-> 兼容性判定基于**蓝牙 GATT 服务指纹**，不依赖型号名：耳机暴露高通 **GAIA 服务** → 走 GAIA V3 协议；暴露 Moondrop 私有 **`9ECA0000` 服务** → 走私有协议（音源切换 / EQ / MIC / SN）。因此只要主控为**高通 QCC** 或**中科蓝讯（Bluetrum）**，理论上即可接入。
+> 兼容性判定基于**蓝牙传输层与服务指纹**，不依赖型号名：
+> - 耳机暴露高通 **GAIA 服务** via BLE GATT → 走 GAIA V3 协议
+> - 耳机暴露高通 **GAIA 服务** via Classic BT RFCOMM/SPP → 走 GAIA V4 协议（如布丁 PUDDING）
+> - 耳机暴露 Moondrop 私有 **`9ECA0000` 服务** → 走私有协议（音源切换 / EQ / MIC / SN）
+>
+> 因此只要主控为**高通 QCC** 或**中科蓝讯（Bluetrum）**，理论上即可接入。
 
 | 状态 | 耳机型号 | 主控 / 协议 | 依据 |
 |---|---|---|---|
@@ -78,7 +84,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | ⚪ 未知 | 太空漫游 / Space Travel（一代） | 疑似中科蓝讯（型号未确认） | 待实机验证 |
 | ⚪ 未知 | 猫咖 MOCA | 疑似蓝讯（蓝牙 5.4 / LC3 特征） | 待实机验证 |
 | ⚪ 未知 | 方糖 BLOCK | 疑似蓝讯 BT8922 系 | 待实机验证 |
-| ⚪ 未知 | 布丁 PUDDING | 国产 SoC（型号未公开） | 待实机验证 |
+| ✅ 已实测 | 布丁 PUDDING（MD-TWS-056） | 国产 SoC（GAIA V4，RFCOMM/SPP） | 借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 项目协议文档完成适配，5 档 ANC + 三路电量 + 增益 + 指示灯 |
 | ⚪ 未知 | 太空漫游2 ULTRA | 国产 SoC（型号未公开） | 待实机验证 |
 | ⚪ 未知 | 羽翼 EDGE / EDGE2 | 国产 SoC（型号未公开） | 待实机验证 |
 
@@ -117,11 +123,13 @@ FxxkMoondrop-repo/
 
 - [JingMatrix](https://github.com/JingMatrix) 及其维护的 [LSPosed](https://github.com/JingMatrix/LSPosed) / [Vector](https://github.com/JingMatrix/Vector) 框架：本项目的**界面与交互风格参考了 LSPosed Manager 的设计**，特此致谢；项目亦受益于 LSPosed 生态的工具链
 - [LSPlant](https://github.com/JingMatrix/LSPlant) 与 Xposed / LSPosed 社区
+- [lingbai-rong/PuddingPods](https://github.com/lingbai-rong/PuddingPods)：通过该项目的协议逆向文档，FxxkMoondrop 完成了对水月雨布丁 PUDDING（MD-TWS-056）的适配——包括 GAIA v4 over RFCOMM/SPP 连接方式、5 档 ANC 设备码映射、三路电量（含充电盒）读取、增益与指示灯控制协议
 - 各AI 协助进行开发
 
 ## 版本历史
 
-- **alpha2.38.7**（当前）：弹窗电量文字恢复写进 GMS 原生 `subhead`（耳机名下方、图标上方），移除自绘 overlay + 硬编码坐标；仅 subhead 缺失时兜底自绘，位置从 `PopupProfile` 屏幕布局库读取
+- **alpha2.38.8**（当前）：借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档完成布丁 PUDDING（MD-TWS-056）适配——GAIA v4 over RFCOMM/SPP 连接、5 档 ANC（关闭/自适应/通透/抗风/基础降噪）、三路电量含充电盒、增益与指示灯控制
+- alpha2.38.7：弹窗电量文字恢复写进 GMS 原生 `subhead`（耳机名下方、图标上方），移除自绘 overlay + 硬编码坐标；仅 subhead 缺失时兜底自绘，位置从 `PopupProfile` 屏幕布局库读取
 - alpha2.38.5：修复弹窗电量显示丢失 + ANC 按钮无响应（模式条动态定位追踪 central_btn）
 - alpha2.38.4：弹窗图标+模式面板整体上抬 140px，给设置按钮腾出空间
 - alpha2.38.3：设置按钮完全克隆确定按钮 + 上方对齐

@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：alpha2.38.7 ｜ 更新日期：2026-08-27
+> 版本：alpha2.38.8 ｜ 更新日期：2026-08-27
 
 ## 系统总览
 
@@ -67,7 +67,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 
 | 模块 | 文件 | 行数 | 职责 |
 |---|---|---|---|
-| **GaiaBleClient** | `GaiaBleClient.kt` | 1246 | BLE GATT 直连耳机单例；连接管理、GAIA V3 + 9ECA 双协议自动识别、电量读取、ANC 控制 |
+| **GaiaBleClient** | `GaiaBleClient.kt` | 1246 | BLE GATT / RFCOMM 直连耳机单例；连接管理、GAIA V3 + GAIA V4 + 9ECA 三协议自动识别、电量读取、ANC 控制 |
 | **HeadsetDetectService** | `HeadsetDetectService.kt` | 367 | 前台服务；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC |
 | **HeadsetGate** | `HeadsetGate.kt` | 242 | 蓝牙连接守卫；A2DP/HEADSET profile 代理获取已连接设备 MAC |
 | **AncBridge** | `AncBridge.kt` | 126 | ANC 模式状态桥接；向 GMS 进程广播当前模式 + ANC 可用性 |
@@ -173,13 +173,15 @@ HalfSheetActivity (GMS 原生)
 
 ## 协议架构
 
-### 双协议自动识别
+### 三协议自动识别
 
 ```
-GATT 连接成功 → onServicesDiscovered
-  ├── 发现 GAIA Service UUID → 初始化 GAIA V3 协议
+连接成功 → 协议识别
+  ├── BLE GATT: 发现 GAIA Service UUID → 初始化 GAIA V3 协议
   │   └── 帧格式: [vendor 2B][commandValue 2B][payload...]
-  └── 发现 9ECA0000 Service UUID → 初始化 BleSourceSwitch 协议
+  ├── Classic BT RFCOMM: SPP 连接 → 初始化 GAIA V4 协议（布丁 PUDDING）
+  │   └── 帧格式同 V3，传输层为 RFCOMM/SPP
+  └── BLE GATT: 发现 9ECA0000 Service UUID → 初始化 BleSourceSwitch 协议
       └── 帧格式: [0xA5][0x01][type][cmd][seq][len][payload ≤14B]
 ```
 
@@ -201,7 +203,7 @@ GATT 连接成功 → onServicesDiscovered
 ## 设计原则
 
 1. **零硬编码地址**：LE 地址全动态发现
-2. **协议自动识别**：按 GATT 服务指纹路由
+2. **协议自动识别**：按传输层（BLE GATT / RFCOMM）+ 服务指纹路由，不依赖型号名
 3. **坐标集中配置**：弹窗布局参数收敛到 PopupProfile
 4. **跨进程解耦**：App 与 GMS 通过广播通信
 5. **自愈闭环**：地址丢失 → 扫描 → 发现 → 连接 → 缓存 → 连接

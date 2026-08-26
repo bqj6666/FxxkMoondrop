@@ -6,10 +6,10 @@
 
 | 项目 | 说明 |
 |---|---|
-| 目标设备 | Moondrop 全系列高通 QCC 耳机（GAIA）+ 中科蓝讯耳机（9ECA） |
-| 已实测 | 梦回2 / Golden Ages 2（GA2），TWS-01 定制 SoC |
-| 连接方式 | BLE GATT 直连（非 Classic Bluetooth RFCOMM / SPP） |
-| 业务协议 | Qualcomm GAIA V3 over BLE |
+| 目标设备 | Moondrop 全系列高通 QCC 耳机（GAIA V3/V4）+ 中科蓝讯耳机（9ECA） |
+| 已实测 | 梦回2 / Golden Ages 2（GA2），TWS-01 定制 SoC；布丁 PUDDING（MD-TWS-056） |
+| 连接方式 | GA2: BLE GATT 直连；布丁: Classic Bluetooth RFCOMM / SPP |
+| 业务协议 | Qualcomm GAIA V3 over BLE（GA2）/ GAIA V4 over RFCOMM（布丁） |
 | 包名 | `com.fxxkmoondrop.secret` |
 
 ### BLE GATT 服务与特征 UUID
@@ -320,3 +320,75 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 - 无增益控制和指示灯控制（GA2 固件未暴露相关 feature）
 - 9ECA 协议客户端已实现但未经实机验证
 - Fast Pair 弹窗依赖完整 GMS，ColorOS 需额外模块
+
+---
+
+## 布丁 PUDDING（MD-TWS-056）适配
+
+> 基于 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 项目协议文档完成适配。
+
+### 连接方式
+
+布丁与 GA2 的关键区别在于**传输层**：
+
+| 项 | GA2 | 布丁 PUDDING |
+|---|---|---|
+| 传输 | BLE GATT | Classic BT RFCOMM / SPP |
+| 协议 | GAIA V3 | GAIA V4 |
+| UUID | `00001100-...`（GATT Service） | `00001101-0000-1000-8000-00805f9b34fb`（SPP） |
+| 双地址 | 是（PUBLIC + LE 随机） | 否（Classic BT 直连） |
+
+GAIA 包格式与 V3 相同：`[vendor 2B BE][commandValue 2B BE][payload...]`，`vendor = 0x001D`。
+
+### ANC 噪声控制
+
+布丁走 ANC V2 路径（feature=32 / 0x20），与 GA2 相同的 feature ID，但模式枚举更丰富（5 档）：
+
+**SET 方向（TX: `00 1D 40 04 <mode>`，RX: `00 1D 41 04 <mode>`）：**
+
+| 功能 | mode |
+|---|---|
+| 关闭 | 0x00 |
+| 自适应降噪 | 0x01 |
+| 通透 | 0x02 |
+| 抗风噪 | 0x03 |
+| 基础降噪 | 0x04 |
+
+> 与 GA2 的区别：GA2 仅 4 档（关/降噪/透传/抗风），布丁增加「自适应降噪」并将「基础降噪」独立为 0x04。
+
+### 电量
+
+布丁支持三路电量（含充电盒），GA2 仅左右耳：
+
+- 查询：`00 1D 1A 00` 或 `00 1D 1A 01 01 02`
+- 回包：`00 1D 1B ...`
+- 类型 1 = 左耳，类型 2 = 右耳，类型 3 = 充电盒
+- 单次回包缺少某组件时保留最近一次有效值
+
+### 增益控制
+
+| 命令 | 帧 |
+|---|---|
+| 查询 | `00 1D 1E 01` |
+| 设置 | `00 1D 1E 02 <level>` |
+
+level: 0x00 = 低, 0x01 = 中, 0x02 = 高
+
+### 指示灯控制
+
+| 命令 | 帧 |
+|---|---|
+| 查询 | `00 1D 26 01` |
+| 设置 | `00 1D 26 02 <state>` |
+
+state: 0x00 = 关, 0x01 = 开
+
+### AncProfileLib 档案
+
+布丁在 `AncProfileLib.PROFILES` 中需添加独立条目，SET 映射为 5 档枚举：
+
+```
+UI[关, 降, 透, 抗, 自适应] → dev: [0, 4, 2, 3, 1]
+```
+
+> 注意布丁的 ANC 模式数（5）超过 GA2（4），UI 侧需适配第 5 档「自适应」按钮。
