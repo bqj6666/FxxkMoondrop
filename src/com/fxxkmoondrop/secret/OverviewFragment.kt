@@ -422,7 +422,7 @@ class OverviewFragment : Fragment() {
             val sz = dp(48)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(requireContext())
-            lbl.text = DeviceControlBridge.TRACKING_NAMES[tm]
+            lbl.text = DeviceControlBridge.trackingLabels()[tm]
             lbl.textSize = 10f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
@@ -1781,7 +1781,7 @@ class OverviewFragment : Fragment() {
 
     companion object {
         private const val AUTO_REFRESH_MS = 30000L
-        private val ANC_NAMES = arrayOf("关闭", "降噪", "透传", "抗风", "自适应", "直播")
+        private val ANC_NAMES = AncProfileLib.ANC_MODE_NAMES_FULL
         private const val SIM_MAC = "AA:BB:CC:DD:EE:FF"
         private const val SIM_NAME = "Moondrop Golden Ages 2"
         private const val REQ_PICK_ICON = 0xE16

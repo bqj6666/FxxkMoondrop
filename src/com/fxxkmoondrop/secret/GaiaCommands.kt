@@ -631,5 +631,5 @@ object GaiaCommands {
     /** alpha2.26.9: AudioCuration 名义默认映射（1=关/2=降噪/3=透传/4=抗风），仅作回退。
      *  实际生效映射由 AncProfileLib 按设备名解析——如梦回二/Golden Ages 2 实测 1=关/2=降/3=抗风/4=透传。
      *  用户自定义（SP anc_map_custom=1）优先级最高。仅 GAIA 路径使用，9ECA 蓝讯系不参与。 */
-    private val DEFAULT_ANC_MAP = intArrayOf(1, 2, 3, 4)
+    private val DEFAULT_ANC_MAP = AncProfileLib.DEFAULT_MAP
 }

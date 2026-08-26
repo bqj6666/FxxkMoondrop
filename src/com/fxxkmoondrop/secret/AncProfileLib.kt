@@ -22,6 +22,9 @@ object AncProfileLib {
     /** 默认映射：AC 名义编码 1=关 / 2=降噪 / 3=透传 / 4=抗风。未实测型号回退用。 */
     val DEFAULT_MAP: IntArray = intArrayOf(1, 2, 3, 4)
 
+    val ANC_MODE_NAMES: Array<String> = arrayOf("关闭", "降噪", "透传", "抗风")
+    val ANC_MODE_NAMES_FULL: Array<String> = arrayOf("关闭", "降噪", "透传", "抗风", "自适应", "直播")
+
     private class Profile(val nameKey: String, val map: IntArray, val getMap: IntArray? = null)
 
     /** 型号档案表：设备名关键字（大写匹配，contains）→ 实测设备码映射。
@@ -91,12 +94,14 @@ object AncProfileLib {
         val hasLed: Boolean,
         val gainCount: Int = 3,
         val gainMap: IntArray = intArrayOf(2, 1, 0),
-        val gainLabels: List<String> = listOf("低", "中", "高")
+        val gainLabels: List<String> = listOf("低", "中", "高"),
+        val trackingLabels: Array<String> = arrayOf("关闭追踪", "30°", "全方位")
     )
 
     private val DC_PROFILES: List<DcProfile> = listOf(
         // 梦回二 / Golden Ages 2: 支持空间音频+增益, 不支持 LED
-        DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"))
+        DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位"))
     )
 
     /** 默认 DC 档案：全部不支持（未知型号保守策略） */

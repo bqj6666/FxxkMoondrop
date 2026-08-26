@@ -14,8 +14,6 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     private const val TAG = "DeviceControlBridge"
 
-    val TRACKING_NAMES = arrayOf("关闭追踪", "30°", "全方位")
-    private val DEFAULT_GAIN_LABELS = listOf("低", "中", "高")
 
     @Volatile private var spatialState = -1
     @Volatile private var headTracking = -1
@@ -27,6 +25,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     @Volatile private var gainMap: IntArray = AncProfileLib.DEFAULT_DC.gainMap
     @Volatile private var gainLabels: List<String> = AncProfileLib.DEFAULT_DC.gainLabels
     @Volatile private var gainCount: Int = AncProfileLib.DEFAULT_DC.gainCount
+    @Volatile private var trackingLabels: Array<String> = AncProfileLib.DEFAULT_DC.trackingLabels
 
     fun getVersion(): Int = version
     private fun bumpVersion() { version++ }
@@ -40,10 +39,12 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
         gainMap = profile.gainMap
         gainLabels = profile.gainLabels
         gainCount = profile.gainCount
+        trackingLabels = profile.trackingLabels
     }
 
     fun gainLabels(): List<String> = gainLabels
     fun gainCount(): Int = gainCount
+    fun trackingLabels(): Array<String> = trackingLabels
 
     private fun uiToDevGain(uiLevel: Int): Int {
         return if (uiLevel in gainMap.indices) gainMap[uiLevel] else uiLevel

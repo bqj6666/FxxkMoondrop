@@ -179,7 +179,7 @@ object PopupOverlay {
         row.addView(label, LinearLayout.LayoutParams(-2, -2))
         row.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
         val names = when (feature) {
-            0 -> DeviceControlBridge.TRACKING_NAMES
+            0 -> DeviceControlBridge.trackingLabels()
             1 -> DeviceControlBridge.gainLabels().toTypedArray()
             2 -> arrayOf("开", "关")
             else -> arrayOf("")
@@ -368,7 +368,7 @@ object PopupOverlay {
             ancRow.orientation = LinearLayout.HORIZONTAL
             ancRow.gravity = Gravity.CENTER
             val ancEmoji = arrayOf("🔇", "🎧", "👂", "🌬️")
-            val ancNames = arrayOf("关闭", "降噪", "透传", "抗风")
+            val ancNames = AncProfileLib.ANC_MODE_NAMES
             for (m in 0 until ancCount) {
                 val fm = m
                 val col = LinearLayout(c)

@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
 import com.fxxkmoondrop.secret.DeviceMatcher
+import com.fxxkmoondrop.secret.AncProfileLib
 import com.fxxkmoondrop.secret.HookHelper
 import android.util.Log
 import io.github.libxposed.api.XposedModule
@@ -612,7 +613,7 @@ class FastPairHookEntry {
             } catch (t: Throwable) {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
-            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, "抗风"))
+            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, AncProfileLib.ANC_MODE_NAMES[3]))
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)

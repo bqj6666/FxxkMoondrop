@@ -14,7 +14,7 @@ class AncBridge {
         private const val TAG = "AncBridge"
 
         @JvmField
-        val MODE_NAMES = arrayOf("关闭", "降噪", "透传", "抗风", "自适应", "直播")
+        val MODE_NAMES = AncProfileLib.ANC_MODE_NAMES_FULL
 
         /** alpha1.20: 跨进程模式状态同步（应用 -> GMS 弹窗高亮；GMS -> 应用请求当前值） */
         const val ACTION_FP_MODE_STATE = "com.fxxkmoondrop.secret.FASTPAIR_MODE_STATE"

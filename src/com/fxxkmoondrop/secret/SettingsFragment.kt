@@ -261,7 +261,7 @@ class SettingsFragment : Fragment() {
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
-        val ancMapNames = arrayOf("关闭", "降噪", "透传", "抗风")
+        val ancMapNames = AncProfileLib.ANC_MODE_NAMES
         val ancMapDefaults = GaiaBleClient.getInstance().getEffectiveAncMap()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
