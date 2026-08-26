@@ -180,7 +180,7 @@ object PopupOverlay {
         row.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
         val names = when (feature) {
             0 -> DeviceControlBridge.TRACKING_NAMES
-            1 -> DeviceControlBridge.GAIN_NAMES
+            1 -> DeviceControlBridge.gainLabels().toTypedArray()
             2 -> arrayOf("开", "关")
             else -> arrayOf("")
         }

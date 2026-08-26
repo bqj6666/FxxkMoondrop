@@ -82,7 +82,9 @@ class GaiaBleClient private constructor() {
     @Volatile private var connectedDeviceName: String? = null
     private var connected = false
     private var ancCallback: AncControlCallback? = null
-    private var deviceControlCallback: DeviceControlCallback? = null  // alpha2.31
+    private var dcBridge: DeviceControlCallback? = null
+
+    fun setDcBridge(cb: DeviceControlCallback?) { this.dcBridge = cb }  // alpha2.31
     private val handler = Handler(Looper.getMainLooper())
 
     // alpha2.27: 能力探测委托给独立状态机
@@ -102,7 +104,7 @@ class GaiaBleClient private constructor() {
         { readAncMap() },
         { readAncGetMap() },
         { left, right -> sendBatteryBroadcast(left, right) },
-        { deviceControlCallback }
+        { dcBridge }
     )
 
     // BLE 扫描
@@ -837,51 +839,43 @@ class GaiaBleClient private constructor() {
     fun hasLedSupport(): Boolean = probe.hasFeature(GaiaCommands.F_LED)
     fun hasSpatialSupport(): Boolean = probe.hasFeature(GaiaCommands.F_SPATIAL_AUDIO)
 
-    fun fetchGain(cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onGainResult(1); return }
+    fun fetchGain() {
+        if (simConnected) { dcBridge?.onGainResult(1); return }
         writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_GET_GAIN, ByteArray(0))
     }
 
-    fun setGain(level: Int, cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onGainResult(level); return }
+    fun setGain(level: Int) {
+        if (simConnected) { dcBridge?.onGainResult(level); return }
         writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_SET_GAIN, byteArrayOf(level.toByte()))
     }
 
-    fun fetchLed(cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onLedResult(0); return }
+    fun fetchLed() {
+        if (simConnected) { dcBridge?.onLedResult(0); return }
         writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_GET_STATE, ByteArray(0))
     }
 
-    fun setLed(state: Int, cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onLedResult(state); return }
+    fun setLed(state: Int) {
+        if (simConnected) { dcBridge?.onLedResult(state); return }
         writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_SET_STATE, byteArrayOf(state.toByte()))
     }
 
-    fun fetchSpatial(cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onSpatialResult(0); return }
+    fun fetchSpatial() {
+        if (simConnected) { dcBridge?.onSpatialResult(0); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_GET_STATE, ByteArray(0))
     }
 
-    fun setSpatial(state: Int, cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onSpatialResult(state); return }
+    fun setSpatial(state: Int) {
+        if (simConnected) { dcBridge?.onSpatialResult(state); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_STATE, byteArrayOf(state.toByte()))
     }
 
-    fun fetchHeadTracking(cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onHeadTrackingResult(0); return }
+    fun fetchHeadTracking() {
+        if (simConnected) { dcBridge?.onHeadTrackingResult(0); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING, ByteArray(0))
     }
 
-    fun setHeadTracking(state: Int, cb: DeviceControlCallback?) {
-        this.deviceControlCallback = cb
-        if (simConnected) { cb?.onHeadTrackingResult(state); return }
+    fun setHeadTracking(state: Int) {
+        if (simConnected) { dcBridge?.onHeadTrackingResult(state); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING, byteArrayOf(state.toByte()))
     }
 
@@ -1166,7 +1160,7 @@ class GaiaBleClient private constructor() {
                     if (connected && gatt != null) {
                         try { AncBridge.fetchAncMode() } catch (_: Exception) { }
                         try { AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) { }
-                        try { DeviceControlBridge.fetchAll() } catch (_: Exception) { }
+                        try { setDcBridge(DeviceControlBridge); DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)); DeviceControlBridge.fetchAll() } catch (_: Exception) { }
                     }
                 }, 1200)
             } catch (e: Exception) {

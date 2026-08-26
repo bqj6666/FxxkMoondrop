@@ -473,7 +473,7 @@ class OverviewFragment : Fragment() {
             val sz = dp(48)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(requireContext())
-            lbl.text = DeviceControlBridge.GAIN_NAMES[gm]
+            lbl.text = DeviceControlBridge.gainLabels()[gm]
             lbl.textSize = 10f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
@@ -639,10 +639,10 @@ class OverviewFragment : Fragment() {
         val trackingRow = card.findViewWithTag<LinearLayout>("dc_tracking_row")
         val gainRow = card.findViewWithTag<LinearLayout>("dc_gain_row")
         val ledRow = card.findViewWithTag<LinearLayout>("dc_led_row")
-        spatialRow?.visibility = if (connected) View.VISIBLE else View.GONE
-        trackingRow?.visibility = if (connected) View.VISIBLE else View.GONE
-        gainRow?.visibility = if (connected) View.VISIBLE else View.GONE
-        ledRow?.visibility = if (connected) View.VISIBLE else View.GONE
+        spatialRow?.visibility = if (connected && profile.hasSpatial) View.VISIBLE else View.GONE
+        trackingRow?.visibility = if (connected && profile.hasSpatial) View.VISIBLE else View.GONE
+        gainRow?.visibility = if (connected && profile.hasGain) View.VISIBLE else View.GONE
+        ledRow?.visibility = if (connected && profile.hasLed) View.VISIBLE else View.GONE
 
         val spSwitch = card.findViewWithTag<com.google.android.material.materialswitch.MaterialSwitch>("dc_spatial_switch")
         spSwitch?.let { sw ->
@@ -1633,7 +1633,7 @@ class OverviewFragment : Fragment() {
                 Handler(Looper.getMainLooper()).postDelayed({
                     AncBridge.fetchAncMode()
                     GaiaBleClient.getInstance().fetchBatteryLevels()
-                    DeviceControlBridge.fetchAll()
+                    val g = GaiaBleClient.getInstance(); g.setDcBridge(DeviceControlBridge); DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(g.getConnectedDeviceName())); DeviceControlBridge.fetchAll()
                     refreshDcHighlight()
                 }, 800)
                 // alpha2.31.1: 二次刷新等能力探测完成
