@@ -1471,8 +1471,8 @@ class FastPairHookEntry {
         private val PROFILE_61 = PopupProfile(
             tag = "6.1in-1216x2640",
             iconSizePx = 340,
-            iconTopPx = 1660,
-            modeBarTopPx = 2050,
+            iconTopPx = 1520,
+            modeBarTopPx = 1910,
             modeItemBtnPx = 46,
             modeItemIconPx = 24,
             modeItemLabelTopPx = 2,
@@ -1486,8 +1486,8 @@ class FastPairHookEntry {
         private val PROFILE_63 = PopupProfile(
             tag = "6.3in-placeholder",
             iconSizePx = 352,
-            iconTopPx = 1716,
-            modeBarTopPx = 2119,
+            iconTopPx = 1576,
+            modeBarTopPx = 1979,
             modeItemBtnPx = 48,
             modeItemIconPx = 25,
             modeItemLabelTopPx = 2,
