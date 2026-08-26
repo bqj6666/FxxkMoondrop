@@ -1,6 +1,6 @@
 # FxxkMoondrop 适配说明
 
-> 本文档记录 FxxkMoondrop 项目在 Moondrop 耳机适配过程中积累的协议知识、踩坑经验和实测数据，供社区参考。
+> 本文档记录 FxxkMoondrop 项目在 Moondrop 耳机适配过程中积累的协议知识、踩坑经验和实测数据。
 
 ## 设备与连接
 
