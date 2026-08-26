@@ -46,7 +46,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 - 产物：`app/build/outputs/apk/release/app-release.apk`
 - Gradle `packaging.merges` 自动合并 `META-INF/xposed/*`（`java_init.list` / `module.prop` / `scope.list`），构建后自动签名
-- 签名密钥请自行准备（已在 `.gitignore` 中排除，不入库），构建时通过 `-PfxxkKeypass=` 传入密码
+- 签名密钥自备，构建时通过 `-PfxxkKeypass=` 传入密码
 
 ## 安装
 
