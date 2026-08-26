@@ -45,6 +45,19 @@ object GaiaConstants {
     const val CMD_ANC1_GET_ANC_STATE = 0x01
     const val CMD_ANC1_SET_ANC_STATE = 0x02
 
+    // alpha2.31: 扩展功能 feature & command IDs
+    const val FEATURE_DAC_GAIN = 0x0F          // 15
+    const val FEATURE_SPATIAL_AUDIO = 0x12     // 18
+    const val FEATURE_LED = 0x13               // 19
+    const val CMD_DAC_GET_GAIN = 0x01
+    const val CMD_DAC_SET_GAIN = 0x02
+    const val CMD_SPATIAL_GET_STATE = 0x01
+    const val CMD_SPATIAL_SET_STATE = 0x02
+    const val CMD_SPATIAL_GET_HEAD_TRACKING = 0x03
+    const val CMD_SPATIAL_SET_HEAD_TRACKING = 0x04
+    const val CMD_LED_GET_STATE = 0x01
+    const val CMD_LED_SET_STATE = 0x02
+
     // Battery IDs
     const val BATTERY_LEFT = 1
     const val BATTERY_RIGHT = 2

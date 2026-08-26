@@ -57,6 +57,15 @@ class GaiaBleClient private constructor() {
         fun onAncError(message: String)
     }
 
+    /** alpha2.31: 扩展设备控制回调（增益/LED/空间音频） */
+    interface DeviceControlCallback {
+        fun onGainResult(level: Int) {}
+        fun onLedResult(state: Int) {}
+        fun onSpatialResult(state: Int) {}
+        fun onHeadTrackingResult(state: Int) {}
+        fun onDeviceControlError(message: String) {}
+    }
+
     private var context: Context? = null
     private var callback: Callback? = null
     private var gatt: BluetoothGatt? = null
@@ -73,6 +82,7 @@ class GaiaBleClient private constructor() {
     @Volatile private var connectedDeviceName: String? = null
     private var connected = false
     private var ancCallback: AncControlCallback? = null
+    private var deviceControlCallback: DeviceControlCallback? = null  // alpha2.31
     private val handler = Handler(Looper.getMainLooper())
 
     // alpha2.27: 能力探测委托给独立状态机
@@ -91,7 +101,8 @@ class GaiaBleClient private constructor() {
         probe,
         { readAncMap() },
         { readAncGetMap() },
-        { left, right -> sendBatteryBroadcast(left, right) }
+        { left, right -> sendBatteryBroadcast(left, right) },
+        { deviceControlCallback }
     )
 
     // BLE 扫描
@@ -793,6 +804,7 @@ class GaiaBleClient private constructor() {
         disconnectInternal()
         deviceAddress = null
         connected = false
+        try { DeviceControlBridge.reset() } catch (_: Exception) { }
         callback?.onDisconnected(addr ?: "")
     }
 
@@ -818,6 +830,63 @@ class GaiaBleClient private constructor() {
         if (simConnected) return
         val payload = byteArrayOf(GaiaConstants.BATTERY_LEFT.toByte(), GaiaConstants.BATTERY_RIGHT.toByte())
         writeCommand(GaiaConstants.FEATURE_BATTERY, GaiaConstants.CMD_GET_BATTERY_LEVELS, payload)
+    }
+
+    // alpha2.31: 扩展设备控制 API
+    fun hasGainSupport(): Boolean = probe.hasFeature(GaiaCommands.F_DAC_GAIN)
+    fun hasLedSupport(): Boolean = probe.hasFeature(GaiaCommands.F_LED)
+    fun hasSpatialSupport(): Boolean = probe.hasFeature(GaiaCommands.F_SPATIAL_AUDIO)
+
+    fun fetchGain(cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onGainResult(1); return }
+        writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_GET_GAIN, ByteArray(0))
+    }
+
+    fun setGain(level: Int, cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onGainResult(level); return }
+        if (!hasGainSupport()) { cb?.onDeviceControlError("设备不支持增益调节"); return }
+        writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_SET_GAIN, byteArrayOf(level.toByte()))
+    }
+
+    fun fetchLed(cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onLedResult(0); return }
+        writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_GET_STATE, ByteArray(0))
+    }
+
+    fun setLed(state: Int, cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onLedResult(state); return }
+        if (!hasLedSupport()) { cb?.onDeviceControlError("设备不支持 LED 控制"); return }
+        writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_SET_STATE, byteArrayOf(state.toByte()))
+    }
+
+    fun fetchSpatial(cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onSpatialResult(0); return }
+        writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_GET_STATE, ByteArray(0))
+    }
+
+    fun setSpatial(state: Int, cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onSpatialResult(state); return }
+        if (!hasSpatialSupport()) { cb?.onDeviceControlError("设备不支持空间音频"); return }
+        writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_STATE, byteArrayOf(state.toByte()))
+    }
+
+    fun fetchHeadTracking(cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onHeadTrackingResult(0); return }
+        writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING, ByteArray(0))
+    }
+
+    fun setHeadTracking(state: Int, cb: DeviceControlCallback?) {
+        this.deviceControlCallback = cb
+        if (simConnected) { cb?.onHeadTrackingResult(state); return }
+        if (!hasSpatialSupport()) { cb?.onDeviceControlError("设备不支持空间音频"); return }
+        writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING, byteArrayOf(state.toByte()))
     }
 
     fun fetchAncMode(cb: AncControlCallback?) {
@@ -950,14 +1019,17 @@ class GaiaBleClient private constructor() {
 
     /** alpha2.27: broadcast battery update to GMS process */
     private fun sendBatteryBroadcast(left: Int, right: Int) {
+        val addr = deviceAddress
+        val actualLeft = if (left >= 0) left else BatteryStore.getGaiaLeft(addr)
+        val actualRight = if (right >= 0) right else BatteryStore.getGaiaRight(addr)
         try {
             val ctx = context ?: return
             val i = android.content.Intent(com.fxxkmoondrop.secret.hook.FastPairHookEntry.ACTION_BATTERY_UPDATE)
-            i.putExtra("left", left)
-            i.putExtra("right", right)
+            i.putExtra("left", actualLeft)
+            i.putExtra("right", actualRight)
             i.setPackage(com.fxxkmoondrop.secret.hook.FastPairHookEntry.PKG_GMS)
             ctx.sendBroadcast(i)
-            Log.d(GaiaConstants.TAG, "battery broadcast -> GMS: l=" + left + " r=" + right)
+            Log.d(GaiaConstants.TAG, "battery broadcast -> GMS: l=" + actualLeft + " r=" + actualRight)
         } catch (_: Throwable) { }
     }
 
@@ -1098,6 +1170,7 @@ class GaiaBleClient private constructor() {
                     if (connected && gatt != null) {
                         try { AncBridge.fetchAncMode() } catch (_: Exception) { }
                         try { AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) { }
+                        try { DeviceControlBridge.fetchAll() } catch (_: Exception) { }
                     }
                 }, 1200)
             } catch (e: Exception) {

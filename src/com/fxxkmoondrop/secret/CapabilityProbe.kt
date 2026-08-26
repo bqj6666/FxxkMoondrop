@@ -41,6 +41,10 @@ class CapabilityProbe(
     @Volatile var featureProbeSent: Boolean = false
         private set
 
+    /** alpha2.31: 完整能力位图（用于增益/LED/空间音频等按需查询） */
+    @Volatile var features: Set<Int> = emptySet()
+        private set
+
     /** 重置全部探测状态（断开/重连时调用） */
     fun reset() {
         featureProbeSent = false
@@ -48,6 +52,7 @@ class CapabilityProbe(
         probeDone = false
         probeTruncated = false
         acProbeActive = false
+        features = emptySet()
     }
 
     /** 能力状态：0=探测中 1=有ANC 2=无ANC/截断 */
@@ -56,6 +61,9 @@ class CapabilityProbe(
         ancPath != GaiaCommands.ANC_PATH_UNKNOWN -> 1
         else -> 2
     }
+
+    /** alpha2.31: 查询设备是否支持指定 GAIA feature bit */
+    fun hasFeature(id: Int): Boolean = id in features
 
     /** 启动能力探测阶梯（在 onServicesDiscovered 成功后调用） */
     fun startProbes() {
@@ -119,6 +127,7 @@ class CapabilityProbe(
         val truncated = GaiaCommands.isFeaturePayloadTruncated(payload)
         probeTruncated = truncated
         val feats = GaiaCommands.parseSupportedFeatures(payload)
+        features = feats  // alpha2.31: 存完整 feature set 供 hasFeature 查询
         if (truncated) {
             ancPath = GaiaCommands.ANC_PATH_UNKNOWN
             Log.w(TAG, "capability payload truncated (len=${payload.size}), keep ANC unknown")

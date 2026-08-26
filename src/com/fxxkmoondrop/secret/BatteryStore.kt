@@ -12,6 +12,7 @@ class BatteryStore {
         private val levels = ConcurrentHashMap<String, Int>()
         private val gaiaLeft = ConcurrentHashMap<String, Int>()
         private val gaiaRight = ConcurrentHashMap<String, Int>()
+        private val gaiaCase = ConcurrentHashMap<String, Int>()
 
         /** 系统广播电量 */
         @JvmStatic
@@ -33,7 +34,7 @@ class BatteryStore {
             when (batteryId) {
                 1 -> gaiaLeft[address] = level
                 2 -> gaiaRight[address] = level
-                3 -> levels[address] = level // 充电盒并入系统值
+                3 -> gaiaCase[address] = level // alpha2.31: 充电盒独立缓存
             }
         }
 
@@ -49,6 +50,13 @@ class BatteryStore {
         fun getGaiaRight(address: String?): Int {
             if (address == null) return -1
             return gaiaRight[address] ?: -1
+        }
+
+        /** GAIA 充电盒电量 */
+        @JvmStatic
+        fun getGaiaCase(address: String?): Int {
+            if (address == null) return -1
+            return gaiaCase[address] ?: -1
         }
 
         /** GAIA 左耳电量，无则回退系统值 */
@@ -70,6 +78,7 @@ class BatteryStore {
             if (address == null) return
             gaiaLeft.remove(address)
             gaiaRight.remove(address)
+            gaiaCase.remove(address)
         }
     }
 }

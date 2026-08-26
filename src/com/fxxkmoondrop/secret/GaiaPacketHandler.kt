@@ -27,7 +27,8 @@ class GaiaPacketHandler(
     private val probe: CapabilityProbe,
     private val ancMapProvider: () -> IntArray,
     private val ancGetMapProvider: () -> IntArray?,
-    private val batteryBroadcastSender: (Int, Int) -> Unit
+    private val batteryBroadcastSender: (Int, Int) -> Unit,
+    private val deviceControlCallbackProvider: () -> GaiaBleClient.DeviceControlCallback?
 ) {
     companion object {
         private const val TAG = "GaiaPacketHandler"
@@ -82,6 +83,49 @@ class GaiaPacketHandler(
             } else if (feature == GaiaConstants.FEATURE_ANC_V1 &&
                     (command == GaiaConstants.CMD_ANC1_GET_ANC_STATE || command == GaiaConstants.CMD_ANC1_SET_ANC_STATE)) {
                 parseAncMode(payload)
+            } else if (feature == GaiaConstants.FEATURE_DAC_GAIN &&
+                    (command == GaiaConstants.CMD_DAC_GET_GAIN || command == GaiaConstants.CMD_DAC_SET_GAIN)) {
+                if (payload.isNotEmpty()) {
+                    val level = payload[0].toInt() and 0xFF
+                    Log.d(TAG, "DAC gain RX level=" + level)
+                    AppLog.d(TAG, "dacGain=" + level)
+                    deviceControlCallbackProvider()?.let { cb ->
+                        handler.post { cb.onGainResult(level) }
+                    }
+                }
+            } else if (feature == GaiaConstants.FEATURE_LED &&
+                    (command == GaiaConstants.CMD_LED_GET_STATE || command == GaiaConstants.CMD_LED_SET_STATE)) {
+                if (payload.isNotEmpty()) {
+                    val state = payload[0].toInt() and 0xFF
+                    Log.d(TAG, "LED RX state=" + state)
+                    AppLog.d(TAG, "ledState=" + state)
+                    deviceControlCallbackProvider()?.let { cb ->
+                        handler.post { cb.onLedResult(state) }
+                    }
+                }
+            } else if (feature == GaiaConstants.FEATURE_SPATIAL_AUDIO) {
+                when (command) {
+                    GaiaConstants.CMD_SPATIAL_GET_STATE, GaiaConstants.CMD_SPATIAL_SET_STATE -> {
+                        if (payload.isNotEmpty()) {
+                            val state = payload[0].toInt() and 0xFF
+                            Log.d(TAG, "spatial RX state=" + state)
+                            AppLog.d(TAG, "spatialState=" + state)
+                            deviceControlCallbackProvider()?.let { cb ->
+                                handler.post { cb.onSpatialResult(state) }
+                            }
+                        }
+                    }
+                    GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING -> {
+                        if (payload.isNotEmpty()) {
+                            val state = payload[0].toInt() and 0xFF
+                            Log.d(TAG, "head tracking RX state=" + state)
+                            AppLog.d(TAG, "headTracking=" + state)
+                            deviceControlCallbackProvider()?.let { cb ->
+                                handler.post { cb.onHeadTrackingResult(state) }
+                            }
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "handlePacket error", e)
@@ -108,20 +152,26 @@ class GaiaPacketHandler(
 
     private fun parseBatteryLevels(payload: ByteArray) {
         if (payload.size < 2) return
+        var leftLevel = -1
+        var rightLevel = -1
         var i = 0
         while (i + 1 < payload.size) {
             val id = payload[i].toInt() and 0xFF
             val level = payload[i + 1].toInt() and 0xFF
             Log.d(TAG, "battery id=" + id + " level=" + level)
+            when (id) {
+                1 -> leftLevel = level
+                2 -> rightLevel = level
+            }
             callbackProvider()?.let { cb ->
                 handler.post { cb.onBatteryLevel(id, level) }
             }
-            // alpha2.27: 同步刷新 GMS 弹窗电量（左右耳分离）
-            try {
-                batteryBroadcastSender(if (id == 1) level else -1, if (id == 2) level else -1)
-            } catch (_: Throwable) { }
             i += 2
         }
+        // alpha2.31: 缺失组件保留旧值，避免电量显示跳动
+        try {
+            batteryBroadcastSender(leftLevel, rightLevel)
+        } catch (_: Throwable) { }
     }
 
     private fun parseAncMode(payload: ByteArray) {

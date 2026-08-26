@@ -528,6 +528,10 @@ object GaiaCommands {
     @JvmStatic fun ledGet(): ByteArray = v3Packet(F_LED, C_LED_GET_LED_STATE, null)
     @JvmStatic fun ledSet(state: Int): ByteArray =
             v3Packet(F_LED, C_LED_SET_LED_STATE, byteArrayOf(state.toByte()))
+    /** DAC 增益（低/中/高 = 0/1/2） */
+    @JvmStatic fun dacGainGet(): ByteArray = v3Packet(F_DAC_GAIN, C_DAC_GET_GAIN, null)
+    @JvmStatic fun dacGainSet(level: Int): ByteArray =
+            v3Packet(F_DAC_GAIN, C_DAC_SET_GAIN, byteArrayOf(level.toByte()))
     @JvmStatic fun lrChannelGet(): ByteArray = v3Packet(F_LR_CHANNEL, C_LR_GET_IF_LR_CHANNEL_REVERSED, null)
     @JvmStatic fun lrChannelSet(reversed: Int): ByteArray =
             v3Packet(F_LR_CHANNEL, C_LR_SET_IF_LR_CHANNEL_REVERSED, byteArrayOf(reversed.toByte()))
