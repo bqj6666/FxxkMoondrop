@@ -6,6 +6,96 @@
 
 ---
 
+## alpha2.38.3（2026-08-26，versionCode 263）——设置按钮完全克隆确定按钮 + 上方对齐
+
+- 设置按钮恢复克隆 `minHeight`/`minWidth`，确保与确定按钮（`central_btn`）尺寸完全一致。
+- 设置按钮改为放在确定按钮**正上方**，`schedulePlace` 动态获取确定按钮屏幕坐标后定位：`width=ref.width`、`height=ref.height`、`leftMargin` 同左对齐、`topMargin = ref.top - ref.height - 8dp gap`。
+- padding 完全克隆（不再缩放 0.6f），视觉与确定按钮一致。
+
+## alpha2.38.2（2026-08-26，versionCode 262）——弹窗布局按屏幕分档硬编码 PopupProfile
+
+- 新增 `PopupProfile` 数据类 + `PROFILE_61`/`PROFILE_63` 两档配置，按屏幕分辨率+density 自动选档。
+- 6.1 寸档（1216×2640 / density 3.0 / 460dpi）：图标 340px@top1660、模式条 top2050。
+- 6.3 寸档（等比占位，待真机精调）：图标 352px@top1716、模式条 top2119。
+- 图标、模式条、模式项图标/按钮/标签尺寸全部从 Profile 读取，不再散落魔法数字。
+- 移除 `injectIconIntoTree` 调用（overlay 方案下不再需要遍历树注入原生 ImageView，避免双图标）。
+
+## alpha2.38.1（2026-08-26，versionCode 261）——设置按钮修复 + 移除 SIM 断连
+
+- 修复设置按钮注入逻辑（overlay 方案替代 parent.addView）。
+- 移除 SIM 卡断连检测逻辑（误触发）。
+
+## alpha2.38（2026-08-26，versionCode 260）——移除 PopupOverlay + 全部硬编码 UI 值修复
+
+- 移除旧的动态 PopupOverlay 追踪逻辑，改为屏幕绝对坐标 overlay。
+- 新增 `screenXY()`（`getLocationOnScreen`）跨窗口坐标系工具 + `schedulePlace()` 轮询等待 ref 布局完成。
+- 设置按钮从 parent 插入改为 decor overlay，不再依赖 central_btn 的父容器。
+
+## alpha2.37（2026-08-26，versionCode 259）——弹窗设置按钮对齐 + DC 自定义设置
+
+- 弹窗设置按钮与确定按钮同行对齐（克隆样式插入父容器）。
+- 扩展设备控制（DC）设置页新增自定义选项。
+
+## alpha2.36.1（2026-08-26，versionCode 256）——修复 BLE 写队列死锁
+
+- 修复 BLE writeCommand 队列在特定时序下死锁导致命令无法发出。
+
+## alpha2.36（2026-08-26，versionCode 255）——BLE 写队列 + 连接状态读回
+
+- 新增 BLE writeCommand 单路径写队列，避免并发写冲突。
+- 连接成功后正确读回当前 ANC 模式状态（而非乐观更新残留值）。
+
+## alpha2.35.3（2026-08-25，versionCode 254）——消除全部硬编码标签/映射
+
+- 所有 ANC 模式标签、设备码映射统一收归 `AncProfileLib`，不再在 UI 代码中硬编码。
+
+## alpha2.35.2（2026-08-25，versionCode 254）——移除 DeviceControlBridge 硬编码 gainMap
+
+- 增益映射改用 `AncProfileLib.DEFAULT_DC`，不再在 Bridge 中硬编码。
+
+## alpha2.35.1（2026-08-25，versionCode 254）——修复 gainMap [0,1,2]→[2,1,0]
+
+- 设备值 0=高增益、2=低增益，映射顺序修正。
+
+## alpha2.35（2026-08-25，versionCode 254）——SET 响应为 ACK 非状态
+
+- SET 响应是 ACK 确认而非当前状态值，拆分 GET/SET 路由避免误解析。
+
+## alpha2.34.1（2026-08-26，versionCode 261）——增益映射修复 + 空间音频开关 + 动态 gainCount
+
+- 修复增益映射 + 空间音频总开关/子模式 + 动态 gainCount。
+
+## alpha2.34（2026-08-26，versionCode 261）——DC callback 架构修复 + DcProfile 增益映射
+
+- 修复扩展设备控制 callback 架构 + DcProfile 增益映射。
+
+## alpha2.33（2026-08-26，versionCode 260）——DC 命令解锁 + 空间音频总开关
+
+- 修复 DC 命令被 feature bitmap guard 误拦 + MaterialSwitch tint + 空间音频总开关与子模式重构。
+
+## alpha2.31（2026-08-26，versionCode 258）——扩展设备控制 + libxposed API 102 迁移
+
+- 新增增益/LED/空间音频扩展设备控制 + 电量缺失保留。
+- 迁移到 libxposed API 102（LSPosed 2.1.1 兼容）。
+
+## alpha2.30（2026-08-25，versionCode 257）——修复 getMap null
+
+- 修复 customSet=true 时 getMap 返回 null 导致降噪解析失败。
+
+## alpha2.29（2026-08-25，versionCode 256）——修复 ANC 刷新回到关闭
+
+- 修复 connectedDeviceName 空值导致 ANC 刷新时模式跳回关闭 + 诊断日志。
+
+## alpha2.28（2026-08-25，versionCode 255）——BLE 扫描统一 + M3Ui 弹窗构建器
+
+- BLE 扫描统一 + writeCommand 单路径 + M3Ui 弹窗构建器 + 性能优化。
+
+## alpha2.27（2026-08-25，versionCode 254）——GaiaBleClient 拆分 + 跨进程电量广播
+
+- GaiaBleClient 拆分为 4 模块（GaiaBleClient/GaiaCommands/AncProfileLib/DeviceControlBridge）+ 跨进程电量广播。
+
+---
+
 ## alpha2.26.10（2026-08-25，versionCode 253）——GET/SET 双向映射分离（GA2 固件读回 0-based 直传）
 
 - **背景**：真机抓包发现 GA2 固件 **GET_MODE(cmd=3) 读回值**是 0-based 直传（0=关/1=降/2=透/3=抗），与 **SET_MODE(cmd=4) 的 1-based 枚举**（1=关/2=降/4=透/3=抗）是两套编码；旧代码用 SET 映射 indexOf 反查读回值，读到 0 时解析失败（ui=-1）导致按钮状态卡死。

@@ -170,7 +170,6 @@ class FastPairHookEntry {
                                 Log.d(TAG, "[FastPairHook] HalfSheet onResume: " + cname)
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     try {
-                                        injectIconIntoTree(act.window.decorView)
                                         injectIconOverlay(act)
                                         injectBatteryOverlay(act)
                                         injectModeButtons(act)
@@ -247,43 +246,51 @@ class FastPairHookEntry {
     }
 
     /** 在弹窗 DecorView 上叠加自定义图标（标题与按钮之间的中央区域） */
+    /** alpha2.38.4: 跨窗口屏幕绝对坐标定位。底部弹窗是独立 window，
+     *  用 getLocationOnScreen 得到与窗口无关的真实屏幕像素，避免混用 decor/弹窗两个坐标系。 */
+    private fun screenXY(v: android.view.View): IntArray {
+        val loc = IntArray(2); v.getLocationOnScreen(loc); return loc
+    }
+    /** 轮询等待 ref 完成布局后执行 place 回调；回调内负责 show 与二次校验 */
+    private fun schedulePlace(
+        handler: android.os.Handler, view: android.view.View, decor: android.view.View,
+        refId: Int, retries: Int, delayMs: Long,
+        place: (android.view.View, android.view.View) -> Unit
+    ) {
+        handler.postDelayed({
+            try {
+                val ref = if (refId != 0) decor.findViewById<android.view.View>(refId) else null
+                if (ref != null && ref.width > 0 && ref.height > 0) {
+                    val rLoc = screenXY(ref)
+                    if (rLoc[1] > 0) { place(view, ref); return@postDelayed }
+                }
+                if (retries > 0) schedulePlace(handler, view, decor, refId, retries - 1, delayMs, place)
+            } catch (_: Throwable) { }
+        }, delayMs)
+    }
+
     private fun injectIconOverlay(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
-            if (decor.findViewWithTag<android.view.View>("fxxk_quickpair_icon") != null) return // 已叠加
+            if (decor.findViewWithTag<android.view.View>("fxxk_quickpair_icon") != null) return
             val bmp = loadOrDrawIcon() ?: return
-            val d = act.resources.displayMetrics.density
+            val prof = resolveScreenProfile(act)
             val iv = ImageView(act)
             iv.setImageBitmap(bmp)
             iv.tag = "fxxk_quickpair_icon"
-            val size = (88 * d).toInt() // dp-based
+            // alpha2.38.x: 从 Profile 读取集中配置坐标（不再动态追 view）
+            val size = prof.iconSizePx
             val lp = android.widget.FrameLayout.LayoutParams(size, size)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            // 动态定位：subhead 上方
-            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
-            val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
-            if (sub != null) {
-                lp.topMargin = (sub.y - size - 12 * d).toInt().coerceAtLeast((40 * d).toInt())
-            } else {
-                lp.topMargin = (48 * d).toInt() // fallback
-            }
+            // 用固定 top 定位在标题上方区间，避免与标题/模式条叠字
+            lp.topMargin = prof.iconTopPx
             (decor as android.view.ViewGroup).addView(iv, lp)
-            // post 校准（sub 可能尚未 layout）
-            iv.post {
-                try {
-                    val sub2 = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
-                    if (sub2 != null) {
-                        val lp2 = iv.layoutParams as android.widget.FrameLayout.LayoutParams
-                        lp2.topMargin = (sub2.y - size - 12 * d).toInt().coerceAtLeast((40 * d).toInt())
-                        iv.layoutParams = lp2
-                    }
-                } catch (_: Throwable) { }
-            }
-            Log.d(TAG, "[FastPairHook] icon overlay added (dynamic pos)")
+            Log.d(TAG, "[FastPairHook] icon overlay added (profile=" + prof.tag + " size=" + size + " top=" + prof.iconTopPx + ")")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] overlay fail: " + t)
+            Log.d(TAG, "[FastPairHook] icon overlay fail: " + t)
         }
     }
+
 
     /** 递归遍历视图树：给无 drawable 的 ImageView 注入自定义图标 */
     private fun injectIconIntoTree(root: android.view.View?) {
@@ -607,7 +614,7 @@ class FastPairHookEntry {
     private fun injectModeButtons(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
-            if (decor.findViewWithTag<android.view.View>("fxxk_mode_bar") != null) return // 已插入
+            if (decor.findViewWithTag<android.view.View>("fxxk_mode_bar") != null) return
             val bar = android.widget.LinearLayout(act)
             bar.tag = "fxxk_mode_bar"
             bar.orientation = android.widget.LinearLayout.HORIZONTAL
@@ -615,12 +622,8 @@ class FastPairHookEntry {
             bar.addView(buildModeItem(act, MODE_OFF, "关闭"))
             bar.addView(buildModeItem(act, MODE_ANC, "降噪"))
             bar.addView(buildModeItem(act, MODE_TRANS, "透传"))
-            // alpha2.26.3: 用户可选隐藏抗风噪按钮。修复：用 act.applicationContext
-            // 现场创建模块 context 读 SP，不依赖 sModCtx（GMS 早期可能为 null 导致不生效）。
             var showWind = true
             try {
-                // alpha2.26.5: 跨 UID 读模块私有 SP 会失败（createPackageContext 只能读 assets），
-                // 改用 exported ContentProvider（模块进程由系统拉起读取，可靠）。
                 val cur = act.applicationContext.contentResolver.query(
                         Uri.parse("content://com.fxxkmoondrop.secret.prefs/show_wind"),
                         null, null, null, null)
@@ -629,39 +632,21 @@ class FastPairHookEntry {
                         if (cur.moveToFirst()) {
                             showWind = cur.getInt(cur.getColumnIndexOrThrow("_value")) == 1
                         }
-                    } finally {
-                        cur.close()
-                    }
+                    } finally { cur.close() }
                 }
             } catch (t: Throwable) {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
             if (showWind) bar.addView(buildModeItem(act, MODE_WIND, AncProfileLib.ANC_MODE_NAMES[3]))
-            val d = act.resources.displayMetrics.density
+            val prof = resolveScreenProfile(act)
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+            // alpha2.38.x: 从 Profile 读取集中配置坐标，水平居中，垂直固定 top
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            // 动态定位：central_btn 上方
-            val btnRef = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
-            if (btnRef != null) {
-                lp.topMargin = (btnRef.y - 60 * d).toInt().coerceAtLeast((80 * d).toInt())
-            } else {
-                lp.topMargin = (80 * d).toInt() // fallback
-            }
+            lp.topMargin = prof.modeBarTopPx
+            lp.leftMargin = 0
             (decor as android.view.ViewGroup).addView(bar, lp)
-            // post 校准
-            bar.post {
-                try {
-                    val btnRef2 = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
-                    if (btnRef2 != null) {
-                        val lp2 = bar.layoutParams as android.widget.FrameLayout.LayoutParams
-                        lp2.topMargin = (btnRef2.y - 60 * d).toInt().coerceAtLeast((80 * d).toInt())
-                        bar.layoutParams = lp2
-                    }
-                } catch (_: Throwable) { }
-            }
-            // alpha2.22: 注入时按已知能力状态应用三态（初始 sAncStatus=0 探测中 -> 禁用，防误发）
             applyAncAvailability(sAncStatus)
             Log.d(TAG, "[FastPairHook] mode buttons injected (关闭/降噪/透传" +
                     (if (showWind) "/抗风" else "") + ")")
@@ -670,13 +655,16 @@ class FastPairHookEntry {
         }
     }
 
+
     /** alpha2.37: 在确定按钮旁注入"设置"入口 —— 动态定位 central_btn 同行对齐 */
     /** alpha2.38: 在确定按钮旁注入"设置"入口 —— 克隆 central_btn 插入同一父容器，共享布局流与动态取色 */
+    /** alpha2.38.3: 设置按钮 —— overlay 到 central_btn 正上方，完全克隆宽高/minHeight/minWidth，上下平行对齐 */
     private fun injectSettingsButton(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
+            val old = decor.findViewWithTag<android.view.View>("fxxk_settings_btn")
+            if (old != null) (decor as android.view.ViewGroup).removeView(old)
 
-            // 查找 central_btn（确定按钮）
             val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
             val centralBtn = if (btnId != 0) decor.findViewById<android.view.View>(btnId) else null
             if (centralBtn == null) {
@@ -684,16 +672,6 @@ class FastPairHookEntry {
                 return
             }
 
-            // 清理旧注入
-            val parent = centralBtn.parent as? android.view.ViewGroup
-            if (parent == null) {
-                Log.d(TAG, "[FastPairHook] settings btn: central_btn has no parent, skip")
-                return
-            }
-            val old = parent.findViewWithTag<android.view.View>("fxxk_settings_btn")
-            if (old != null) parent.removeView(old)
-
-            // 尝试用 MaterialButton 创建（GMS 依赖 material 库），回退普通 TextView
             val btn: android.widget.TextView = try {
                 Class.forName("com.google.android.material.button.MaterialButton")
                     .getConstructor(android.content.Context::class.java)
@@ -701,39 +679,33 @@ class FastPairHookEntry {
             } catch (_: Throwable) {
                 android.widget.TextView(act)
             }
-
             btn.tag = "fxxk_settings_btn"
             btn.text = "设置"
             btn.gravity = android.view.Gravity.CENTER
             btn.isSingleLine = true
 
-            // ── 完整克隆 central_btn 的视觉样式（动态取色） ──
             if (centralBtn is android.widget.TextView) {
                 btn.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, centralBtn.textSize)
                 btn.setTextColor(centralBtn.textColors)
                 btn.typeface = centralBtn.typeface
                 btn.letterSpacing = centralBtn.letterSpacing
-                btn.setPadding(centralBtn.paddingLeft, centralBtn.paddingTop,
-                        centralBtn.paddingRight, centralBtn.paddingBottom)
+                btn.setPadding(centralBtn.paddingLeft,
+                        centralBtn.paddingTop,
+                        centralBtn.paddingRight,
+                        centralBtn.paddingBottom)
                 btn.minHeight = centralBtn.minHeight
                 btn.minWidth = centralBtn.minWidth
             }
-            // 克隆 background（含 tintList、圆角、ripple）
             try {
                 val cbBg = centralBtn.background
                 val cbTint = centralBtn.backgroundTintList
                 val cbTintMode = centralBtn.backgroundTintMode
-                if (cbBg != null) {
-                    val cd = cbBg.constantState?.newDrawable() ?: cbBg
-                    btn.background = cd
-                }
+                if (cbBg != null) btn.background = cbBg.constantState?.newDrawable() ?: cbBg
                 if (cbTint != null) btn.backgroundTintList = cbTint
                 if (cbTintMode != null) btn.backgroundTintMode = cbTintMode
             } catch (_: Throwable) { }
-            // 克隆 elevation
             try { btn.elevation = centralBtn.elevation } catch (_: Throwable) { }
 
-            // 点击 → 打开应用设置
             btn.setOnClickListener {
                 try {
                     val i = android.content.Intent()
@@ -746,33 +718,46 @@ class FastPairHookEntry {
                 }
             }
 
-            // ── 插入 central_btn 的父容器，在其左侧 ──
-            val idx = parent.indexOfChild(centralBtn)
-            val childLp = centralBtn.layoutParams
-            try {
-                if (childLp is android.view.ViewGroup.MarginLayoutParams) {
-                    val ml = android.view.ViewGroup.MarginLayoutParams(childLp)
-                    val gap = (8 * act.resources.displayMetrics.density).toInt()
-                    ml.rightMargin = gap + childLp.rightMargin
-                    parent.addView(btn, idx, ml)
-                } else if (childLp != null) {
-                    parent.addView(btn, idx, android.view.ViewGroup.LayoutParams(childLp.width, childLp.height))
-                } else {
-                    parent.addView(btn, idx)
-                }
-            } catch (_: Throwable) {
-                try { parent.addView(btn, idx) } catch (_: Throwable) { }
-            }
+            val screenW = act.resources.displayMetrics.widthPixels
+            val prof = resolveScreenProfile(act)
+            val lp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
+            lp.topMargin = -(2000)
+            lp.leftMargin = 0
+            btn.visibility = android.view.View.INVISIBLE
+            (decor as android.view.ViewGroup).addView(btn, lp)
 
-            Log.d(TAG, "[FastPairHook] settings btn injected into parent (idx=" + idx + ") with cloned style")
+            if (btnId != 0) sCentralBtnId = btnId
+            val handler = Handler(Looper.getMainLooper())
+            schedulePlace(handler, btn, decor, sCentralBtnId, 12, 120) { v, ref ->
+                val gap = (8 * act.resources.displayMetrics.density).toInt()
+                val rLoc = screenXY(ref); val dLoc = screenXY(decor)
+                val lp2 = v.layoutParams as android.widget.FrameLayout.LayoutParams
+                lp2.width = ref.width
+                lp2.height = ref.height
+                lp2.leftMargin = (rLoc[0] - dLoc[0])
+                lp2.topMargin = (rLoc[1] - dLoc[1] - ref.height - gap)
+                lp2.gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
+                v.layoutParams = lp2
+                v.visibility = android.view.View.VISIBLE
+                Log.d(TAG, "[FastPairHook] settings btn ABOVE: left=" + lp2.leftMargin +
+                        " top=" + lp2.topMargin + " w=" + ref.width + " gap=" + gap +
+                        " rLoc=" + rLoc[0] + "," + rLoc[1] +
+                        " dLoc=" + dLoc[0] + "," + dLoc[1])
+            }
+            Log.d(TAG, "[FastPairHook] settings btn overlay added (pending)")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] settings button fail: " + t)
         }
     }
 
+
     /** 构建单个模式项：Material 风格圆形按钮 + 下方功能小字（克隆 central_btn 样式） */
     private fun buildModeItem(act: android.app.Activity, mode: Int, label: String): android.view.View {
         val d = act.resources.displayMetrics.density
+        val prof = resolveScreenProfile(act)
         val item = android.widget.LinearLayout(act)
         item.orientation = android.widget.LinearLayout.VERTICAL
         item.gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -785,7 +770,7 @@ class FastPairHookEntry {
         holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-        val iconPx = (24 * d).toInt() // Material 图标规范 24dp
+        val iconPx = (prof.modeItemIconPx * d).toInt() // Material 图标规范 24dp
         val iv = ImageView(act)
         iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
         val il = android.widget.FrameLayout.LayoutParams(iconPx, iconPx)
@@ -804,7 +789,7 @@ class FastPairHookEntry {
             applyModeHighlight(mode)
             sendModeChanged(mode)
         }
-        item.addView(holder, android.widget.LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
+        item.addView(holder, android.widget.LinearLayout.LayoutParams((prof.modeItemBtnPx * d).toInt(), (prof.modeItemBtnPx * d).toInt()))
         val tv = android.widget.TextView(act)
         tv.text = label
         applyCentralTextStyle(act, tv)
@@ -812,13 +797,13 @@ class FastPairHookEntry {
         val tl = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
-        tl.topMargin = (2 * d).toInt()
+        tl.topMargin = (prof.modeItemLabelTopPx * d).toInt()
         item.addView(tv, tl)
         val ilp = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
-        ilp.leftMargin = (6 * d).toInt()
-        ilp.rightMargin = (6 * d).toInt()
+        ilp.leftMargin = (prof.modeItemLabelMarginPx * d).toInt()
+        ilp.rightMargin = (prof.modeItemLabelMarginPx * d).toInt()
         item.layoutParams = ilp
         return item
     }
@@ -1457,6 +1442,80 @@ class FastPairHookEntry {
 
     companion object {
         const val TAG = "FastPairHook"
+
+        // ==================== 弹窗布局 Profile（集中配置，按屏幕档位选择） ====================
+        // alpha2.38.x：不把坐标散落写死在函数里，统一收敛到一个可配置 Profile 表。
+        // 坐标单位统一用设备绝对像素（px）。按屏幕分辨率+density 分档：
+        //  - 6.1 寸档：1216x2640 / density 3.0 / 物理 460dpi（alpha2.38.x 真机验证）
+        //  - 6.3 寸档：其它大屏档位（等比占位，待 6.3 寸真机精调）
+        /** 单个屏幕档位的弹窗布局参数。字段均为绝对像素 px。 */
+        data class PopupProfile(
+            val tag: String,
+            // 耳机图标
+            val iconSizePx: Int,
+            val iconTopPx: Int,
+            // 模式按钮条（关闭/降噪/透传/抗风）
+            val modeBarTopPx: Int,
+            val modeItemBtnPx: Int,
+            val modeItemIconPx: Int,
+            val modeItemLabelTopPx: Int,
+            val modeItemLabelMarginPx: Int,
+            // 底部设置按钮（相对确定按钮左侧的固定间距）
+            val settingsOffsetFromBtnPx: Int,
+            // 图标与标题/模式条的间距系数（用于不叠字的安全余量）
+            val iconTitleGapPx: Int,
+            val modeBarGapPx: Int,
+        )
+
+        // 6.1 寸档（1216x2640 / density 3.0）：沿用 alpha2.37 真机验证坐标
+        private val PROFILE_61 = PopupProfile(
+            tag = "6.1in-1216x2640",
+            iconSizePx = 340,
+            iconTopPx = 1660,
+            modeBarTopPx = 2050,
+            modeItemBtnPx = 46,
+            modeItemIconPx = 24,
+            modeItemLabelTopPx = 2,
+            modeItemLabelMarginPx = 6,
+            settingsOffsetFromBtnPx = 88,
+            iconTitleGapPx = 12,
+            modeBarGapPx = 100,
+        )
+
+        // 6.3 寸档：占位，按对角线比例缩放（6.3/6.1 ≈ 1.033），待真机精调
+        private val PROFILE_63 = PopupProfile(
+            tag = "6.3in-placeholder",
+            iconSizePx = 352,
+            iconTopPx = 1716,
+            modeBarTopPx = 2119,
+            modeItemBtnPx = 48,
+            modeItemIconPx = 25,
+            modeItemLabelTopPx = 2,
+            modeItemLabelMarginPx = 6,
+            settingsOffsetFromBtnPx = 91,
+            iconTitleGapPx = 12,
+            modeBarGapPx = 103,
+        )
+
+        /** 依据屏幕参数解析当前设备所属档位。6.1 寸=1216x2640/density 3.0 精确匹配，其余走 6.3 档。 */
+        @JvmStatic
+        fun resolveScreenProfile(act: android.app.Activity): PopupProfile {
+            return try {
+                val dm = act.resources.displayMetrics
+                val w = dm.widthPixels; val h = dm.heightPixels; val dens = dm.density
+                Log.d(TAG, "[FastPairHook] screen profile query: " + w + "x" + h + " density=" + dens)
+                if (w == 1216 && h == 2640 && Math.abs(dens - 3.0f) < 0.05f) {
+                    Log.d(TAG, "[FastPairHook] screen profile -> 6.1in (1216x2640)")
+                    PROFILE_61
+                } else {
+                    Log.d(TAG, "[FastPairHook] screen profile -> 6.3in (fallback)")
+                    PROFILE_63
+                }
+            } catch (t: Throwable) {
+                Log.d(TAG, "[FastPairHook] screen profile fail: " + t)
+                PROFILE_61
+            }
+        }
         const val PKG_GMS = "com.google.android.gms"
         const val PKG_APP = "com.fxxkmoondrop.secret"
         const val ACTION_TRIGGER = "com.fxxkmoondrop.secret.FASTPAIR_TRIGGER"
