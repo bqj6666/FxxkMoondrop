@@ -242,7 +242,7 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 2. Hook `dthi.O(ImageView, dtok)` 方法——注入自定义设备图标 Bitmap
 3. Hook `HalfSheetActivity` 生命周期——在弹窗显示后注入 ANC 控制按钮
 
-### 应用自带悬浮卡片
+### 应用自带悬浮卡片（已经废弃）
 
 不依赖 Xposed，通过 `WindowManager` 添加 TYPE_APPLICATION_OVERLAY 窗口。设置页可切换两种模式。
 
@@ -259,7 +259,7 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 | 包名 | 用途 |
 |---|---|
 | `com.google.android.gms` | Fast Pair 弹窗注入 + BLE 扫描能力借道 |
-| `com.android.settings` | 设置页注入耳机入口 |
+| `com.android.settings` | 设置页注入耳机入口（准备实现） |
 | `com.android.bluetooth` | A2DP 连接状态监听 |
 | `com.moondroplab.moondrop.moondrop_app` | Hook 官方 App 的 ANC 控制路径（逆向参考） |
 
@@ -274,7 +274,7 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 | Bluetooth A2DP 状态 | 连接时静默拉起 App / 断开时停止进程 |
 | Moondrop App `AncV2Handler` | 逆向参考官方 ANC 控制路径 |
 
-## 踩坑记录
+## 问题记录
 
 ### 1. ANC 刷新跳回关闭（alpha2.23-2.29）
 
