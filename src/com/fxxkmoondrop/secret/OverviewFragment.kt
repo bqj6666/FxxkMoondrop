@@ -70,6 +70,7 @@ class OverviewFragment : Fragment() {
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
     private var ancWindCol: View? = null
+    private var dcSwitchSyncing = false
     @Volatile private var lastRefreshAncMs = 0L  // alpha2.28: refreshAnc 节流 // alpha2.26.2: 抗风按钮列（用户可选隐藏）
     private var ancMode = -1
     private var dcControlCard: LinearLayout? = null  // alpha2.31
@@ -372,8 +373,8 @@ class OverviewFragment : Fragment() {
         spatialSwitch.thumbTintList = android.content.res.ColorStateList(
             arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
             intArrayOf(onPrimaryColor, 0xFF888888.toInt()))
-        spatialSwitch.setOnCheckedChangeListener { v, isChecked ->
-            if (v.isPressed) {
+        spatialSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!dcSwitchSyncing) {
                 DeviceControlBridge.setSpatialEnabled(isChecked)
                 refreshDcHighlight()
             }
@@ -445,7 +446,7 @@ class OverviewFragment : Fragment() {
         gLabel.setTextColor(onContainerColor)
         dcGainRow.addView(gLabel, LinearLayout.LayoutParams(-2, -2))
         dcGainRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
-        for (gm in 0..2) {
+        for (gm in 0 until DeviceControlBridge.gainCount()) {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
@@ -648,10 +649,11 @@ class OverviewFragment : Fragment() {
         spSwitch?.let { sw ->
             sw.isEnabled = connected
             if (sw.isChecked != spatialOn) {
-                sw.setOnCheckedChangeListener(null)
+                dcSwitchSyncing = true
                 sw.isChecked = spatialOn
-                sw.setOnCheckedChangeListener { v, isChecked ->
-                    if (v.isPressed) {
+                dcSwitchSyncing = false
+                sw.setOnCheckedChangeListener { _, isChecked ->
+                    if (!dcSwitchSyncing) {
                         DeviceControlBridge.setSpatialEnabled(isChecked)
                         refreshDcHighlight()
                     }

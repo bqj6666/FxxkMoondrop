@@ -423,7 +423,7 @@ object PopupOverlay {
                 }
                 if (dcHasGain) {
                     if (dcHasSpatial) cv.addView(vgap(c, 8f))
-                    cv.addView(buildDcPopupRow(c, density, 1, 2, accent, textMain, textSub))
+                    cv.addView(buildDcPopupRow(c, density, 1, DeviceControlBridge.gainCount() - 1, accent, textMain, textSub))
                 }
                 if (dcHasLed) {
                     if (dcHasSpatial || dcHasGain) cv.addView(vgap(c, 8f))

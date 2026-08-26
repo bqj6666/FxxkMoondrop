@@ -110,6 +110,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun setSpatialEnabled(enabled: Boolean) {
+        Log.d("DeviceControlBridge", "setSpatialEnabled=" + enabled)
         spatialState = if (enabled) 1 else 0
         if (!enabled) headTracking = -1
         notifyStateChanged()
@@ -126,6 +127,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun setGain(level: Int) {
+        Log.d("DeviceControlBridge", "setGain uiLevel=" + level + " gainCount=" + gainCount + " gainMap=" + gainMap.contentToString())
         if (level !in 0 until gainCount) return
         gainLevel = level
         bumpVersion()
@@ -143,6 +145,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun fetchAll() {
+        Log.d("DeviceControlBridge", "fetchAll called")
         try {
             val c = GaiaBleClient.getInstance()
             c.fetchSpatial()
