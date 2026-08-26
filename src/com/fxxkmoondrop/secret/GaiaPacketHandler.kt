@@ -84,45 +84,69 @@ class GaiaPacketHandler(
                     (command == GaiaConstants.CMD_ANC1_GET_ANC_STATE || command == GaiaConstants.CMD_ANC1_SET_ANC_STATE)) {
                 parseAncMode(payload)
             } else if (feature == GaiaConstants.FEATURE_DAC_GAIN &&
-                    (command == GaiaConstants.CMD_DAC_GET_GAIN || command == GaiaConstants.CMD_DAC_SET_GAIN)) {
+                    command == GaiaConstants.CMD_DAC_GET_GAIN) {
                 if (payload.isNotEmpty()) {
                     val level = payload[0].toInt() and 0xFF
-                    Log.d(TAG, "DAC gain RX level=" + level)
+                    Log.d(TAG, "DAC gain GET RX level=" + level)
                     AppLog.d(TAG, "dacGain=" + level)
                     deviceControlCallbackProvider()?.let { cb ->
                         handler.post { cb.onGainResult(level) }
                     }
                 }
+            } else if (feature == GaiaConstants.FEATURE_DAC_GAIN &&
+                    command == GaiaConstants.CMD_DAC_SET_GAIN) {
+                Log.d(TAG, "DAC gain SET ACK (ignored)")
+                deviceControlCallbackProvider()?.let { cb ->
+                    handler.postDelayed({ GaiaBleClient.getInstance().fetchGain() }, 300)
+                }
             } else if (feature == GaiaConstants.FEATURE_LED &&
-                    (command == GaiaConstants.CMD_LED_GET_STATE || command == GaiaConstants.CMD_LED_SET_STATE)) {
+                    command == GaiaConstants.CMD_LED_GET_STATE) {
                 if (payload.isNotEmpty()) {
                     val state = payload[0].toInt() and 0xFF
-                    Log.d(TAG, "LED RX state=" + state)
+                    Log.d(TAG, "LED GET RX state=" + state)
                     AppLog.d(TAG, "ledState=" + state)
                     deviceControlCallbackProvider()?.let { cb ->
                         handler.post { cb.onLedResult(state) }
                     }
                 }
+            } else if (feature == GaiaConstants.FEATURE_LED &&
+                    command == GaiaConstants.CMD_LED_SET_STATE) {
+                Log.d(TAG, "LED SET ACK (ignored)")
+                deviceControlCallbackProvider()?.let { cb ->
+                    handler.postDelayed({ GaiaBleClient.getInstance().fetchLed() }, 300)
+                }
             } else if (feature == GaiaConstants.FEATURE_SPATIAL_AUDIO) {
                 when (command) {
-                    GaiaConstants.CMD_SPATIAL_GET_STATE, GaiaConstants.CMD_SPATIAL_SET_STATE -> {
+                    GaiaConstants.CMD_SPATIAL_GET_STATE -> {
                         if (payload.isNotEmpty()) {
                             val state = payload[0].toInt() and 0xFF
-                            Log.d(TAG, "spatial RX state=" + state)
+                            Log.d(TAG, "spatial GET RX state=" + state)
                             AppLog.d(TAG, "spatialState=" + state)
                             deviceControlCallbackProvider()?.let { cb ->
                                 handler.post { cb.onSpatialResult(state) }
                             }
                         }
                     }
-                    GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING -> {
+                    GaiaConstants.CMD_SPATIAL_SET_STATE -> {
+                        Log.d(TAG, "spatial SET ACK (ignored)")
+                        deviceControlCallbackProvider()?.let { cb ->
+                            handler.postDelayed({ GaiaBleClient.getInstance().fetchSpatial() }, 300)
+                        }
+                    }
+                    GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING -> {
                         if (payload.isNotEmpty()) {
                             val state = payload[0].toInt() and 0xFF
-                            Log.d(TAG, "head tracking RX state=" + state)
+                            Log.d(TAG, "head tracking GET RX state=" + state)
                             AppLog.d(TAG, "headTracking=" + state)
                             deviceControlCallbackProvider()?.let { cb ->
                                 handler.post { cb.onHeadTrackingResult(state) }
                             }
+                        }
+                    }
+                    GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING -> {
+                        Log.d(TAG, "head tracking SET ACK (ignored)")
+                        deviceControlCallbackProvider()?.let { cb ->
+                            handler.postDelayed({ GaiaBleClient.getInstance().fetchHeadTracking() }, 300)
                         }
                     }
                 }
