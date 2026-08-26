@@ -252,15 +252,34 @@ class FastPairHookEntry {
             val decor = act.window.decorView
             if (decor.findViewWithTag<android.view.View>("fxxk_quickpair_icon") != null) return // 已叠加
             val bmp = loadOrDrawIcon() ?: return
+            val d = act.resources.displayMetrics.density
             val iv = ImageView(act)
             iv.setImageBitmap(bmp)
             iv.tag = "fxxk_quickpair_icon"
-            val size = 340 // v0.8 缩小：给三模式按钮腾空间
+            val size = (88 * d).toInt() // dp-based
             val lp = android.widget.FrameLayout.LayoutParams(size, size)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            lp.topMargin = 1660 // v0.8 上移缩小（原 1700/400），三模式按钮区 2050-2280
+            // 动态定位：subhead 上方
+            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+            val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+            if (sub != null) {
+                lp.topMargin = (sub.y - size - 12 * d).toInt().coerceAtLeast((40 * d).toInt())
+            } else {
+                lp.topMargin = (48 * d).toInt() // fallback
+            }
             (decor as android.view.ViewGroup).addView(iv, lp)
-            Log.d(TAG, "[FastPairHook] icon overlay added")
+            // post 校准（sub 可能尚未 layout）
+            iv.post {
+                try {
+                    val sub2 = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+                    if (sub2 != null) {
+                        val lp2 = iv.layoutParams as android.widget.FrameLayout.LayoutParams
+                        lp2.topMargin = (sub2.y - size - 12 * d).toInt().coerceAtLeast((40 * d).toInt())
+                        iv.layoutParams = lp2
+                    }
+                } catch (_: Throwable) { }
+            }
+            Log.d(TAG, "[FastPairHook] icon overlay added (dynamic pos)")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] overlay fail: " + t)
         }
@@ -395,7 +414,11 @@ class FastPairHookEntry {
             val batNight = (tv.resources.configuration.uiMode and
                     android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
-            tv.setTextColor(if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
+            // 用主题 textColorPrimary 代替硬编码
+            val tv2 = android.util.TypedValue()
+            val batColor = if (act.theme.resolveAttribute(android.R.attr.textColorPrimary, tv2, true))
+                tv2.data else (if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
+            tv.setTextColor(batColor)
             tv.visibility = android.view.View.VISIBLE
             Log.d(TAG, "[FastPairHook] battery on subhead: L=" + l + " R=" + r + " sys=" + sys)
             val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
@@ -614,12 +637,30 @@ class FastPairHookEntry {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
             if (showWind) bar.addView(buildModeItem(act, MODE_WIND, AncProfileLib.ANC_MODE_NAMES[3]))
+            val d = act.resources.displayMetrics.density
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            lp.topMargin = 2050 // 图标(1660-2000)与确定按钮(2370)之间
+            // 动态定位：central_btn 上方
+            val btnRef = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
+            if (btnRef != null) {
+                lp.topMargin = (btnRef.y - 60 * d).toInt().coerceAtLeast((80 * d).toInt())
+            } else {
+                lp.topMargin = (80 * d).toInt() // fallback
+            }
             (decor as android.view.ViewGroup).addView(bar, lp)
+            // post 校准
+            bar.post {
+                try {
+                    val btnRef2 = if (sCentralBtnId != 0) decor.findViewById<android.view.View>(sCentralBtnId) else null
+                    if (btnRef2 != null) {
+                        val lp2 = bar.layoutParams as android.widget.FrameLayout.LayoutParams
+                        lp2.topMargin = (btnRef2.y - 60 * d).toInt().coerceAtLeast((80 * d).toInt())
+                        bar.layoutParams = lp2
+                    }
+                } catch (_: Throwable) { }
+            }
             // alpha2.22: 注入时按已知能力状态应用三态（初始 sAncStatus=0 探测中 -> 禁用，防误发）
             applyAncAvailability(sAncStatus)
             Log.d(TAG, "[FastPairHook] mode buttons injected (关闭/降噪/透传" +
@@ -729,6 +770,7 @@ class FastPairHookEntry {
 
     /** 构建单个模式项：Material 风格圆形按钮 + 下方功能小字（克隆 central_btn 样式） */
     private fun buildModeItem(act: android.app.Activity, mode: Int, label: String): android.view.View {
+        val d = act.resources.displayMetrics.density
         val item = android.widget.LinearLayout(act)
         item.orientation = android.widget.LinearLayout.VERTICAL
         item.gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -741,7 +783,6 @@ class FastPairHookEntry {
         holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-        val d = act.resources.displayMetrics.density
         val iconPx = (24 * d).toInt() // Material 图标规范 24dp
         val iv = ImageView(act)
         iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
@@ -761,7 +802,7 @@ class FastPairHookEntry {
             applyModeHighlight(mode)
             sendModeChanged(mode)
         }
-        item.addView(holder, android.widget.LinearLayout.LayoutParams(170, 170))
+        item.addView(holder, android.widget.LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
         val tv = android.widget.TextView(act)
         tv.text = label
         applyCentralTextStyle(act, tv)
@@ -769,13 +810,13 @@ class FastPairHookEntry {
         val tl = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
-        tl.topMargin = 6
+        tl.topMargin = (2 * d).toInt()
         item.addView(tv, tl)
         val ilp = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
-        ilp.leftMargin = 22
-        ilp.rightMargin = 22
+        ilp.leftMargin = (6 * d).toInt()
+        ilp.rightMargin = (6 * d).toInt()
         item.layoutParams = ilp
         return item
     }

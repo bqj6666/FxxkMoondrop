@@ -45,7 +45,6 @@ class SettingsFragment : Fragment() {
     private val simRestoreHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val simRestoreRunnable = object : Runnable {
         override fun run() {
-            PopupOverlay.clearSimDismissHook()
             simRestoreHandler.removeCallbacks(this)
             if (!GaiaBleClient.isSimConnected()) return
             GaiaBleClient.setSimConnected(false)
@@ -231,15 +230,6 @@ class SettingsFragment : Fragment() {
             getSP().edit().putBoolean("auto_service", checked).commit()
         }
 
-        // ── Google 弹窗（Fast Pair）──
-        val swGp = makeTintedSwitch()
-        swGp.isChecked = getSP().getBoolean(PopupGate.CFG_FASTPAIR_POPUP, true)
-        val rowGp = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bluetooth, "Google 弹窗（Fast Pair）",
-                "连接时使用谷歌半屏配对弹窗（含电量与降噪控制）；关闭则用应用自带弹窗", swGp, null)
-        swGp.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean(PopupGate.CFG_FASTPAIR_POPUP, checked).commit()
-        }
-
         // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
         val swWind = makeTintedSwitch()
         swWind.isChecked = getSP().getBoolean("show_wind", true)
@@ -250,7 +240,7 @@ class SettingsFragment : Fragment() {
         }
 
         // 行为区分组卡片
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowGp, rowWind))
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowWind))
         box.addView(spacer(dp(14)))
 
                 // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
@@ -415,7 +405,6 @@ class SettingsFragment : Fragment() {
             PopupGate.tryShowConnected(requireContext(), SIM_MAC, SIM_NAME)
             // alpha2.7: 模拟弹窗消失后自动恢复（自带弹窗用 hide 钩子，GMS 弹窗用 30s 兜底）
             simRestoreHandler.removeCallbacks(simRestoreRunnable)
-            PopupOverlay.setSimDismissHook(simRestoreRunnable)
             simRestoreHandler.postDelayed(simRestoreRunnable, 30000)
         }
         simBox.addView(simConnBtn, LinearLayout.LayoutParams(-1, -2))
@@ -423,7 +412,6 @@ class SettingsFragment : Fragment() {
         simDiscBtn = makeM3Button("模拟断开 耳机", R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟断开：退出 GAIA 模拟态 + 清模拟电量 + 弹窗（可重复点击）
             simRestoreHandler.removeCallbacks(simRestoreRunnable)
-            PopupOverlay.clearSimDismissHook()
             GaiaBleClient.setSimConnected(false)
             BatteryStore.clearGaia(SIM_MAC)
             PopupGate.clear(SIM_MAC, SIM_NAME)

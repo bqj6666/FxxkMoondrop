@@ -230,7 +230,7 @@ class HeadsetDetectService : Service() {
         override fun onBatteryLevel(batteryId: Int, level: Int) {
             val addr = GaiaBleClient.getInstance().deviceAddress ?: return
             BatteryStore.setGaiaLevel(addr, batteryId, level)
-            PopupOverlay.refreshBattery()
+            // alpha2.38: battery refresh handled via ACTION_BATTERY_UPDATE broadcast
             // alpha1.12: 左右耳电量就绪 → 弹连接窗（延迟弹窗）
             PopupGate.flushPendingIfReady()
             // alpha1.4: 通知主界面刷新电量显示

@@ -21,7 +21,7 @@ class PillSwitch(c: Context) : View(c) {
     private var progress = 0f // 0..1，滑块位置比例
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var trackOn = 0xFF6750A4.toInt()
+    private var trackOn = 0xFF6750A4.toInt() // overridden by theme in init
     private var trackOff = 0x33000000.toInt() // 半透明黑，深浅色背景都协调
     private var thumbOn = 0xFFFFFFFF.toInt()
     private var thumbOff = 0xFFFFFFFF.toInt()

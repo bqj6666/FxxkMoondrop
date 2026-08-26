@@ -15,7 +15,6 @@ import android.net.Uri
  *
  * 用法:
  *   content://com.fxxkmoondrop.secret.prefs/show_wind        -> _value=1/0
- *   content://com.fxxkmoondrop.secret.prefs/fastpair_popup   -> _value=1/0
  */
 class PrefsProvider : ContentProvider() {
 
@@ -32,7 +31,6 @@ class PrefsProvider : ContentProvider() {
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
         val value: Int = when (key) {
             "show_wind" -> if (sp.getBoolean("show_wind", true)) 1 else 0
-            "fastpair_popup" -> if (sp.getBoolean(PopupGate.CFG_FASTPAIR_POPUP, true)) 1 else 0
             else -> return null
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))

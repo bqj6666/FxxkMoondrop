@@ -372,7 +372,7 @@ class OverviewFragment : Fragment() {
             intArrayOf(primaryColor, if (dark) 0x33FFFFFF else 0x22000000))
         spatialSwitch.thumbTintList = android.content.res.ColorStateList(
             arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-            intArrayOf(onPrimaryColor, 0xFF888888.toInt()))
+            intArrayOf(onPrimaryColor, onVariantColor))
         spatialSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!dcSwitchSyncing) {
                 DeviceControlBridge.setSpatialEnabled(isChecked)
@@ -634,7 +634,7 @@ class OverviewFragment : Fragment() {
         val sMode = DeviceControlBridge.spatialUiMode()
         val gLevel = DeviceControlBridge.getGainLevel()
         val ledOn = DeviceControlBridge.getLedState() == 1
-        val greyColor = 0xFF888888.toInt()
+        val greyColor = onVariantColor
 
         val spatialRow = card.findViewWithTag<LinearLayout>("dc_spatial_row")
         val trackingRow = card.findViewWithTag<LinearLayout>("dc_tracking_row")
@@ -701,7 +701,7 @@ class OverviewFragment : Fragment() {
                             g.setColor(greyColor)
                             bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
                         }
-                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), 0xFFAAAAAA.toInt()))
+                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), onVariantColor))
                     } else {
                         holder.isEnabled = true
                         holder.alpha = 1f
@@ -1456,7 +1456,6 @@ class OverviewFragment : Fragment() {
     }
 
     private fun updateAncStatus() {
-        PopupOverlay.setAncMode(ancMode)
         updateRunStatus()
         // alpha1.4: 降噪控制区块仅随真实耳机连接显示（模拟按钮不影响）
         val realConnected = HeadsetGate.getConnectedMac(requireContext()) != null
