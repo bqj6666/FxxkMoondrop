@@ -12,14 +12,14 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 
 ## 功能
 
-- **蓝牙监听 + GAIA 直连**：自研 `GaiaBleClient`，BLE GATT 直连耳机，读取左右耳电量，控制降噪（关闭 / 降噪 / 透传 / 抗风）
+- **蓝牙监听 + GAIA 直连**：BLE GATT 直连耳机，读取左右耳电量，控制降噪
 - **ANC 型号档案库**：`AncProfileLib` 按设备名自动套用实测设备码映射（如 GA2 实测 1=关/2=降/3=抗风/4=透传），未实测型号回退默认映射；设置页可自定义映射优先生效
 - **FastPairHook（LSPosed 模块，注入 Google Play 服务）**：借道 GMS 的 BLE 扫描能力动态发现耳机 LE 地址并推送给应用
 - **自愈闭环**：无缓存 → REQ 扫描 → GMS 推送 → 连接成功写回文件 / SP → 下次秒连；地址变化自动重新发现（**地址全动态发现、零硬编码**）
-- **两种弹窗模式**：Google Fast Pair 半屏弹窗（默认，注入 GMS 的 HalfSheetActivity）/ 应用自带悬浮卡片（不依赖 Xposed，应用主体仍可独立运行）
-- **三页 M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 通用 / 行为，随系统深浅色 + Material You 动态取色）、关于页，全部 Material 3 组件化
+- **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）
+- **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 通用 / 行为，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
 - **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
-- **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP（含 Material 隐私声明弹窗）
+- **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
 - **Root 强力保活**、开机自启、后台隐藏（可选开关）
 
 ## 软件截图
@@ -32,9 +32,9 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 
 | 项目 | 说明 |
 |---|---|
-| 语言 | **100% Kotlin**（源码 28 个 `.kt`，零 Java） |
+| 语言 | **Kotlin** |
 | 构建链 | Gradle 8.9（wrapper 固定）+ AGP 8.5.2 + Kotlin 1.9.22 |
-| UI | Material 3（`Theme.Material3.DayNight.NoActionBar`）+ 动态取色，三页 Fragment 架构 |
+| UI | Material 3,`Theme.Material3.DayNight.NoActionBar`+ 动态取色，三页 Fragment 架构 |
 | 模块 | libxposed API 102（LSPosed ≥ 2.1.1，作用域 `com.google.android.gms;com.android.settings`） |
 | 包名 | `com.fxxkmoondrop.secret` |
 
@@ -55,7 +55,7 @@ Moondrop 蓝牙耳机助手：耳机连接 / 断开时自动弹出 **Fast Pair �
 3. 授予蓝牙 / 通知 / 悬浮窗权限（设置页「检查权限」可一键跳转修复）
 4. 弹窗默认 Google Fast Pair 半屏弹窗，也可在设置中切换为应用自带悬浮卡片
 
-> ## 📣 需要更多耳机实机测试
+> ##  需要更多耳机实机测试;
 >
 > 下表**理论支持**与**未知**的型号多为芯片级推断，尚未逐一实机验证。欢迎拥有对应耳机的用户可以帮忙**连接一次并把结果反馈到 [Issue](https://github.com/bqj6666/FxxkMoondrop/issues)**
 
