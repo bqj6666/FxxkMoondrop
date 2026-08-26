@@ -24,6 +24,7 @@ import android.util.Log
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -83,6 +84,10 @@ class GaiaBleClient private constructor() {
     private var connected = false
     private var ancCallback: AncControlCallback? = null
     private var dcBridge: DeviceControlCallback? = null
+
+    // alpha2.36: BLE write queue - Android only allows one write at a time
+    private val gaiaWriteQueue = ArrayDeque<ByteArray>()
+    @Volatile private var isGaiaWriting = false
 
     fun setDcBridge(cb: DeviceControlCallback?) { this.dcBridge = cb }  // alpha2.31
     private val handler = Handler(Looper.getMainLooper())
@@ -970,13 +975,36 @@ class GaiaBleClient private constructor() {
     fun sendGaia(packet: ByteArray) {
         val g = gatt; val ch = cmdChar
         if (g == null || ch == null) { callback?.onError("GAIA 未连接"); return }
+        if (isGaiaWriting) {
+            gaiaWriteQueue.add(packet)
+            Log.d(GaiaConstants.TAG, "TX gaia queued " + packet.contentToString())
+            return
+        }
+        doGaiaWrite(g, ch, packet)
+    }
+
+    @Synchronized
+    private fun doGaiaWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, packet: ByteArray) {
         try {
             ch.value = packet
             ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            isGaiaWriting = true
             g.writeCharacteristic(ch)
             Log.d(GaiaConstants.TAG, "TX gaia " + packet.contentToString())
         } catch (e: SecurityException) { Log.e(GaiaConstants.TAG, "gaia write denied", e)
-        } catch (e: Exception) { Log.e(GaiaConstants.TAG, "gaia write failed", e) }
+            isGaiaWriting = false
+        } catch (e: Exception) { Log.e(GaiaConstants.TAG, "gaia write failed", e)
+            isGaiaWriting = false
+        }
+    }
+
+    @Synchronized
+    private fun drainGaiaQueue() {
+        isGaiaWriting = false
+        val next = gaiaWriteQueue.poll() ?: return
+        val g = gatt; val ch = cmdChar
+        if (g == null || ch == null) { gaiaWriteQueue.clear(); return }
+        doGaiaWrite(g, ch, next)
     }
 
     fun getSrcClient(): BleSourceSwitchClient? = srcClient
@@ -1163,6 +1191,12 @@ class GaiaBleClient private constructor() {
                         try { setDcBridge(DeviceControlBridge); DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)); DeviceControlBridge.fetchAll() } catch (_: Exception) { }
                     }
                 }, 1200)
+                // alpha2.36: probe may take up to 3.5s; re-fetch DC state after probe completes
+                handler.postDelayed({
+                    if (connected && gatt != null) {
+                        try { DeviceControlBridge.fetchAll() } catch (_: Exception) { }
+                    }
+                }, 4000)
             } catch (e: Exception) {
                 Log.e(GaiaConstants.TAG, "onServicesDiscovered error", e)
             }
@@ -1201,6 +1235,13 @@ class GaiaBleClient private constructor() {
                 return
             }
             if (value.size >= 4) packetHandler.handlePacket(value)
+        }
+
+        override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+            Log.d(GaiaConstants.TAG, "char write status=" + status + " ch=" + ch.uuid)
+            if (ch === cmdChar) {
+                drainGaiaQueue()
+            }
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {

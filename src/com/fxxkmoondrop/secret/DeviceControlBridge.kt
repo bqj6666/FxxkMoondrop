@@ -152,6 +152,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
             c.fetchSpatial()
             c.fetchGain()
             c.fetchLed()
+            c.fetchHeadTracking()
         } catch (e: Exception) { Log.w(TAG, "fetchAll error", e) }
     }
 
