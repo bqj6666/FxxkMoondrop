@@ -7,23 +7,22 @@
 | 项 | 要求 |
 |---|---|
 | JDK | 17 |
-| Gradle | 8.9（wrapper 固定，无需手动安装） |
+| Gradle | 8.9（wrapper 固定) |
 | AGP | 8.5.2 |
 | Kotlin | 1.9.22 |
 | Android SDK | compileSdk 34, build-tools 34.0.0 |
 | minSdk / targetSdk | 26 / 36 |
-| 签名密钥 | `app2.keystore`（不入库，自行准备） |
 
 ## 构建命令
 
 ```bash
-# Release 构建（需签名密码）
+# Release 构建
 ./gradlew :app:assembleRelease -PfxxkKeypass=<签名密码>
 
 # 产物路径
 app/build/outputs/apk/release/app-release.apk
 
-# Debug 构建（不签名）
+# Debug 构建
 ./gradlew :app:assembleDebug
 ```
 
@@ -110,7 +109,7 @@ staticScope=true
 
 ```
 com.google.android.gms        # Fast Pair 弹窗 + BLE 扫描
-com.android.settings          # 设置页耳机入口
+com.android.settings          # 设置页耳机入口（还未实现）
 ```
 
 ### 运行时作用域（代码中动态 Hook）
@@ -169,9 +168,9 @@ com.android.settings          # 设置页耳机入口
 
 ## 开发注意事项
 
-### 弹窗布局修改
+### 弹窗布局相关修改
 
-弹窗所有坐标参数集中在 `FastPairHookEntry.PopupProfile` 中，**不要在代码其他位置散落魔法数字**。新增屏幕档位时：
+弹窗所有坐标参数集中在 `FastPairHookEntry.PopupProfile` 中。新增屏幕档位时：
 
 1. 在 `PopupProfile` companion object 中添加 `PROFILE_XX` 常量
 2. 在 `resolveScreenProfile()` 中添加分辨率匹配条件
