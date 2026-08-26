@@ -117,9 +117,9 @@ class DeviceControlBridge {
         fun fetchAll() {
             try {
                 val c = GaiaBleClient.getInstance()
-                if (c.hasSpatialSupport()) fetchSpatial()
-                if (c.hasGainSupport()) fetchGain()
-                if (c.hasLedSupport()) fetchLed()
+                fetchSpatial()
+                fetchGain()
+                fetchLed()
             } catch (e: Exception) { Log.w(TAG, "fetchAll error", e) }
         }
 

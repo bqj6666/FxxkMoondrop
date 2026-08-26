@@ -366,6 +366,12 @@ class OverviewFragment : Fragment() {
         dcSpatialRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
         val spatialSwitch = com.google.android.material.materialswitch.MaterialSwitch(requireContext())
         spatialSwitch.tag = "dc_spatial_switch"
+        spatialSwitch.trackTintList = android.content.res.ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(primaryColor, if (dark) 0x33FFFFFF else 0x22000000))
+        spatialSwitch.thumbTintList = android.content.res.ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(onPrimaryColor, 0xFF888888.toInt()))
         spatialSwitch.setOnCheckedChangeListener { v, isChecked ->
             if (v.isPressed) {
                 DeviceControlBridge.setSpatialEnabled(isChecked)
@@ -633,14 +639,14 @@ class OverviewFragment : Fragment() {
         val trackingRow = card.findViewWithTag<LinearLayout>("dc_tracking_row")
         val gainRow = card.findViewWithTag<LinearLayout>("dc_gain_row")
         val ledRow = card.findViewWithTag<LinearLayout>("dc_led_row")
-        spatialRow?.visibility = if (connected && !hasSpatial) View.GONE else View.VISIBLE
-        trackingRow?.visibility = if (connected && hasSpatial) View.VISIBLE else View.GONE
-        gainRow?.visibility = if (connected && !hasGain) View.GONE else View.VISIBLE
-        ledRow?.visibility = if (connected && !hasLed) View.GONE else View.VISIBLE
+        spatialRow?.visibility = if (connected) View.VISIBLE else View.GONE
+        trackingRow?.visibility = if (connected) View.VISIBLE else View.GONE
+        gainRow?.visibility = if (connected) View.VISIBLE else View.GONE
+        ledRow?.visibility = if (connected) View.VISIBLE else View.GONE
 
         val spSwitch = card.findViewWithTag<com.google.android.material.materialswitch.MaterialSwitch>("dc_spatial_switch")
         spSwitch?.let { sw ->
-            sw.isEnabled = connected && hasSpatial
+            sw.isEnabled = connected
             if (sw.isChecked != spatialOn) {
                 sw.setOnCheckedChangeListener(null)
                 sw.isChecked = spatialOn
@@ -654,9 +660,9 @@ class OverviewFragment : Fragment() {
         }
 
         if (card.childCount >= 7) {
-            card.getChildAt(1)?.visibility = if (hasSpatial) View.VISIBLE else View.GONE
-            card.getChildAt(3)?.visibility = if (hasSpatial && hasGain) View.VISIBLE else View.GONE
-            card.getChildAt(5)?.visibility = if (hasGain && hasLed) View.VISIBLE else View.GONE
+            card.getChildAt(1)?.visibility = if (connected) View.VISIBLE else View.GONE
+            card.getChildAt(3)?.visibility = if (connected) View.VISIBLE else View.GONE
+            card.getChildAt(5)?.visibility = if (connected) View.VISIBLE else View.GONE
         }
 
         for (i in 0 until card.childCount) {

@@ -846,7 +846,6 @@ class GaiaBleClient private constructor() {
     fun setGain(level: Int, cb: DeviceControlCallback?) {
         this.deviceControlCallback = cb
         if (simConnected) { cb?.onGainResult(level); return }
-        if (!hasGainSupport()) { cb?.onDeviceControlError("设备不支持增益调节"); return }
         writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_SET_GAIN, byteArrayOf(level.toByte()))
     }
 
@@ -859,7 +858,6 @@ class GaiaBleClient private constructor() {
     fun setLed(state: Int, cb: DeviceControlCallback?) {
         this.deviceControlCallback = cb
         if (simConnected) { cb?.onLedResult(state); return }
-        if (!hasLedSupport()) { cb?.onDeviceControlError("设备不支持 LED 控制"); return }
         writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_SET_STATE, byteArrayOf(state.toByte()))
     }
 
@@ -872,7 +870,6 @@ class GaiaBleClient private constructor() {
     fun setSpatial(state: Int, cb: DeviceControlCallback?) {
         this.deviceControlCallback = cb
         if (simConnected) { cb?.onSpatialResult(state); return }
-        if (!hasSpatialSupport()) { cb?.onDeviceControlError("设备不支持空间音频"); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_STATE, byteArrayOf(state.toByte()))
     }
 
@@ -885,7 +882,6 @@ class GaiaBleClient private constructor() {
     fun setHeadTracking(state: Int, cb: DeviceControlCallback?) {
         this.deviceControlCallback = cb
         if (simConnected) { cb?.onHeadTrackingResult(state); return }
-        if (!hasSpatialSupport()) { cb?.onDeviceControlError("设备不支持空间音频"); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING, byteArrayOf(state.toByte()))
     }
 
