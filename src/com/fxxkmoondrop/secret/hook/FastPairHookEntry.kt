@@ -24,6 +24,8 @@ import android.widget.ImageView
 import com.fxxkmoondrop.secret.DeviceMatcher
 import com.fxxkmoondrop.secret.AncProfileLib
 import com.fxxkmoondrop.secret.HookHelper
+import com.fxxkmoondrop.secret.BatteryStore
+import com.fxxkmoondrop.secret.GaiaBleClient
 import android.util.Log
 import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
@@ -150,7 +152,11 @@ class FastPairHookEntry {
                 try {
                     val act = chain.thisObject as? android.app.Activity ?: return@intercept null
                     val cname = act.javaClass.name
-                    if (!cname.contains("HalfSheet")) return@intercept null
+                    if (!cname.contains("HalfSheet")) {
+                        Log.d(TAG, "[FastPairHook] onResume seen: " + cname + " (not HalfSheet, skip)")
+                        return@intercept null
+                    }
+                    Log.d(TAG, "[FastPairHook] HalfSheet MATCH onResume: " + cname)
                     sHalfSheetActivity = act
                                 // 从 Intent 同步模拟电量（渲染进程与触发进程静态字段不共享）
                                 try {
@@ -160,8 +166,8 @@ class FastPairHookEntry {
                                         val br = it.getIntExtra(EXTRA_BATTERY_RIGHT, -1)
                                         // alpha2.26.6: 无条件覆盖（含 -1），防止上次弹窗(如模拟连接 86/72)
                                         // 的渲染进程静态字段残留，导致真实弹窗显示旧模拟电量
-                                        sBatteryLeft = bl
-                                        sBatteryRight = br
+                                        if (bl >= 0) sBatteryLeft = bl
+                                        if (br >= 0) sBatteryRight = br
                                         Log.d(TAG, "[FastPairHook] battery from intent: L=" + sBatteryLeft + " R=" + sBatteryRight)
                                     }
                                 } catch (t: Throwable) {
@@ -397,49 +403,62 @@ class FastPairHookEntry {
     }
 
     /** alpha2.27: 电量显示——支持部分显示 + 系统电量兜底 + GAIA 回包后自动刷新 */
+    /** alpha2.38.7: 电量文字恢复写进 GMS 的 subhead（耳机名的副标题）。
+     *  alpha2.38.5 误改成自绘 overlay + 硬编码 batteryTopPx=1080，导致电量跑到屏幕中央、还加了圆角背景。
+     *  恢复 subhead 方案：位置由 GMS 布局决定（天然在耳机名下方、图标上方），样式沿用系统原生，无自绘背景。
+     *  不再散落硬编码坐标；仅当 subhead 缺失时的回退自绘位置从 PopupProfile 读，不写死。 */
     private fun injectBatteryOverlay(act: android.app.Activity) {
         try {
             sBatteryOverlayActivity = act
-            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
-            val sub = if (subId != 0) act.window.decorView.findViewById<android.view.View>(subId) else null
-            if (sub !is android.widget.TextView) return
-            val tv = sub
-            val l = sBatteryLeft
-            val r = sBatteryRight
-            val sys = sBatterySysLevel
+            val mac = GaiaBleClient.getInstance().deviceAddress
+            var l = sBatteryLeft
+            var r = sBatteryRight
+            var sys = sBatterySysLevel
+            if (l < 0 && mac != null) l = BatteryStore.getGaiaLeft(mac).let { if (it >= 0) it else BatteryStore.get(mac) }
+            if (r < 0 && mac != null) r = BatteryStore.getGaiaRight(mac).let { if (it >= 0) it else BatteryStore.get(mac) }
+            if (sys < 0 && mac != null) sys = BatteryStore.get(mac)
             val text: String = when {
                 l >= 0 && r >= 0 -> "左耳 " + l + "%  ·  右耳 " + r + "%"
                 l >= 0 -> "左耳 " + l + "%"
                 r >= 0 -> "右耳 " + r + "%"
                 sys >= 0 -> "耳机电量 " + sys + "%"
-                else -> {
-                    Log.d(TAG, "[FastPairHook] battery not ready yet, will retry on update")
-                    return
-                }
+                else -> "耳机电量 --%"
             }
-            tv.text = text
-            val batNight = (tv.resources.configuration.uiMode and
-                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES
-            // 用主题 textColorPrimary 代替硬编码
-            val tv2 = android.util.TypedValue()
-            val batColor = if (act.theme.resolveAttribute(android.R.attr.textColorPrimary, tv2, true))
-                tv2.data else (if (batNight) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
-            tv.setTextColor(batColor)
-            tv.visibility = android.view.View.VISIBLE
-            Log.d(TAG, "[FastPairHook] battery on subhead: L=" + l + " R=" + r + " sys=" + sys)
-            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
-            val btnV = if (btnId != 0) act.window.decorView.findViewById<android.view.View>(btnId) else null
-            if (btnV is android.widget.TextView) {
-                btnV.text = "确定"
+            val decor = act.window.decorView
+            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+            val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+            if (sub is android.widget.TextView) {
+                sub.text = text
+                sub.visibility = android.view.View.VISIBLE
+                Log.d(TAG, "[FastPairHook] battery on subhead: " + text)
+            } else {
+                // subhead 缺失时兜底自绘；位置读 PopupProfile（不硬编码）
+                val prof = resolveScreenProfile(act)
+                var tv = decor.findViewWithTag<android.widget.TextView>("fxxk_batt_tv")
+                if (tv == null) {
+                    tv = android.widget.TextView(act)
+                    tv.tag = "fxxk_batt_tv"
+                    tv.gravity = android.view.Gravity.CENTER
+                    tv.textSize = 15f
+                    tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                    val lp = android.widget.FrameLayout.LayoutParams(
+                            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+                    lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+                    lp.topMargin = prof.batteryTopPx
+                    (decor as android.view.ViewGroup).addView(tv, lp)
+                }
+                tv.text = text
+                tv.setTextColor(0xFFFFFFFF.toInt())
+                tv.visibility = android.view.View.VISIBLE
+                Log.d(TAG, "[FastPairHook] battery overlay fallback: " + text + " top=" + prof.batteryTopPx)
             }
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] battery overlay fail: " + t)
         }
     }
 
-    /** alpha2.27: GAIA 电量回包后刷新弹窗 */
-    fun refreshBatteryOverlay(left: Int, right: Int) {
+        fun refreshBatteryOverlay(left: Int, right: Int) {
         val act = sBatteryOverlayActivity ?: return
         if (left >= 0) sBatteryLeft = left
         if (right >= 0) sBatteryRight = right
@@ -1488,6 +1507,8 @@ class FastPairHookEntry {
             // 耳机图标
             val iconSizePx: Int,
             val iconTopPx: Int,
+            // 电量文字（自绘 overlay）
+            val batteryTopPx: Int,
             // 模式按钮条（关闭/降噪/透传/抗风）
             val modeBarTopPx: Int,
             val modeItemBtnPx: Int,
@@ -1506,6 +1527,7 @@ class FastPairHookEntry {
             tag = "6.1in-1216x2640",
             iconSizePx = 340,
             iconTopPx = 1520,
+            batteryTopPx = 1080,
             modeBarTopPx = 1910,
             modeItemBtnPx = 46,
             modeItemIconPx = 24,
@@ -1521,6 +1543,7 @@ class FastPairHookEntry {
             tag = "6.3in-placeholder",
             iconSizePx = 352,
             iconTopPx = 1576,
+            batteryTopPx = 1120,
             modeBarTopPx = 1979,
             modeItemBtnPx = 48,
             modeItemIconPx = 25,
