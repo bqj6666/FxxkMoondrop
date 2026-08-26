@@ -90,13 +90,13 @@ object AncProfileLib {
         val hasGain: Boolean,
         val hasLed: Boolean,
         val gainCount: Int = 3,
-        val gainMap: IntArray = intArrayOf(0, 1, 2),
+        val gainMap: IntArray = intArrayOf(2, 1, 0),
         val gainLabels: List<String> = listOf("低", "中", "高")
     )
 
     private val DC_PROFILES: List<DcProfile> = listOf(
         // 梦回二 / Golden Ages 2: 支持空间音频+增益, 不支持 LED
-        DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"))
+        DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"))
     )
 
     /** 默认 DC 档案：全部不支持（未知型号保守策略） */

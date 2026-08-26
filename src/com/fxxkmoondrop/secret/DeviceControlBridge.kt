@@ -24,7 +24,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     @Volatile private var version = 0
     @Volatile private var stateListener: (() -> Unit)? = null
 
-    @Volatile private var gainMap: IntArray = intArrayOf(0, 1, 2)
+    @Volatile private var gainMap: IntArray = intArrayOf(2, 1, 0)
     @Volatile private var gainLabels: List<String> = DEFAULT_GAIN_LABELS
     @Volatile private var gainCount: Int = 3
 
