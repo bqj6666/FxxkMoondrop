@@ -639,6 +639,7 @@ class FastPairHookEntry {
             }
             if (showWind) bar.addView(buildModeItem(act, MODE_WIND, AncProfileLib.ANC_MODE_NAMES[3]))
             val prof = resolveScreenProfile(act)
+            val d = act.resources.displayMetrics.density
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
@@ -646,7 +647,40 @@ class FastPairHookEntry {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
             lp.topMargin = prof.modeBarTopPx
             lp.leftMargin = 0
+            bar.visibility = android.view.View.INVISIBLE
             (decor as android.view.ViewGroup).addView(bar, lp)
+
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            if (sCentralBtnId != 0 || btnId != 0) {
+                if (btnId != 0) sCentralBtnId = btnId
+                val refId = sCentralBtnId
+                val placeBar = object : Runnable {
+                    override fun run() {
+                        try {
+                            val ref = if (refId != 0) decor.findViewById<android.view.View>(refId) else null
+                            if (ref != null && ref.width > 0 && ref.height > 0 && bar.width > 0 && bar.height > 0) {
+                                val rLoc = screenXY(ref); val dLoc = screenXY(decor)
+                                if (rLoc[1] > 0) {
+                                    val gap = (8 * d).toInt()
+                                    val settingsTop = rLoc[1] - dLoc[1] - ref.height - gap
+                                    val modeBarTop = settingsTop - gap - bar.height
+                                    val lp2 = bar.layoutParams as android.widget.FrameLayout.LayoutParams
+                                    lp2.topMargin = modeBarTop
+                                    bar.layoutParams = lp2
+                                    bar.visibility = android.view.View.VISIBLE
+                                    Log.d(TAG, "[FastPairHook] mode bar dynamic: top=" + modeBarTop + " barH=" + bar.height)
+                                    return
+                                }
+                            }
+                            Handler(Looper.getMainLooper()).postDelayed(this, 120)
+                        } catch (_: Throwable) { }
+                    }
+                }
+                Handler(Looper.getMainLooper()).postDelayed(placeBar, 120)
+            } else {
+                bar.visibility = android.view.View.VISIBLE
+            }
+
             applyAncAvailability(sAncStatus)
             Log.d(TAG, "[FastPairHook] mode buttons injected (关闭/降噪/透传" +
                     (if (showWind) "/抗风" else "") + ")")
