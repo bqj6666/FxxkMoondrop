@@ -24,9 +24,9 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     @Volatile private var version = 0
     @Volatile private var stateListener: (() -> Unit)? = null
 
-    @Volatile private var gainMap: IntArray = intArrayOf(2, 1, 0)
-    @Volatile private var gainLabels: List<String> = DEFAULT_GAIN_LABELS
-    @Volatile private var gainCount: Int = 3
+    @Volatile private var gainMap: IntArray = AncProfileLib.DEFAULT_DC.gainMap
+    @Volatile private var gainLabels: List<String> = AncProfileLib.DEFAULT_DC.gainLabels
+    @Volatile private var gainCount: Int = AncProfileLib.DEFAULT_DC.gainCount
 
     fun getVersion(): Int = version
     private fun bumpVersion() { version++ }
