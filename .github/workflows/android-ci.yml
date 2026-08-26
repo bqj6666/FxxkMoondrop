@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 发布 GitHub Release 需要写权限（GITHUB_TOKEN 默认只读）
+    # 发布 GitHub Release 
     permissions:
       contents: write
     steps:
