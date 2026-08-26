@@ -294,6 +294,107 @@ class SettingsFragment : Fragment() {
         box.addView(M3Ui.groupCard(requireActivity(), pal, *ancMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
+        // ── 增益映射（alpha2.37：用户自定义增益设备码，同 ANC 映射逻辑）──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "增益按钮映射"))
+        val gainMapHint = TextView(requireContext())
+        gainMapHint.text = "自定义增益按钮发送的设备码（0-9）。留空或设为 -1 可隐藏对应档位。"
+        gainMapHint.textSize = 12f
+        gainMapHint.setTextColor(pal.onVariant)
+        gainMapHint.setPadding(dp(4), 0, dp(4), dp(6))
+        box.addView(gainMapHint, LinearLayout.LayoutParams(-1, -2))
+        val gainLabels = DeviceControlBridge.gainLabels()
+        val gainCount = DeviceControlBridge.gainCount()
+        val gainDefaults = AncProfileLib.resolveDc(GaiaBleClient.getInstance().getConnectedDeviceName()).gainMap
+        val gainMapRows = ArrayList<View>()
+        for (i in 0 until gainCount) {
+            val et = EditText(requireContext())
+            et.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            val savedVal = getSP().getInt("gain_map_" + i, gainDefaults.getOrElse(i) { i })
+            et.setText(savedVal.toString())
+            et.textSize = 15f
+            et.gravity = Gravity.CENTER
+            et.setPadding(dp(8), dp(4), dp(8), dp(4))
+            val etBg = GradientDrawable()
+            etBg.shape = GradientDrawable.RECTANGLE
+            etBg.setStroke(dp(1), pal.outline)
+            etBg.setColor(pal.surface)
+            etBg.setCornerRadius(dp(8).toFloat())
+            et.background = etBg
+            val labelIdx = i
+            et.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val v = s?.toString()?.trim()?.toIntOrNull()
+                    if (v != null && v in 0..9) {
+                        getSP().edit().putInt("gain_map_" + labelIdx, v).commit()
+                    }
+                }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+            gainMapRows.add(M3Ui.listRow(requireActivity(), pal, 0,
+                    gainLabels.getOrElse(i) { "档位 $i" },
+                    "发送的设备码（当前生效 " + gainDefaults.getOrElse(i) { i } + "）", et, null))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, *gainMapRows.toTypedArray()))
+        box.addView(spacer(dp(10)))
+
+        // ── 空间音频追踪模式（alpha2.37：用户自定义标签）──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "空间音频追踪标签"))
+        val trackHint = TextView(requireContext())
+        trackHint.text = "自定义空间音频各追踪模式显示名称。"
+        trackHint.textSize = 12f
+        trackHint.setTextColor(pal.onVariant)
+        trackHint.setPadding(dp(4), 0, dp(4), dp(6))
+        box.addView(trackHint, LinearLayout.LayoutParams(-1, -2))
+        val trackLabels = DeviceControlBridge.trackingLabels()
+        val trackRows = ArrayList<View>()
+        for (i in trackLabels.indices) {
+            val et = EditText(requireContext())
+            et.setText(getSP().getString("track_label_" + i, trackLabels[i]))
+            et.textSize = 15f
+            et.setSingleLine(true)
+            et.setPadding(dp(8), dp(4), dp(8), dp(4))
+            val etBg = GradientDrawable()
+            etBg.shape = GradientDrawable.RECTANGLE
+            etBg.setStroke(dp(1), pal.outline)
+            etBg.setColor(pal.surface)
+            etBg.setCornerRadius(dp(8).toFloat())
+            et.background = etBg
+            val labelIdx = i
+            et.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val v = s?.toString()?.trim()
+                    if (!v.isNullOrEmpty()) {
+                        getSP().edit().putString("track_label_" + labelIdx, v).commit()
+                    }
+                }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+            trackRows.add(M3Ui.listRow(requireActivity(), pal, 0,
+                    "模式 $i", "默认名称：" + trackLabels[i], et, null))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, *trackRows.toTypedArray()))
+        box.addView(spacer(dp(10)))
+
+        // ── 重置自定义映射（alpha2.37）──
+        val resetBtn = makeM3Button("重置所有自定义映射", R.drawable.ic_settings,
+                pal.container, pal.onContainer) {
+            val editor = getSP().edit()
+            // 清除 ANC 映射
+            for (i in 0..3) editor.remove("anc_map_" + i)
+            editor.remove("anc_map_custom")
+            // 清除增益映射
+            for (i in 0 until gainCount) editor.remove("gain_map_" + i)
+            // 清除追踪标签
+            for (i in trackLabels.indices) editor.remove("track_label_" + i)
+            editor.commit()
+            android.widget.Toast.makeText(requireContext(), "已重置所有自定义映射", android.widget.Toast.LENGTH_SHORT).show()
+            // 刷新当前页面
+            requireActivity().recreate()
+        }
+        box.addView(resetBtn, LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
 
         // ── 模拟测试（alpha2.3 从主页迁入；真实耳机连接时禁用）──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, "模拟测试"))

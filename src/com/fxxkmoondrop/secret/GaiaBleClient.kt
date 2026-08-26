@@ -938,6 +938,7 @@ class GaiaBleClient private constructor() {
 
     fun getEffectiveAncMap(): IntArray = readAncMap()
     fun getConnectedDeviceName(): String? = connectedDeviceName
+    fun getContext(): android.content.Context? = context
 
     fun setAncMode(mode: Int, cb: AncControlCallback?) {
         this.ancCallback = cb

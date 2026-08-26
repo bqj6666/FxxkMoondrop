@@ -629,30 +629,50 @@ class FastPairHookEntry {
         }
     }
 
-    /** alpha2.31: 在确定按钮旁注入"设置"入口 */
+    /** alpha2.37: 在确定按钮旁注入"设置"入口 —— 动态定位 central_btn 同行对齐 */
     private fun injectSettingsButton(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
             val old = decor.findViewWithTag<android.view.View>("fxxk_settings_btn")
             if (old != null) (decor as android.view.ViewGroup).removeView(old)
+
+            // 查找 central_btn（确定按钮）
+            val btnId = act.resources.getIdentifier("central_btn", "id", PKG_GMS)
+            val centralBtn = if (btnId != 0) decor.findViewById<android.view.View>(btnId) else null
+            if (centralBtn == null) {
+                Log.d(TAG, "[FastPairHook] settings btn: central_btn not found, skip")
+                return
+            }
+
             val d = act.resources.displayMetrics.density
+
+            // 创建设置按钮 —— Material TextButton 风格（克隆 central_btn 文字样式）
             val btn = android.widget.TextView(act)
             btn.tag = "fxxk_settings_btn"
             btn.text = "设置"
-            btn.textSize = 14f
             btn.gravity = android.view.Gravity.CENTER
             btn.isSingleLine = true
-            val g = android.graphics.drawable.GradientDrawable()
-            g.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            g.cornerRadius = 24f * d
-            val isDark = (act.resources.configuration.uiMode and
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES) != 0
-            g.setColor(if (isDark) 0xFF2A2A2E.toInt() else 0xFFE8E8EA.toInt())
-            btn.background = android.graphics.drawable.RippleDrawable(
-                    android.content.res.ColorStateList.valueOf(0x33000000), g, g)
-            btn.setTextColor(if (isDark) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
-            val pad = (16 * d).toInt()
-            btn.setPadding(pad, (10 * d).toInt(), pad, (10 * d).toInt())
+            // 克隆 central_btn 的文字样式
+            if (centralBtn is android.widget.TextView) {
+                btn.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
+                        centralBtn.textSize)
+                btn.setTextColor(centralBtn.currentTextColor)
+                btn.typeface = centralBtn.typeface
+                btn.letterSpacing = centralBtn.letterSpacing
+            }
+            // Material TextButton：透明背景 + ripple，无圆角填充
+            val typed = android.util.TypedValue()
+            var rippleColor = 0x33000000
+            if (act.theme.resolveAttribute(android.R.attr.colorControlHighlight, typed, true)) {
+                rippleColor = typed.data
+            }
+            val rippleBg = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(rippleColor), null, null)
+            btn.background = rippleBg
+            val padH = (16 * d).toInt()
+            val padV = (14 * d).toInt()
+            btn.setPadding(padH, padV, padH, padV)
+
             btn.setOnClickListener {
                 try {
                     val i = android.content.Intent()
@@ -664,14 +684,44 @@ class FastPairHookEntry {
                     Log.d(TAG, "[FastPairHook] settings btn launch fail: " + t)
                 }
             }
+
+            // 用容器水平排列：设置按钮在左，确定按钮在右
+            // 获取 central_btn 在 decor 中的位置
+            val loc = IntArray(2)
+            centralBtn.getLocationInWindow(loc)
+            val btnW = centralBtn.width
+            val btnH = centralBtn.height
+            val centerX = loc[0] + btnW / 2
+
             val lp = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+                    btnH)
+            // 放在确定按钮左侧，紧贴
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
-            lp.topMargin = 2370
-            lp.leftMargin = (24 * d).toInt()
+            lp.topMargin = loc[1]
+            lp.leftMargin = centerX - btnW / 2 - (88 * d).toInt()  // 设置按钮在确定按钮左边
+            lp.rightMargin = 0
+            lp.bottomMargin = 0
+
             (decor as android.view.ViewGroup).addView(btn, lp)
-            Log.d(TAG, "[FastPairHook] settings button injected")
+
+            // central_btn 可能尚未完成 layout，用 post 再校准一次
+            btn.post {
+                try {
+                    val loc2 = IntArray(2)
+                    centralBtn.getLocationInWindow(loc2)
+                    val lp2 = btn.layoutParams as android.widget.FrameLayout.LayoutParams
+                    lp2.topMargin = loc2[1]
+                    lp2.height = centralBtn.height
+                    lp2.leftMargin = loc2[0] + centralBtn.width / 2 - (88 * d).toInt()
+                    btn.layoutParams = lp2
+                    Log.d(TAG, "[FastPairHook] settings btn repositioned: top=" + lp2.topMargin
+                            + " left=" + lp2.leftMargin + " h=" + lp2.height)
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] settings btn reposition fail: " + t)
+                }
+            }
+            Log.d(TAG, "[FastPairHook] settings button injected (aligned to central_btn)")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] settings button fail: " + t)
         }

@@ -36,10 +36,28 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun applyProfile(profile: AncProfileLib.DcProfile) {
-        gainMap = profile.gainMap
-        gainLabels = profile.gainLabels
-        gainCount = profile.gainCount
-        trackingLabels = profile.trackingLabels
+        // alpha2.37: 优先读取用户自定义增益映射
+        val ctx = try { GaiaBleClient.getInstance().getContext() } catch (_: Exception) { null }
+        val prefs = ctx?.getSharedPreferences("cfg", 0)
+        if (prefs != null) {
+            // 增益映射
+            val customGain = IntArray(profile.gainCount) { i ->
+                prefs.getInt("gain_map_" + i, profile.gainMap.getOrElse(i) { i })
+            }
+            gainMap = customGain
+            gainCount = profile.gainCount
+            gainLabels = profile.gainLabels
+            // 追踪标签
+            val customLabels = Array(profile.trackingLabels.size) { i ->
+                prefs.getString("track_label_" + i, profile.trackingLabels[i]) ?: profile.trackingLabels[i]
+            }
+            trackingLabels = customLabels
+        } else {
+            gainMap = profile.gainMap
+            gainLabels = profile.gainLabels
+            gainCount = profile.gainCount
+            trackingLabels = profile.trackingLabels
+        }
     }
 
     fun gainLabels(): List<String> = gainLabels
