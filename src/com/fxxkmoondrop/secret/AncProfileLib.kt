@@ -101,6 +101,13 @@ object AncProfileLib {
     private val DC_PROFILES: List<DcProfile> = listOf(
         // 梦回二 / Golden Ages 2: 支持空间音频+增益, 不支持 LED
         DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
+
+        // 布丁 PUDDING (MD-TWS-056): 增益+指示灯, 无空间音频
+        // GAIA V4 over RFCOMM/SPP; ANC 走 ANC_V2 恒等映射（0=关/1=自适应/2=通透/3=抗风/4=基础降噪）
+        // 协议来源: https://github.com/lingbai-rong/PuddingPods
+        // 增益 0x00=低/0x01=中/0x02=高（恒等映射）; 指示灯 0x00=关/0x01=开
+        DcProfile("PUDDING", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位"))
     )
 

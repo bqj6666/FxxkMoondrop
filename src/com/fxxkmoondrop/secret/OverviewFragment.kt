@@ -645,6 +645,10 @@ class OverviewFragment : Fragment() {
         gainRow?.visibility = if (connected && profile.hasGain) View.VISIBLE else View.GONE
         ledRow?.visibility = if (connected && profile.hasLed) View.VISIBLE else View.GONE
 
+        // alpha2.38.8: 未连接或无 DC 功能时隐藏整个卡片，避免空背景残留
+        val anyDcVisible = connected && (profile.hasSpatial || profile.hasGain || profile.hasLed)
+        card.visibility = if (anyDcVisible) View.VISIBLE else View.GONE
+
         val spSwitch = card.findViewWithTag<com.google.android.material.materialswitch.MaterialSwitch>("dc_spatial_switch")
         spSwitch?.let { sw ->
             sw.isEnabled = connected
