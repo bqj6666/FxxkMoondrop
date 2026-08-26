@@ -165,6 +165,75 @@ object PopupOverlay {
     }
 
     /** 连接弹窗：竖向，大图标 → 大标题 → MAC → 确定按钮 */
+
+    private fun buildDcPopupRow(c: Context, density: Float, feature: Int, maxMode: Int,
+                                 accent: Int, textMain: Int, textSub: Int): LinearLayout {
+        val row = LinearLayout(c)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val label = TextView(c)
+        label.text = when (feature) { 0 -> "空间音频"; 1 -> "增益"; 2 -> "指示灯"; else -> "" }
+        label.textSize = 12f
+        label.setTextColor(textSub)
+        label.isSingleLine = true
+        row.addView(label, LinearLayout.LayoutParams(-2, -2))
+        row.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
+        val names = when (feature) {
+            0 -> DeviceControlBridge.TRACKING_NAMES
+            1 -> DeviceControlBridge.GAIN_NAMES
+            2 -> arrayOf("开", "关")
+            else -> arrayOf("")
+        }
+        val curState = when (feature) {
+            0 -> DeviceControlBridge.spatialUiMode()
+            1 -> DeviceControlBridge.getGainLevel()
+            2 -> if (DeviceControlBridge.getLedState() == 1) 0 else 1
+            else -> -1
+        }
+        for (m in 0..maxMode) {
+            val active = m == curState
+            val col = LinearLayout(c)
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER
+            val btn = android.widget.FrameLayout(c)
+            val g = GradientDrawable()
+            g.shape = GradientDrawable.OVAL
+            g.setColor(if (active) accent else (textMain and 0x00FFFFFF) or 0x1A000000)
+            btn.background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33000000), g, null)
+            val iv = android.widget.ImageView(c)
+            iv.setImageDrawable(DcIcons.build(c, feature, m, (22 * density).toInt(),
+                if (active) 0xFFFFFFFF.toInt() else textMain))
+            val il = android.widget.FrameLayout.LayoutParams(
+                (22 * density).toInt(), (22 * density).toInt(), Gravity.CENTER)
+            btn.addView(iv, il)
+            btn.setOnClickListener {
+                when (feature) {
+                    0 -> {
+                        if (!DeviceControlBridge.isSpatialOn())
+                            DeviceControlBridge.setSpatialEnabled(true)
+                        DeviceControlBridge.setTrackingMode(m)
+                    }
+                    1 -> DeviceControlBridge.setGain(m)
+                    2 -> DeviceControlBridge.setLed(if (DeviceControlBridge.getLedState() == 1) 0 else 1)
+                }
+                extendDismiss()
+            }
+            val sz = (44 * density).toInt()
+            col.addView(btn, LinearLayout.LayoutParams(sz, sz))
+            col.addView(vgap(c, 2f))
+            val lbl = TextView(c)
+            lbl.text = names[m]
+            lbl.textSize = 10f
+            lbl.gravity = Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(if (active) accent else textMain)
+            col.addView(lbl, LinearLayout.LayoutParams(-2, -2))
+            row.addView(col, LinearLayout.LayoutParams(-2, -2))
+        }
+        return row
+    }
+
     private fun buildConnectedCard(c: Context, name: String?, mac: String?, dark: Boolean,
                                    accent: Int, container: Int, textMain: Int, textSub: Int,
                                    density: Float): View {
@@ -340,130 +409,25 @@ object PopupOverlay {
             }
             cv.addView(ancRow, LinearLayout.LayoutParams(-1, -2))
 
-            // alpha2.31: 扩展设备控制（空间音频/增益/LED）——按能力位图条件显示
-            val client = GaiaBleClient.getInstance()
-            val hasSpatial = try { client.hasSpatialSupport() } catch (e: Exception) { false }
-            val hasGain = try { client.hasGainSupport() } catch (e: Exception) { false }
-            val hasLed = try { client.hasLedSupport() } catch (e: Exception) { false }
-
-            if (hasSpatial || hasGain || hasLed) {
+            // alpha2.32: 扩展设备控制——型号档案 + 圆形 Material 图标按钮
+            val dcClient = GaiaBleClient.getInstance()
+            val dcDevName = dcClient.getConnectedDeviceName()
+            val dcProfile = AncProfileLib.resolveDc(dcDevName)
+            val dcHasSpatial = dcProfile.hasSpatial || try { dcClient.hasSpatialSupport() } catch (e: Exception) { false }
+            val dcHasGain = dcProfile.hasGain || try { dcClient.hasGainSupport() } catch (e: Exception) { false }
+            val dcHasLed = dcProfile.hasLed || try { dcClient.hasLedSupport() } catch (e: Exception) { false }
+            if (dcHasSpatial || dcHasGain || dcHasLed) {
                 cv.addView(vgap(c, 10f))
-
-                // 空间音频（3 按钮追踪模式）
-                if (hasSpatial) {
-                    val sRow = LinearLayout(c)
-                    sRow.orientation = LinearLayout.HORIZONTAL
-                    sRow.gravity = Gravity.CENTER_VERTICAL
-                    val sLabel = TextView(c)
-                    sLabel.text = "空间音频"
-                    sLabel.textSize = 12f
-                    sLabel.setTextColor(textSub)
-                    sLabel.isSingleLine = true
-                    sRow.addView(sLabel, LinearLayout.LayoutParams(-2, -2))
-                    sRow.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
-                    val sMode = DeviceControlBridge.spatialUiMode()
-                    for (tm in 0..2) {
-                        val btn = TextView(c)
-                        btn.text = DeviceControlBridge.TRACKING_NAMES[tm]
-                        btn.textSize = 11f
-                        btn.gravity = Gravity.CENTER
-                        btn.isSingleLine = true
-                        val g = GradientDrawable()
-                        g.shape = GradientDrawable.RECTANGLE
-                        g.cornerRadius = 16f * density
-                        g.setColor(if (tm == sMode) accent else (textMain and 0x00FFFFFF) or 0x1A000000)
-                        btn.background = android.graphics.drawable.RippleDrawable(
-                            android.content.res.ColorStateList.valueOf(0x33000000), g, null)
-                        btn.setTextColor(if (tm == sMode) 0xFFFFFFFF.toInt() else textMain)
-                        val pad = (8 * density).toInt()
-                        btn.setPadding(pad, (4 * density).toInt(), pad, (4 * density).toInt())
-                        btn.setOnClickListener {
-                            val cur = DeviceControlBridge.spatialUiMode()
-                            if (tm == cur) DeviceControlBridge.setSpatialMode(-1)
-                            else DeviceControlBridge.setSpatialMode(tm)
-                            extendDismiss()
-                        }
-                        val lp = LinearLayout.LayoutParams(-2, -2)
-                        lp.setMargins((3 * density).toInt(), 0, (3 * density).toInt(), 0)
-                        sRow.addView(btn, lp)
-                    }
-                    cv.addView(sRow, LinearLayout.LayoutParams(-1, -2))
+                if (dcHasSpatial) {
+                    cv.addView(buildDcPopupRow(c, density, 0, 2, accent, textMain, textSub))
                 }
-
-                // 增益（低/中/高）
-                if (hasGain) {
-                    cv.addView(vgap(c, 8f))
-                    val gRow = LinearLayout(c)
-                    gRow.orientation = LinearLayout.HORIZONTAL
-                    gRow.gravity = Gravity.CENTER_VERTICAL
-                    val gLabel = TextView(c)
-                    gLabel.text = "增益"
-                    gLabel.textSize = 12f
-                    gLabel.setTextColor(textSub)
-                    gLabel.isSingleLine = true
-                    gRow.addView(gLabel, LinearLayout.LayoutParams(-2, -2))
-                    gRow.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
-                    val gLevel = DeviceControlBridge.getGainLevel()
-                    for (gm in 0..2) {
-                        val btn = TextView(c)
-                        btn.text = DeviceControlBridge.GAIN_NAMES[gm]
-                        btn.textSize = 11f
-                        btn.gravity = Gravity.CENTER
-                        btn.isSingleLine = true
-                        val g = GradientDrawable()
-                        g.shape = GradientDrawable.RECTANGLE
-                        g.cornerRadius = 16f * density
-                        g.setColor(if (gm == gLevel) accent else (textMain and 0x00FFFFFF) or 0x1A000000)
-                        btn.background = android.graphics.drawable.RippleDrawable(
-                            android.content.res.ColorStateList.valueOf(0x33000000), g, null)
-                        btn.setTextColor(if (gm == gLevel) 0xFFFFFFFF.toInt() else textMain)
-                        val pad = (12 * density).toInt()
-                        btn.setPadding(pad, (4 * density).toInt(), pad, (4 * density).toInt())
-                        btn.setOnClickListener {
-                            DeviceControlBridge.setGain(gm)
-                            extendDismiss()
-                        }
-                        val lp = LinearLayout.LayoutParams(-2, -2)
-                        lp.setMargins((3 * density).toInt(), 0, (3 * density).toInt(), 0)
-                        gRow.addView(btn, lp)
-                    }
-                    cv.addView(gRow, LinearLayout.LayoutParams(-1, -2))
+                if (dcHasGain) {
+                    if (dcHasSpatial) cv.addView(vgap(c, 8f))
+                    cv.addView(buildDcPopupRow(c, density, 1, 2, accent, textMain, textSub))
                 }
-
-                // LED 指示灯
-                if (hasLed) {
-                    cv.addView(vgap(c, 8f))
-                    val lRow = LinearLayout(c)
-                    lRow.orientation = LinearLayout.HORIZONTAL
-                    lRow.gravity = Gravity.CENTER_VERTICAL
-                    val lLabel = TextView(c)
-                    lLabel.text = "指示灯"
-                    lLabel.textSize = 12f
-                    lLabel.setTextColor(textSub)
-                    lLabel.isSingleLine = true
-                    lRow.addView(lLabel, LinearLayout.LayoutParams(-2, -2))
-                    lRow.addView(View(c), LinearLayout.LayoutParams(0, -2, 1f))
-                    val ledOn = DeviceControlBridge.getLedState() == 1
-                    val ledBtn = TextView(c)
-                    ledBtn.text = if (ledOn) "开" else "关"
-                    ledBtn.textSize = 11f
-                    ledBtn.gravity = Gravity.CENTER
-                    ledBtn.isSingleLine = true
-                    val g = GradientDrawable()
-                    g.shape = GradientDrawable.RECTANGLE
-                    g.cornerRadius = 16f * density
-                    g.setColor(if (ledOn) accent else (textMain and 0x00FFFFFF) or 0x1A000000)
-                    ledBtn.background = android.graphics.drawable.RippleDrawable(
-                        android.content.res.ColorStateList.valueOf(0x33000000), g, null)
-                    ledBtn.setTextColor(if (ledOn) 0xFFFFFFFF.toInt() else textMain)
-                    val pad = (16 * density).toInt()
-                    ledBtn.setPadding(pad, (4 * density).toInt(), pad, (4 * density).toInt())
-                    ledBtn.setOnClickListener {
-                        DeviceControlBridge.setLed(if (DeviceControlBridge.getLedState() == 1) 0 else 1)
-                        extendDismiss()
-                    }
-                    lRow.addView(ledBtn, LinearLayout.LayoutParams(-2, -2))
-                    cv.addView(lRow, LinearLayout.LayoutParams(-1, -2))
+                if (dcHasLed) {
+                    if (dcHasSpatial || dcHasGain) cv.addView(vgap(c, 8f))
+                    cv.addView(buildDcPopupRow(c, density, 2, 1, accent, textMain, textSub))
                 }
             }
         } // alpha1.5: 真实连接才显示降噪快捷按钮

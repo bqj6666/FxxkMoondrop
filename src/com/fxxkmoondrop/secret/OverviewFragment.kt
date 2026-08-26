@@ -72,6 +72,7 @@ class OverviewFragment : Fragment() {
     private var ancWindCol: View? = null
     @Volatile private var lastRefreshAncMs = 0L  // alpha2.28: refreshAnc 节流 // alpha2.26.2: 抗风按钮列（用户可选隐藏）
     private var ancMode = -1
+    private var dcControlCard: LinearLayout? = null  // alpha2.31
     // alpha2.28: ANC icon bitmap cache (4 modes x 2 colors = 8 slots)
     private var ancIconCache: Array<android.graphics.drawable.Drawable?>? = null
     @Volatile private var moonProcState = "未知"
@@ -342,6 +343,199 @@ class OverviewFragment : Fragment() {
 
         root.addView(spacer(dp(8)))
 
+        // alpha2.32: 扩展设备控制（空间音频/增益/LED）—— 圆形图标按钮 + 型号档案
+        val dcCard = LinearLayout(requireContext())
+        dcCard.orientation = LinearLayout.VERTICAL
+        dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
+        val dcBg = GradientDrawable()
+        dcBg.shape = GradientDrawable.RECTANGLE
+        dcBg.setColor(cardColor)
+        dcBg.setCornerRadius(dp(28).toFloat())
+        dcCard.background = dcBg
+
+        // 空间音频行（总开关）
+        val dcSpatialRow = LinearLayout(requireContext())
+        dcSpatialRow.orientation = LinearLayout.HORIZONTAL
+        dcSpatialRow.gravity = Gravity.CENTER_VERTICAL
+        dcSpatialRow.tag = "dc_spatial_row"
+        val sLabel = TextView(requireContext())
+        sLabel.text = "空间音频"
+        sLabel.textSize = 12f
+        sLabel.setTextColor(onContainerColor)
+        dcSpatialRow.addView(sLabel, LinearLayout.LayoutParams(-2, -2))
+        dcSpatialRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
+        val spatialSwitch = com.google.android.material.materialswitch.MaterialSwitch(requireContext())
+        spatialSwitch.tag = "dc_spatial_switch"
+        spatialSwitch.setOnCheckedChangeListener { v, isChecked ->
+            if (v.isPressed) {
+                DeviceControlBridge.setSpatialEnabled(isChecked)
+                refreshDcHighlight()
+            }
+        }
+        dcSpatialRow.addView(spatialSwitch, LinearLayout.LayoutParams(-2, -2))
+        dcCard.addView(dcSpatialRow, LinearLayout.LayoutParams(-1, -2))
+
+        // 空间追踪子模式行
+        dcCard.addView(spacer(dp(6)))
+        val dcTrackingRow = LinearLayout(requireContext())
+        dcTrackingRow.orientation = LinearLayout.HORIZONTAL
+        dcTrackingRow.gravity = Gravity.CENTER_VERTICAL
+        dcTrackingRow.tag = "dc_tracking_row"
+        val tLabel = TextView(requireContext())
+        tLabel.text = "追踪模式"
+        tLabel.textSize = 11f
+        tLabel.setTextColor(onContainerColor)
+        dcTrackingRow.addView(tLabel, LinearLayout.LayoutParams(-2, -2))
+        dcTrackingRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
+        for (tm in 0..2) {
+            val col = LinearLayout(requireContext())
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER
+            val holder = android.widget.FrameLayout(requireContext())
+            val bg = View(requireContext())
+            bg.tag = "dc_bg"
+            val g0 = GradientDrawable()
+            g0.shape = GradientDrawable.OVAL
+            g0.setColor(containerColor)
+            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val icon = ImageView(requireContext())
+            icon.tag = "dc_icon"
+            icon.setImageDrawable(DcIcons.build(requireContext(), 0, tm, dp(22), onContainerColor))
+            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
+            il.gravity = Gravity.CENTER
+            holder.addView(icon, il)
+            holder.tag = "dc_btn_spatial_" + tm
+            holder.setOnClickListener {
+                DeviceControlBridge.setTrackingMode(tm)
+                refreshDcHighlight()
+            }
+            val sz = dp(48)
+            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
+            val lbl = TextView(requireContext())
+            lbl.text = DeviceControlBridge.TRACKING_NAMES[tm]
+            lbl.textSize = 10f
+            lbl.gravity = Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(onContainerColor)
+            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
+            val lp = LinearLayout.LayoutParams(-2, -2)
+            lp.setMargins(dp(4), 0, dp(4), 0)
+            dcTrackingRow.addView(col, lp)
+        }
+        dcCard.addView(dcTrackingRow, LinearLayout.LayoutParams(-1, -2))
+
+        // 增益行
+        dcCard.addView(spacer(dp(8)))
+        val dcGainRow = LinearLayout(requireContext())
+        dcGainRow.orientation = LinearLayout.HORIZONTAL
+        dcGainRow.gravity = Gravity.CENTER_VERTICAL
+        dcGainRow.tag = "dc_gain_row"
+        val gLabel = TextView(requireContext())
+        gLabel.text = "增益"
+        gLabel.textSize = 12f
+        gLabel.setTextColor(onContainerColor)
+        dcGainRow.addView(gLabel, LinearLayout.LayoutParams(-2, -2))
+        dcGainRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
+        for (gm in 0..2) {
+            val col = LinearLayout(requireContext())
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER
+            val holder = android.widget.FrameLayout(requireContext())
+            val bg = View(requireContext())
+            bg.tag = "dc_bg"
+            val g0 = GradientDrawable()
+            g0.shape = GradientDrawable.OVAL
+            g0.setColor(containerColor)
+            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val icon = ImageView(requireContext())
+            icon.tag = "dc_icon"
+            icon.setImageDrawable(DcIcons.build(requireContext(), 1, gm, dp(22), onContainerColor))
+            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
+            il.gravity = Gravity.CENTER
+            holder.addView(icon, il)
+            holder.tag = "dc_btn_gain_" + gm
+            holder.setOnClickListener {
+                DeviceControlBridge.setGain(gm)
+                refreshDcHighlight()
+            }
+            val sz = dp(48)
+            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
+            val lbl = TextView(requireContext())
+            lbl.text = DeviceControlBridge.GAIN_NAMES[gm]
+            lbl.textSize = 10f
+            lbl.gravity = Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(onContainerColor)
+            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
+            val lp = LinearLayout.LayoutParams(-2, -2)
+            lp.setMargins(dp(4), 0, dp(4), 0)
+            dcGainRow.addView(col, lp)
+        }
+        dcCard.addView(dcGainRow, LinearLayout.LayoutParams(-1, -2))
+
+        // 指示灯行
+        dcCard.addView(spacer(dp(8)))
+        val dcLedRow = LinearLayout(requireContext())
+        dcLedRow.orientation = LinearLayout.HORIZONTAL
+        dcLedRow.gravity = Gravity.CENTER_VERTICAL
+        dcLedRow.tag = "dc_led_row"
+        val lLabel = TextView(requireContext())
+        lLabel.text = "指示灯"
+        lLabel.textSize = 12f
+        lLabel.setTextColor(onContainerColor)
+        dcLedRow.addView(lLabel, LinearLayout.LayoutParams(-2, -2))
+        dcLedRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
+        val ledNames = arrayOf("开", "关")
+        for (lm in 0..1) {
+            val col = LinearLayout(requireContext())
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER
+            val holder = android.widget.FrameLayout(requireContext())
+            val bg = View(requireContext())
+            bg.tag = "dc_bg"
+            val g0 = GradientDrawable()
+            g0.shape = GradientDrawable.OVAL
+            g0.setColor(containerColor)
+            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val icon = ImageView(requireContext())
+            icon.tag = "dc_icon"
+            icon.setImageDrawable(DcIcons.build(requireContext(), 2, lm, dp(22), onContainerColor))
+            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
+            il.gravity = Gravity.CENTER
+            holder.addView(icon, il)
+            holder.tag = "dc_btn_led_" + lm
+            holder.setOnClickListener {
+                DeviceControlBridge.setLed(lm)
+                refreshDcHighlight()
+            }
+            val sz = dp(48)
+            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
+            val lbl = TextView(requireContext())
+            lbl.text = ledNames[lm]
+            lbl.textSize = 10f
+            lbl.gravity = Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(onContainerColor)
+            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
+            val lp = LinearLayout.LayoutParams(-2, -2)
+            lp.setMargins(dp(4), 0, dp(4), 0)
+            dcLedRow.addView(col, lp)
+        }
+        dcCard.addView(dcLedRow, LinearLayout.LayoutParams(-1, -2))
+
+        root.addView(dcCard, lp(false))
+        dcControlCard = dcCard
+        root.addView(spacer(dp(8)))
+
         root.addView(makeButton("刷新状态 / 检查 Moondrop", R.drawable.ic_refresh, container, onContainer) { refreshAnc() })
 
         root.addView(spacer(dp(12)))
@@ -376,6 +570,8 @@ class OverviewFragment : Fragment() {
         } catch (_: Exception) { }
 
         refreshAnc()
+        // alpha2.31: 刷新设备控制高亮
+        refreshDcHighlight()
         dumpDynColors(if (isDark()) "DARK" else "LIGHT")
         requestNeededPermissions()
         updateStatus()
@@ -409,6 +605,110 @@ class OverviewFragment : Fragment() {
         val p = LinearLayout.LayoutParams(-1, -2)
         if (center) p.gravity = Gravity.CENTER_HORIZONTAL
         return p
+    }
+
+    /**
+     * alpha2.32: 刷新扩展设备控制按钮。
+     * - 按型号档案（AncProfileLib.resolveDc）决定行可见性
+     * - 未连接时灰禁用
+     * - 连接后按当前状态高亮
+     */
+    private fun refreshDcHighlight() {
+        val card = dcControlCard ?: return
+        val gaia = GaiaBleClient.getInstance()
+        val connected = try { gaia.isConnected() } catch (e: Exception) { false }
+        val devName = if (connected) gaia.getConnectedDeviceName() else null
+        val profile = AncProfileLib.resolveDc(devName)
+        val hasSpatial = profile.hasSpatial || (connected && try { gaia.hasSpatialSupport() } catch (e: Exception) { false })
+        val hasGain = profile.hasGain || (connected && try { gaia.hasGainSupport() } catch (e: Exception) { false })
+        val hasLed = profile.hasLed || (connected && try { gaia.hasLedSupport() } catch (e: Exception) { false })
+
+        val spatialOn = DeviceControlBridge.isSpatialOn()
+        val sMode = DeviceControlBridge.spatialUiMode()
+        val gLevel = DeviceControlBridge.getGainLevel()
+        val ledOn = DeviceControlBridge.getLedState() == 1
+        val greyColor = 0xFF888888.toInt()
+
+        val spatialRow = card.findViewWithTag<LinearLayout>("dc_spatial_row")
+        val trackingRow = card.findViewWithTag<LinearLayout>("dc_tracking_row")
+        val gainRow = card.findViewWithTag<LinearLayout>("dc_gain_row")
+        val ledRow = card.findViewWithTag<LinearLayout>("dc_led_row")
+        spatialRow?.visibility = if (connected && !hasSpatial) View.GONE else View.VISIBLE
+        trackingRow?.visibility = if (connected && hasSpatial) View.VISIBLE else View.GONE
+        gainRow?.visibility = if (connected && !hasGain) View.GONE else View.VISIBLE
+        ledRow?.visibility = if (connected && !hasLed) View.GONE else View.VISIBLE
+
+        val spSwitch = card.findViewWithTag<com.google.android.material.materialswitch.MaterialSwitch>("dc_spatial_switch")
+        spSwitch?.let { sw ->
+            sw.isEnabled = connected && hasSpatial
+            if (sw.isChecked != spatialOn) {
+                sw.setOnCheckedChangeListener(null)
+                sw.isChecked = spatialOn
+                sw.setOnCheckedChangeListener { v, isChecked ->
+                    if (v.isPressed) {
+                        DeviceControlBridge.setSpatialEnabled(isChecked)
+                        refreshDcHighlight()
+                    }
+                }
+            }
+        }
+
+        if (card.childCount >= 7) {
+            card.getChildAt(1)?.visibility = if (hasSpatial) View.VISIBLE else View.GONE
+            card.getChildAt(3)?.visibility = if (hasSpatial && hasGain) View.VISIBLE else View.GONE
+            card.getChildAt(5)?.visibility = if (hasGain && hasLed) View.VISIBLE else View.GONE
+        }
+
+        for (i in 0 until card.childCount) {
+            val row = card.getChildAt(i) as? LinearLayout ?: continue
+            val rowTag = row.tag as? String ?: ""
+            if (!rowTag.startsWith("dc_")) continue
+            for (j in 0 until row.childCount) {
+                val col = row.getChildAt(j) as? LinearLayout ?: continue
+                for (k in 0 until col.childCount) {
+                    val holder = col.getChildAt(k) as? android.widget.FrameLayout ?: continue
+                    val tag = holder.tag as? String ?: continue
+                    if (!tag.startsWith("dc_btn_")) continue
+                    val bgV = holder.findViewWithTag<View>("dc_bg")
+                    val iv = holder.findViewWithTag<View>("dc_icon") as? ImageView
+                    val parts = tag.substring(7).split("_")
+                    if (parts.size != 2) continue
+                    val feature = parts[0]
+                    val idx = parts[1].toInt()
+                    val active = when (feature) {
+                        "spatial" -> spatialOn && idx == sMode
+                        "gain" -> idx == gLevel
+                        "led" -> idx == if (ledOn) 0 else 1
+                        else -> false
+                    }
+                    val iconColor = if (active) 0xFFFFFFFF.toInt() else onContainerColor
+                    val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
+                    val spatialDisabled = feature == "spatial" && !spatialOn
+                    if (!connected || spatialDisabled) {
+                        holder.isEnabled = false
+                        holder.alpha = 0.4f
+                        if (bgV != null) {
+                            val g = GradientDrawable()
+                            g.shape = GradientDrawable.OVAL
+                            g.setColor(greyColor)
+                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                        }
+                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), 0xFFAAAAAA.toInt()))
+                    } else {
+                        holder.isEnabled = true
+                        holder.alpha = 1f
+                        if (bgV != null) {
+                            val g = GradientDrawable()
+                            g.shape = GradientDrawable.OVAL
+                            g.setColor(if (active) primaryColor else containerColor)
+                            if (active) g.setStroke(dp(2), 0xFFFFFFFF.toInt())
+                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                        }
+                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), iconColor))
+                    }
+                }
+            }
+        }
     }
 
     private fun spacer(h: Int): View {
@@ -739,6 +1039,12 @@ class OverviewFragment : Fragment() {
         } catch (_: Exception) { }
         updateStatus()
         refreshAnc()
+        // alpha2.32: 回前台时刷新 DC 按钮状态（设备可能已连接）
+        refreshDcHighlight()
+        // alpha2.33: DC 状态变化监听（空间/增益/LED 回包后刷新 UI）
+        DeviceControlBridge.setStateListener {
+            activity?.runOnUiThread { refreshDcHighlight() }
+        }
         // alpha2.26.2: 每次回到前台按最新设置应用抗风按钮可见性（设置页切换后返回即时生效）
         try {
             val sw = requireContext().getSharedPreferences("cfg", 0)
@@ -1010,6 +1316,7 @@ class OverviewFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        DeviceControlBridge.setStateListener(null)
         try { requireContext().unregisterReceiver(ancModeReceiver) } catch (_: Exception) { }
         try { requireContext().unregisterReceiver(stateReceiver) } catch (_: Exception) { }
         try { requireContext().unregisterReceiver(modeRequestReceiver) } catch (_: Exception) { }
@@ -1018,7 +1325,11 @@ class OverviewFragment : Fragment() {
     /** alpha1.4: 后台服务 GAIA 状态广播（电量/降噪更新） */
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            requireActivity().runOnUiThread { updateAncStatus() }
+            requireActivity().runOnUiThread {
+                updateAncStatus()
+                // alpha2.32: STATE_UPDATED 到来时连接已就绪，刷新 DC 按钮启用状态
+                refreshDcHighlight()
+            }
         }
     }
 
@@ -1316,7 +1627,13 @@ class OverviewFragment : Fragment() {
                 Handler(Looper.getMainLooper()).postDelayed({
                     AncBridge.fetchAncMode()
                     GaiaBleClient.getInstance().fetchBatteryLevels()
+                    DeviceControlBridge.fetchAll()
+                    refreshDcHighlight()
                 }, 800)
+                // alpha2.31.1: 二次刷新等能力探测完成
+                Handler(Looper.getMainLooper()).postDelayed({
+                    if (isAdded) refreshDcHighlight()
+                }, 2500)
             }
         }
 
@@ -1328,6 +1645,7 @@ class OverviewFragment : Fragment() {
                 moonProcState = serviceState()
                 updateAncStatus()
                 updateBatteryStatus()
+                refreshDcHighlight()
             }
         }
 

@@ -173,6 +173,7 @@ class FastPairHookEntry {
                                         injectIconOverlay(act)
                                         injectBatteryOverlay(act)
                                         injectModeButtons(act)
+                                        injectSettingsButton(act)
                                         // alpha1.20: 已知模式立即高亮 + 向应用请求当前模式
                                         if (sLastMode >= 0) applyModeHighlight(sLastMode)
                                         sendModeRequest()
@@ -624,6 +625,54 @@ class FastPairHookEntry {
                     (if (showWind) "/抗风" else "") + ")")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] mode buttons fail: " + t)
+        }
+    }
+
+    /** alpha2.31: 在确定按钮旁注入"设置"入口 */
+    private fun injectSettingsButton(act: android.app.Activity) {
+        try {
+            val decor = act.window.decorView
+            val old = decor.findViewWithTag<android.view.View>("fxxk_settings_btn")
+            if (old != null) (decor as android.view.ViewGroup).removeView(old)
+            val d = act.resources.displayMetrics.density
+            val btn = android.widget.TextView(act)
+            btn.tag = "fxxk_settings_btn"
+            btn.text = "设置"
+            btn.textSize = 14f
+            btn.gravity = android.view.Gravity.CENTER
+            btn.isSingleLine = true
+            val g = android.graphics.drawable.GradientDrawable()
+            g.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            g.cornerRadius = 24f * d
+            val isDark = (act.resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES) != 0
+            g.setColor(if (isDark) 0xFF2A2A2E.toInt() else 0xFFE8E8EA.toInt())
+            btn.background = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x33000000), g, g)
+            btn.setTextColor(if (isDark) 0xFFFFFFFF.toInt() else 0xFF1C1B1F.toInt())
+            val pad = (16 * d).toInt()
+            btn.setPadding(pad, (10 * d).toInt(), pad, (10 * d).toInt())
+            btn.setOnClickListener {
+                try {
+                    val i = android.content.Intent()
+                    i.setClassName(PKG_APP, "com.fxxkmoondrop.secret.MainActivity")
+                    i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    act.startActivity(i)
+                    Log.d(TAG, "[FastPairHook] settings btn -> launch MainActivity")
+                } catch (t: Throwable) {
+                    Log.d(TAG, "[FastPairHook] settings btn launch fail: " + t)
+                }
+            }
+            val lp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
+            lp.topMargin = 2370
+            lp.leftMargin = (24 * d).toInt()
+            (decor as android.view.ViewGroup).addView(btn, lp)
+            Log.d(TAG, "[FastPairHook] settings button injected")
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] settings button fail: " + t)
         }
     }
 

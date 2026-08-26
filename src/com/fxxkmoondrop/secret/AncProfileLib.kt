@@ -78,4 +78,34 @@ object AncProfileLib {
         }
         return "默认"
     }
+
+    /**
+     * alpha2.32: 扩展设备控制（DC）能力档案。
+     * 按型号记录空间音频/增益/LED 支持情况。
+     * 优先使用档案；档案未命中时回退到 GAIA 能力探测（CapabilityProbe.hasFeature）。
+     */
+    data class DcProfile(
+        val nameKey: String,
+        val hasSpatial: Boolean,
+        val hasGain: Boolean,
+        val hasLed: Boolean
+    )
+
+    private val DC_PROFILES: List<DcProfile> = listOf(
+        // 梦回二 / Golden Ages 2: 支持空间音频+增益, 不支持 LED
+        DcProfile("GOLDEN AGES 2", hasSpatial = true, hasGain = true, hasLed = false)
+    )
+
+    /** 默认 DC 档案：全部不支持（未知型号保守策略） */
+    val DEFAULT_DC = DcProfile("默认", hasSpatial = false, hasGain = false, hasLed = false)
+
+    fun resolveDc(deviceName: String?): DcProfile {
+        val n = deviceName?.uppercase()?.trim()
+        if (!n.isNullOrEmpty()) {
+            for (p in DC_PROFILES) {
+                if (n.contains(p.nameKey)) return p
+            }
+        }
+        return DEFAULT_DC
+    }
 }

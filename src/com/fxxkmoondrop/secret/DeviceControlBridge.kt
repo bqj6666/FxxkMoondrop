@@ -14,14 +14,15 @@ class DeviceControlBridge {
         @Volatile private var gainLevel = -1
         @Volatile private var ledState = -1
         @Volatile private var version = 0
+        @Volatile private var stateListener: (() -> Unit)? = null
 
-        fun spatialUiMode(): Int =
-            if (spatialState == 1 && headTracking in 0..2) headTracking else -1
-
+        fun setStateListener(l: (() -> Unit)?) { stateListener = l }
+        private fun notifyStateChanged() { bumpVersion(); stateListener?.invoke() }
+        fun isSpatialOn(): Boolean = spatialState == 1
+        fun spatialUiMode(): Int = if (spatialState == 1 && headTracking in 0..2) headTracking else -1
         fun getGainLevel(): Int = gainLevel
         fun getLedState(): Int = ledState
         fun getVersion(): Int = version
-
         private fun bumpVersion() { version++ }
 
         @JvmStatic
@@ -30,42 +31,62 @@ class DeviceControlBridge {
                 override fun onSpatialResult(state: Int) {
                     spatialState = state
                     if (state == 1) fetchHeadTracking()
-                    else { headTracking = -1; bumpVersion() }
+                    else { headTracking = -1; notifyStateChanged() }
                 }
-                override fun onHeadTrackingResult(state: Int) { headTracking = state; bumpVersion() }
-                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchSpatial: $message") }
+                override fun onHeadTrackingResult(state: Int) { headTracking = state; notifyStateChanged() }
+                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchSpatial: " + message) }
             })
         }
 
         @JvmStatic
         fun fetchHeadTracking() {
             GaiaBleClient.getInstance().fetchHeadTracking(object : GaiaBleClient.DeviceControlCallback {
-                override fun onHeadTrackingResult(state: Int) { headTracking = state; bumpVersion() }
-                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchHT: $message") }
+                override fun onHeadTrackingResult(state: Int) { headTracking = state; notifyStateChanged() }
+                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchHT: " + message) }
             })
         }
 
+        /** 总开关：开启/关闭空间音频 */
         @JvmStatic
-        fun setSpatialMode(uiMode: Int) {
-            if (uiMode < 0) {
-                spatialState = 0; headTracking = -1; bumpVersion()
-                GaiaBleClient.getInstance().setSpatial(0, null)
-                return
-            }
-            spatialState = 1; headTracking = uiMode; bumpVersion()
-            GaiaBleClient.getInstance().setSpatial(1, object : GaiaBleClient.DeviceControlCallback {
-                override fun onSpatialResult(state: Int) {
-                    if (state == 1) GaiaBleClient.getInstance().setHeadTracking(uiMode, null)
+        fun setSpatialEnabled(enabled: Boolean) {
+            spatialState = if (enabled) 1 else 0
+            if (!enabled) headTracking = -1
+            notifyStateChanged()
+            GaiaBleClient.getInstance().setSpatial(if (enabled) 1 else 0,
+                if (enabled) object : GaiaBleClient.DeviceControlCallback {
+                    override fun onSpatialResult(state: Int) {
+                        spatialState = state
+                        if (state == 1) fetchHeadTracking()
+                        notifyStateChanged()
+                    }
+                    override fun onDeviceControlError(message: String) {
+                        spatialState = -1; notifyStateChanged()
+                        Log.w(TAG, "setSpatial: " + message)
+                    }
+                } else null)
+        }
+
+        /** 子模式：设置头部追踪模式 */
+        @JvmStatic
+        fun setTrackingMode(mode: Int) {
+            if (mode !in 0..2) return
+            headTracking = mode
+            notifyStateChanged()
+            GaiaBleClient.getInstance().setHeadTracking(mode, object : GaiaBleClient.DeviceControlCallback {
+                override fun onHeadTrackingResult(state: Int) {
+                    headTracking = state; notifyStateChanged()
+                }
+                override fun onDeviceControlError(message: String) {
+                    Log.w(TAG, "setTracking: " + message)
                 }
             })
-            GaiaBleClient.getInstance().setHeadTracking(uiMode, null)
         }
 
         @JvmStatic
         fun fetchGain() {
             GaiaBleClient.getInstance().fetchGain(object : GaiaBleClient.DeviceControlCallback {
-                override fun onGainResult(level: Int) { gainLevel = level; bumpVersion() }
-                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchGain: $message") }
+                override fun onGainResult(level: Int) { gainLevel = level; notifyStateChanged() }
+                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchGain: " + message) }
             })
         }
 
@@ -74,13 +95,14 @@ class DeviceControlBridge {
             if (level !in 0..2) return
             gainLevel = level; bumpVersion()
             GaiaBleClient.getInstance().setGain(level, null)
+            stateListener?.invoke()
         }
 
         @JvmStatic
         fun fetchLed() {
             GaiaBleClient.getInstance().fetchLed(object : GaiaBleClient.DeviceControlCallback {
-                override fun onLedResult(state: Int) { ledState = state; bumpVersion() }
-                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchLed: $message") }
+                override fun onLedResult(state: Int) { ledState = state; notifyStateChanged() }
+                override fun onDeviceControlError(message: String) { Log.w(TAG, "fetchLed: " + message) }
             })
         }
 
@@ -88,6 +110,7 @@ class DeviceControlBridge {
         fun setLed(state: Int) {
             ledState = state; bumpVersion()
             GaiaBleClient.getInstance().setLed(state, null)
+            stateListener?.invoke()
         }
 
         @JvmStatic
@@ -103,6 +126,7 @@ class DeviceControlBridge {
         @JvmStatic
         fun reset() {
             spatialState = -1; headTracking = -1; gainLevel = -1; ledState = -1
+            stateListener?.invoke()
         }
     }
 }
