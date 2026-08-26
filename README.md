@@ -117,7 +117,7 @@ FxxkMoondrop-repo/
 
 - [JingMatrix](https://github.com/JingMatrix) 及其维护的 [LSPosed](https://github.com/JingMatrix/LSPosed) / [Vector](https://github.com/JingMatrix/Vector) 框架：本项目的**界面与交互风格参考了 LSPosed Manager 的设计**，特此致谢；项目亦受益于 LSPosed 生态的工具链
 - [LSPlant](https://github.com/JingMatrix/LSPlant) 与 Xposed / LSPosed 社区
-- AI 协助开发：Deepseek · Qwen · ChatGPT · Kimi
+- 各AI 协助进行开发
 
 ## 版本历史
 
