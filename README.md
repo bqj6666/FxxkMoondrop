@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.8**（versionCode 268） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.9**（versionCode 269） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -112,11 +112,30 @@ FxxkMoondrop-repo/
 ├── app/                  # Gradle 应用模块（sourceSets 指向 ../src）
 │   └── src/main/         # res / AndroidManifest.xml / resources/META-INF/xposed
 ├── src/                  # 全部 Kotlin 源码（com.fxxkmoondrop.secret）
+├── screenshots/          # README 用到的界面截图
 ├── gradle/               # Gradle wrapper（8.9）
 ├── build.gradle.kts      # AGP 8.5.2 + Kotlin 1.9.22（apply false）
 ├── settings.gradle.kts   # 模块声明与仓库
+├── tools/                # 构建辅助脚本（post_edf.py：EDF 注入 + 重签）
+├── ADAPTATION.md         # 设备适配说明（协议知识 / 踩坑 / 实测数据）
+├── ARCHITECTURE.md       # 系统架构文档（进程模型 / 数据流 / 弹窗布局 / 协议）
+├── DEVELOPMENT.md        # 开发文档（构建环境 / 目录 / 版本规范 / 调试 / 发布清单）
+├── CHANGELOG.md          # 更新日志（按版本号逐条记录）
 └── (无需 xposed-api-stub.jar)  # 已改用 Maven 依赖 io.github.libxposed:api:102.0.0
 ```
+
+## 开发文档
+
+项目在仓库根目录维护了多份开发文档，建议按需阅读：
+
+| 文档 | 内容 | 适用场景 |
+|---|---|---|
+| [ADAPTATION.md](ADAPTATION.md) | 设备适配说明：协议知识、踩坑经验、实测数据、BLE/9ECA 帧格式、ANC 设备码映射、连接策略 | 新增耳机适配、排查连接/协议问题时阅读 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构：双进程模型、跨进程通信、核心模块、关键数据流、弹窗布局、协议架构与设计原则 | 理解项目整体设计、做较大改动前阅读 |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | 开发指南：构建环境与命令、签名与 EDF 作用域注入、目录结构、版本号规范、LSPosed 元信息、依赖清单、调试技巧、发布检查清单 | 本地编译、二次开发、提 MR 前检查 |
+| [CHANGELOG.md](CHANGELOG.md) | 更新日志：按 `alpha.x.y` 逐条记录的功能、修复与逆向进度 | 查看版本演进历史 |
+
+> 版本号格式采用 `alpha.x.y`：`x` 为里程碑、`y` 为迭代，`versionCode` 单调递增。详见 [DEVELOPMENT.md 版本号规范](DEVELOPMENT.md#版本号规范)。
 
 ## 致谢
 
@@ -127,7 +146,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
-- **alpha2.38.8**（当前）：借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档完成布丁 PUDDING（MD-TWS-056）适配——GAIA v4 over RFCOMM/SPP 连接、5 档 ANC（关闭/自适应/通透/抗风/基础降噪）、三路电量含充电盒、增益与指示灯控制
+- **alpha2.38.9**（当前）：借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档完成布丁 PUDDING（MD-TWS-056）适配——GAIA v4 over RFCOMM/SPP 连接、5 档 ANC（关闭/自适应/通透/抗风/基础降噪）、三路电量含充电盒、增益与指示灯控制；并修复 SettingsFragment 重复 `setContentView` 导致的弹窗自定义图标闪退
 - alpha2.38.7：弹窗电量文字恢复写进 GMS 原生 `subhead`（耳机名下方、图标上方），移除自绘 overlay + 硬编码坐标；仅 subhead 缺失时兜底自绘，位置从 `PopupProfile` 屏幕布局库读取
 - alpha2.38.5：修复弹窗电量显示丢失 + ANC 按钮无响应（模式条动态定位追踪 central_btn）
 - alpha2.38.4：弹窗图标+模式面板整体上抬 140px，给设置按钮腾出空间
