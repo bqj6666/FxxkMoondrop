@@ -21,7 +21,6 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
 - **Root 强力保活**、开机自启、后台隐藏（可选开关）
-- **布丁 PUDDING 适配**：基于 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档，支持 GAIA v4 over RFCOMM/SPP 连接，5 档降噪（关闭 / 自适应 / 通透 / 抗风 / 基础降噪）、三路电量（左耳 / 右耳 / 充电盒）、增益控制（低 / 中 / 高）、指示灯开关
 
 ## 软件截图
 
