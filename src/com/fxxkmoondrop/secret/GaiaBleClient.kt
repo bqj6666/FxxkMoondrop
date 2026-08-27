@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothSocket
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -82,6 +83,9 @@ class GaiaBleClient private constructor() {
     var deviceAddress: String? = null
     @Volatile private var connectedDeviceName: String? = null
     private var connected = false
+    // alpha2.38.9: RFCOMM/SPP transport (for Classic BT devices like Pudding)
+    @Volatile private var useRfcomm = false
+    private var rfcommTransport: GaiaRfcommTransport? = null
     private var ancCallback: AncControlCallback? = null
     private var dcBridge: DeviceControlCallback? = null
 
@@ -97,7 +101,7 @@ class GaiaBleClient private constructor() {
     private val probe = CapabilityProbe(
         handler,
         { connected },
-        { gatt != null },
+        { gatt != null || useRfcomm },
         { f, c, p -> writeCommand(f, c, p) }
     )
 
@@ -290,7 +294,7 @@ class GaiaBleClient private constructor() {
     }
 
     @Synchronized
-    fun isConnected(): Boolean = simConnected || (connected && gatt != null)
+    fun isConnected(): Boolean = simConnected || (connected && (gatt != null || useRfcomm))
 
     fun setCallback(cb: Callback?) { this.callback = cb }
 
@@ -821,6 +825,9 @@ class GaiaBleClient private constructor() {
             try { it.disconnect(); it.close() } catch (_: Exception) { }
         }
         gatt = null
+        rfcommTransport?.disconnect()
+        rfcommTransport = null
+        useRfcomm = false
         cmdChar = null
         respChar = null
         dataChar = null
@@ -832,6 +839,54 @@ class GaiaBleClient private constructor() {
         srcClient?.clear()
         srcClient = null
         probe.reset()
+    }
+
+    // alpha2.38.9: RFCOMM/SPP fallback for Classic BT devices (e.g. Pudding MD-TWS-056)
+    private fun tryRfcommFallback(device: BluetoothDevice) {
+        gatt?.let { try { it.disconnect(); it.close() } catch (_: Exception) {} }
+        gatt = null
+        Thread {
+            val transport = GaiaRfcommTransport(
+                handler,
+                { packet -> packetHandler.handlePacket(packet) },
+                {
+                    connected = false
+                    useRfcomm = false
+                    rfcommTransport = null
+                    try { DeviceControlBridge.reset() } catch (_: Exception) {}
+                    callback?.onDisconnected(deviceAddress ?: "")
+                },
+                { msg -> handler.post { callback?.onError(msg) } }
+            )
+            if (transport.connect(device)) {
+                handler.post {
+                    rfcommTransport = transport
+                    useRfcomm = true
+                    connected = true
+                    connectedDeviceName = device.name ?: connectedDeviceName
+                    Log.i(GaiaConstants.TAG, "RFCOMM connected: " + connectedDeviceName)
+                    AppLog.i(GaiaConstants.TAG, "protocol: RFCOMM/SPP connected (" + connectedDeviceName + ")")
+                    probe.reset()
+                    probe.startProbes()
+                    callback?.onConnected(deviceAddress ?: "")
+                    handler.postDelayed({
+                        if (connected) fetchBatteryLevels()
+                        if (connected) {
+                            try { AncBridge.fetchAncMode() } catch (_: Exception) {}
+                            try { AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) {}
+                            try { DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)); DeviceControlBridge.fetchAll() } catch (_: Exception) {}
+                        }
+                    }, 1200)
+                    handler.postDelayed({
+                        if (connected) {
+                            try { DeviceControlBridge.fetchAll() } catch (_: Exception) {}
+                        }
+                    }, 4000)
+                }
+            } else {
+                handler.post { callback?.onError("device unsupported (GAIA/9ECA/RFCOMM)") }
+            }
+        }.start()
     }
 
     fun fetchBatteryLevels() {
@@ -975,6 +1030,10 @@ class GaiaBleClient private constructor() {
 
     @Synchronized
     fun sendGaia(packet: ByteArray) {
+        if (useRfcomm) {
+            rfcommTransport?.send(packet)
+            return
+        }
         val g = gatt; val ch = cmdChar
         if (g == null || ch == null) { callback?.onError("GAIA 未连接"); return }
         gaiaWriteQueue.add(packet)
@@ -1009,6 +1068,7 @@ class GaiaBleClient private constructor() {
     fun hasSrcService(): Boolean = srcClient != null && srcClient!!.isPresent()
 
     fun activeProtocol(): String {
+        if (useRfcomm) return "RFCOMM"
         val gaia = cmdChar != null
         val src = srcClient != null && srcClient!!.isPresent()
         return when {
@@ -1153,9 +1213,9 @@ class GaiaBleClient private constructor() {
                     }
                 } catch (e: Exception) { Log.e(GaiaConstants.TAG, "src service lookup failed", e) }
                 if (!hasGaia && !hasSrc9) {
-                    Log.e(GaiaConstants.TAG, "neither GAIA nor 9ECA service found")
-                    AppLog.e(GaiaConstants.TAG, "protocol: neither GAIA nor 9ECA service found - unsupported device")
-                    callback?.onError("未找到 GAIA / 9ECA 服务（暂不支持该设备）")
+                    Log.d(GaiaConstants.TAG, "no GATT services found, trying RFCOMM/SPP fallback")
+                    AppLog.i(GaiaConstants.TAG, "protocol: no GATT services, trying RFCOMM/SPP fallback")
+                    tryRfcommFallback(g.device)
                     return
                 }
                 connected = true
