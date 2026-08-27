@@ -779,7 +779,6 @@ class SettingsFragment : Fragment() {
         btnRow.gravity = Gravity.END
         btnRow.addView(makeMaterialTextButton("取消", accent) { dlg.dismiss() })
         card.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        dlg.setContentView(card)
         val w2 = dlg.window
         if (w2 != null) w2.setLayout((resources.displayMetrics.widthPixels * 0.85f).toInt(), -2)
         dlg.show()
