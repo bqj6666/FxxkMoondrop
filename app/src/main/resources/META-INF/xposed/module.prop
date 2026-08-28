@@ -1,3 +1,9 @@
+id=com.fxxkmoondrop.secret
+name=FxxkMoondrop
+version=alpha2.38.9
+author=bqj6666
+homepage=https://github.com/bqj6666/FxxkMoondrop
+description=Moondrop 蓝牙耳机助手
 minApiVersion=101
 targetApiVersion=102
 staticScope=true
