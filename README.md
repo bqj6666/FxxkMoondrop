@@ -1,5 +1,7 @@
 # FxxkMoondrop
 
+> **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
+
 > 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.9**（versionCode 269） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
