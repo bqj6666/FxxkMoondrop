@@ -3,6 +3,7 @@ name: Android CI
 on:
   push:
     branches: [main]
+    tags: ['*']
   pull_request:
     branches: [main]
 
@@ -75,8 +76,9 @@ jobs:
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
-      - name: 发布 GitHub Release（Prerelease，仅 push main 触发）
-        if: github.event_name == 'push'
+
+      - name: 发布 GitHub Release（push main -> ci-N 预发布）
+        if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ci-${{ github.run_number }}
@@ -94,5 +96,27 @@ jobs:
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
           prerelease: true
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+
+      - name: 发布 GitHub Release（push 版本号 tag -> 正式版）
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FxxkMoondrop ${{ github.ref_name }}
+          body: |
+            ## 正式发布 `${{ github.ref_name }}`
+
+            - 提交：`${{ github.sha }}`
+            - 触发：tag `${{ github.ref_name }}`
+            - 构建方式：Release + EDF 注入（LSPosed 推荐作用域）
+            - 签名：CN=FxxkMoondrop（v2/v3）
+
+            变更内容请查看 [Commits](https://github.com/bqj6666/FxxkMoondrop/commits/main)。
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
+          prerelease: false
           fail_on_unmatched_files: false
           generate_release_notes: false
