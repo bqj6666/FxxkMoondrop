@@ -1,0 +1,86 @@
+name: Sync module release to modules.lsposed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MIRROR_REPO: Xposed-Modules-Repo/com.fxxkmoondrop.secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip non-version tags
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if ! echo "$TAG" | grep -Eq '^[0-9]+-.+$'; then
+            echo "Tag '$TAG' not a module version (want [0-9]+-...), skip sync."
+            exit 0
+          fi
+          echo "Syncing tag $TAG"
+          echo "$TAG" > /tmp/tag.txt
+
+      - name: Download APK from triggering release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(cat /tmp/tag.txt)
+          mkdir -p apk
+          gh release download "$TAG" --pattern '*.apk' --dir apk --clobber || echo "no apk asset in release $TAG"
+          ls -la apk/
+
+      - name: Sync meta files to mirror main
+        env:
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          git config --global user.name "fxxkmoondrop-sync"
+          git config --global user.email "actions@users.noreply.github.com"
+          rm -rf mirrorclone
+          git clone --depth 1 "https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git" mirrorclone
+          cd mirrorclone
+          cp ../README.md ../SUMMARY ../SCOPE ../SOURCE_URL ../LICENSE . 2>/dev/null || true
+          mkdir -p screenshots
+          cp -r ../screenshots/. screenshots/ 2>/dev/null || true
+          git add -A
+          git commit -m "sync meta files" 2>/dev/null || echo "no meta changes"
+          git push origin HEAD:main
+          cd ..
+
+      - name: Create mirror release + upload APK
+        env:
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          TAG=$(cat /tmp/tag.txt)
+          REPO="${MIRROR_REPO}"
+          # create release (ignore error if exists)
+          curl -sS -X POST -H "Authorization: Bearer ${MIRROR_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/releases" \
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"generate_release_notes\":true}" || true
+          REL_ID=$(curl -sS -H "Authorization: Bearer ${MIRROR_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
+            | python3 -c "import sys,json
+d=json.load(sys.stdin)
+print(d.get('id','') if isinstance(d,dict) else '')")
+          echo "release_id=${REL_ID}" || true
+          for f in apk/*.apk; do
+            [ -e "$f" ] || continue
+            echo "uploading $f"
+            curl -sS -X POST -H "Authorization: Bearer ${MIRROR_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/vnd.android.package-archive" \
+              --data-binary @"$f" \
+              "https://uploads.github.com/repos/${REPO}/releases/${REL_ID}/assets?name=$(basename "$f")"
+            echo
+          done
