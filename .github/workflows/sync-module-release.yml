@@ -3,7 +3,13 @@ name: Sync module release to modules.lsposed
 on:
   release:
     types: [published]
+  push:
+    tags: ['*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: '要同步的 tag，如 270-alpha2.38.10 或 ci-57'
+        required: true
 
 jobs:
   mirror:
@@ -16,40 +22,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve tag
+      - name: Resolve tag + prerelease flag
         id: tag
-        run: echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Skip non-version tags
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          if ! echo "$TAG" | grep -Eq '^[0-9]+-.+$'; then
-            echo "Tag '$TAG' not a module version (want [0-9]+-...), skip sync."
-            exit 0
+          TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${GITHUB_REF_NAME}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if echo "$TAG" | grep -Eq '^[0-9]+-.+$'; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "Syncing tag $TAG"
-          echo "$TAG" > /tmp/tag.txt
 
       - name: Download APK from triggering release
+        id: download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG=$(cat /tmp/tag.txt)
+          TAG="${{ steps.tag.outputs.tag }}"
           mkdir -p apk
           gh release download "$TAG" --pattern '*.apk' --dir apk --clobber || echo "no apk asset in release $TAG"
           ls -la apk/
+          if ls apk/*.apk >/dev/null 2>&1; then
+            echo "has_apk=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_apk=false" >> "$GITHUB_OUTPUT"
+            echo "No APK for $TAG — release 可能尚未就绪，跳过本次建 release（将由 android-ci 的 dispatch 补同步）"
+          fi
 
       - name: Sync meta files to mirror main
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
         run: |
+          # 保证 meta 始终来自默认分支 main 的最新版本
+          git fetch origin main --depth 1 || true
+          git checkout origin/main -- docs/module README.md SUMMARY SCOPE SOURCE_URL LICENSE screenshots 2>/dev/null || true
           git config --global user.name "fxxkmoondrop-sync"
           git config --global user.email "actions@users.noreply.github.com"
           rm -rf mirrorclone
           git clone --depth 1 "https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git" mirrorclone
           cd mirrorclone
-          cp ../README.md ../SUMMARY ../SCOPE ../SOURCE_URL ../LICENSE . 2>/dev/null || true
+          cp ../docs/module/README.md ./README.md 2>/dev/null || cp ../README.md ./README.md
+          cp ../SUMMARY ../SCOPE ../SOURCE_URL ../LICENSE . 2>/dev/null || true
           mkdir -p screenshots
           cp -r ../screenshots/. screenshots/ 2>/dev/null || true
           git add -A
@@ -58,21 +72,20 @@ jobs:
           cd ..
 
       - name: Create mirror release + upload APK
+        if: steps.download.outputs.has_apk == 'true'
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
         run: |
-          TAG=$(cat /tmp/tag.txt)
+          TAG="${{ steps.tag.outputs.tag }}"
           REPO="${MIRROR_REPO}"
-          # create release (ignore error if exists)
           curl -sS -X POST -H "Authorization: Bearer ${MIRROR_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${REPO}/releases" \
-            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"generate_release_notes\":true}" || true
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE},\"generate_release_notes\":true}" || true
           REL_ID=$(curl -sS -H "Authorization: Bearer ${MIRROR_TOKEN}" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
-            | python3 -c "import sys,json
-d=json.load(sys.stdin)
-print(d.get('id','') if isinstance(d,dict) else '')")
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','') if isinstance(d,dict) else '')")
           echo "release_id=${REL_ID}" || true
           for f in apk/*.apk; do
             [ -e "$f" ] || continue

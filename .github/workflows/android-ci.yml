@@ -10,9 +10,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 发布 GitHub Release 
+    # 发布 GitHub Release + 触发镜像自动同步
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,6 +100,12 @@ jobs:
           fail_on_unmatched_files: false
           generate_release_notes: false
 
+      - name: 触发模块镜像同步（ci 预发布）
+        if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run sync-module-release.yml -f tag="ci-${{ github.run_number }}" || true
+
       - name: 发布 GitHub Release（push 版本号 tag -> 正式版）
         if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -120,3 +127,9 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: false
           generate_release_notes: false
+
+      - name: 触发模块镜像同步（正式版）
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run sync-module-release.yml -f tag="${{ github.ref_name }}" || true
