@@ -26,16 +26,18 @@ class PermissionChecker {
             val btOk = Build.VERSION.SDK_INT < 31 ||
                     ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
                     PackageManager.PERMISSION_GRANTED
-            list.add(Item("蓝牙权限", btOk,
-                    if (btOk) "已授予" else "未授予，无法扫描 / 连接耳机",
+            list.add(Item(Lang.t(ctx, "蓝牙权限", "Bluetooth permission"),
+                    btOk,
+                    if (btOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，无法扫描 / 连接耳机", "Not granted, cannot scan / connect earbuds"),
                     ACTION_RUNTIME, 1))
 
             // 2. 通知权限（Android 13+ 运行时）
             val notifOk = Build.VERSION.SDK_INT < 33 ||
                     ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
                     PackageManager.PERMISSION_GRANTED
-            list.add(Item("通知权限", notifOk,
-                    if (notifOk) "已授予" else "未授予，耳机弹窗通知将无法显示",
+            list.add(Item(Lang.t(ctx, "通知权限", "Notification permission"),
+                    notifOk,
+                    if (notifOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，耳机弹窗通知将无法显示", "Not granted, earbuds popup notifications won\'t show"),
                     ACTION_RUNTIME, 2))
 
             // 3. 悬浮窗权限（特殊权限）
@@ -44,8 +46,9 @@ class PermissionChecker {
             } catch (_: Exception) {
                 false
             }
-            list.add(Item("悬浮窗权限", overlayOk,
-                    if (overlayOk) "已授予" else "未授予，连接弹窗悬浮卡片将无法显示",
+            list.add(Item(Lang.t(ctx, "悬浮窗权限", "Overlay permission"),
+                    overlayOk,
+                    if (overlayOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，连接弹窗悬浮卡片将无法显示", "Not granted, connect popup cards won\'t show"),
                     ACTION_OVERLAY, 0))
 
             // 4. 电池优化白名单（建议项）
@@ -55,22 +58,24 @@ class PermissionChecker {
             } catch (_: Exception) {
                 true
             }
-            list.add(Item("电池优化白名单", battOk,
-                    if (battOk) "已加入" else "未加入，后台监听可能被系统杀掉",
+            list.add(Item(Lang.t(ctx, "电池优化白名单", "Battery optimization whitelist"),
+                    battOk,
+                    if (battOk) Lang.t(ctx, "已加入", "Exempted") else Lang.t(ctx, "未加入，后台监听可能被系统杀掉", "Not exempted, background monitoring may be killed"),
                     ACTION_BATTERY, 0))
 
             // 5. Root / 特权环境（alpha1.34：显示项，非缺失项）
             val rooted = EnvProbe.isRooted()
-            list.add(Item("Root / 特权环境", true,
-                    if (rooted) "已检测到 Root（配合 FastPairHook 使用）"
-                    else "未检测到（纯净环境：内置自扫可用）",
+            list.add(Item(Lang.t(ctx, "Root / 特权环境", "Root / privileged env"), true,
+                    if (rooted) Lang.t(ctx, "已检测到 Root（配合 FastPairHook 使用）", "Root detected (use with FastPairHook)")
+                    else Lang.t(ctx, "未检测到（纯净环境：内置自扫可用）", "Not detected (clean env: built-in scan works)"),
                     ACTION_NONE, 0))
 
             // 6. FastPairHook 模块（LSPosed）（alpha1.34：缺失时提示手动排查）
             val hookActive = EnvProbe.isFastPairHookActive(ctx)
-            list.add(Item("FastPairHook 模块（LSPosed）", hookActive,
-                    if (hookActive) "已激活（GMS 扫描桥接正常）"
-                    else "未激活；纯净环境将自动使用内置自扫",
+            list.add(Item(Lang.t(ctx, "FastPairHook 模块（LSPosed）", "FastPairHook module (LSPosed)"),
+                    hookActive,
+                    if (hookActive) Lang.t(ctx, "已激活（GMS 扫描桥接正常）", "Active (GMS scan bridging OK)")
+                    else Lang.t(ctx, "未激活；纯净环境将自动使用内置自扫", "Not active; clean env will use built-in scan"),
                     ACTION_NONE, 0))
 
             // 7. GAIA 直连链路（alpha1.34：动态真实状态，不再恒 true）
@@ -78,15 +83,15 @@ class PermissionChecker {
             val gaiaDetail: String
             if (hookActive) {
                 gaiaOk = true
-                gaiaDetail = "FastPairHook 桥接：LE 地址发现 → GAIA 直连"
+                gaiaDetail = Lang.t(ctx, "FastPairHook 桥接：LE 地址发现 → GAIA 直连", "FastPairHook bridge: LE discover → GAIA direct")
             } else if (!rooted) {
                 gaiaOk = true
-                gaiaDetail = "备用模式：应用内置 BLE 自扫（无需 Root）"
+                gaiaDetail = Lang.t(ctx, "备用模式：应用内置 BLE 自扫（无需 Root）", "Fallback: built-in BLE scan (no Root needed)")
             } else {
                 gaiaOk = false
-                gaiaDetail = "检测到 Root 但模块未激活；请启用 FastPairHook 或使用纯净环境"
+                gaiaDetail = Lang.t(ctx, "检测到 Root 但模块未激活；请启用 FastPairHook 或使用纯净环境", "Root detected but module not active; enable FastPairHook or use clean env")
             }
-            list.add(Item("GAIA 直连", gaiaOk, gaiaDetail, ACTION_NONE, 0))
+            list.add(Item(Lang.t(ctx, "GAIA 直连", "GAIA direct link"), gaiaOk, gaiaDetail, ACTION_NONE, 0))
 
             return list
         }

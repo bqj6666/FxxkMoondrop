@@ -28,10 +28,19 @@ import java.util.zip.ZipOutputStream
 class LogCollector {
     companion object {
         /** 隐私声明（设置页弹窗复用） */
-        const val PRIVACY_NOTICE = "日志将打包为 ZIP（含多分类日志），包含：设备型号与系统版本、应用与模块版本、" +
-                "应用设置、Root/环境检测状态、蓝牙连接信息与系统日志等。\n\n" +
-                "\u26a0\ufe0f 这些信息可能涉及设备隐私，仅供您本人调试与设备适配使用；" +
-                "请勿上传至公开平台或分享给不可信的人。"
+        /** 隐私声明（设置页弹窗复用）；按当前语言返回。 */
+        @JvmStatic
+        fun privacyNotice(ctx: Context): String =
+                if (Lang.isZh(ctx))
+                    "日志将打包为 ZIP（含多分类日志），包含：设备型号与系统版本、应用与模块版本、" +
+                    "应用设置、Root/环境检测状态、蓝牙连接信息与系统日志等。\n\n" +
+                    "\u26a0\ufe0f 这些信息可能涉及设备隐私，仅供您本人调试与设备适配使用；" +
+                    "请勿上传至公开平台或分享给不可信的人。"
+                else
+                    "Logs will be packaged as ZIP (multiple categories): device model & OS version, app & module version, " +
+                    "app settings, Root/env status, Bluetooth connection info, and system logs.\n\n" +
+                    "\u26a0\ufe0f These may contain device privacy info, only for your own debugging & adaptation; " +
+                    "please do not upload publicly or share with untrusted people."
 
         private const val ZIP_PREFIX = "FxxkMoondrop_logs_"
 
@@ -46,9 +55,11 @@ class LogCollector {
             val baseName = ZIP_PREFIX + stamp
             try {
                 // 1) 组装 5 条分类日志
-                val names = arrayOf(
-                        "01_系统信息.txt", "02_应用与设置.txt", "03_蓝牙信息.txt",
+                val names =
+                        if (Lang.isZh(ctx)) arrayOf("01_系统信息.txt", "02_应用与设置.txt", "03_蓝牙信息.txt",
                         "04_运行环境.txt", "05_logcat.txt", "06_运行日志.txt")
+                        else arrayOf("01_system.txt", "02_app_settings.txt", "03_bluetooth.txt",
+                        "04_env.txt", "05_logcat.txt", "06_runtime_log.txt")
                 val contents = arrayOf(
                         buildSystemInfo(ctx, stamp),
                         buildAppInfo(ctx),
@@ -61,7 +72,7 @@ class LogCollector {
                 var base = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                 if (base == null) base = ctx.filesDir
                 val dir = File(base, "logs")
-                if (!dir.exists() && !dir.mkdirs()) return "保存失败: 无法创建目录 $dir"
+                if (!dir.exists() && !dir.mkdirs()) return Lang.t(ctx, "保存失败: 无法创建目录 ", "Save failed: cannot create dir ") + dir
                 val zipFile = File(dir, "$baseName.zip")
 
                 // 3) 打包 ZIP
@@ -88,9 +99,9 @@ class LogCollector {
                 } catch (_: Exception) { }
 
                 // 6) 最终回退：私有目录
-                return zipFile.absolutePath + "\n（Root 不可用，已存应用目录；分享前请自行导出）"
+                return zipFile.absolutePath + Lang.t(ctx, "\n（Root 不可用，已存应用目录；分享前请自行导出）", "\n(Root unavailable, saved to app dir; export manually before sharing)")
             } catch (e: Exception) {
-                return "保存失败: $e"
+                return Lang.t(ctx, "保存失败: ", "Save failed: ") + e
             }
         }
 

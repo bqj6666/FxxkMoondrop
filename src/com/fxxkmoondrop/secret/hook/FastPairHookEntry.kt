@@ -408,6 +408,7 @@ class FastPairHookEntry {
      *  恢复 subhead 方案：位置由 GMS 布局决定（天然在耳机名下方、图标上方），样式沿用系统原生，无自绘背景。
      *  不再散落硬编码坐标；仅当 subhead 缺失时的回退自绘位置从 PopupProfile 读，不写死。 */
     private fun injectBatteryOverlay(act: android.app.Activity) {
+        val zh = langZh(act)
         try {
             sBatteryOverlayActivity = act
             val mac = GaiaBleClient.getInstance().deviceAddress
@@ -418,11 +419,11 @@ class FastPairHookEntry {
             if (r < 0 && mac != null) r = BatteryStore.getGaiaRight(mac).let { if (it >= 0) it else BatteryStore.get(mac) }
             if (sys < 0 && mac != null) sys = BatteryStore.get(mac)
             val text: String = when {
-                l >= 0 && r >= 0 -> "左耳 " + l + "%  ·  右耳 " + r + "%"
-                l >= 0 -> "左耳 " + l + "%"
-                r >= 0 -> "右耳 " + r + "%"
-                sys >= 0 -> "耳机电量 " + sys + "%"
-                else -> "耳机电量 --%"
+                l >= 0 && r >= 0 -> if (zh) "左耳 " + l + "%  ·  右耳 " + r + "%" else "L " + l + "%  ·  R " + r + "%"
+                l >= 0 -> if (zh) "左耳 " + l + "%" else "L " + l + "%"
+                r >= 0 -> if (zh) "右耳 " + r + "%" else "R " + r + "%"
+                sys >= 0 -> if (zh) "耳机电量 " + sys + "%" else "Battery " + sys + "%"
+                else -> if (zh) "耳机电量 --%" else "Battery --%"
             }
             val decor = act.window.decorView
             val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
@@ -480,6 +481,7 @@ class FastPairHookEntry {
     private fun showConnectingUi() {
         try {
             val act = sHalfSheetActivity ?: return
+            val zh = langZh(act)
             Handler(Looper.getMainLooper()).post {
                 try {
                     val decor = act.window.decorView
@@ -487,7 +489,7 @@ class FastPairHookEntry {
                     val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
                     val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
                     if (sub is android.widget.TextView) {
-                        sub.text = "正在连接…"
+                        sub.text = if (zh) "正在连接…" else "Connecting…"
                         sub.visibility = android.view.View.VISIBLE
                     }
                     // v0.7: 连接中 -> 按钮禁用（原生置灰样式），不再自绘转圈
@@ -634,13 +636,14 @@ class FastPairHookEntry {
         try {
             val decor = act.window.decorView
             if (decor.findViewWithTag<android.view.View>("fxxk_mode_bar") != null) return
+            val zh = langZh(act)
             val bar = android.widget.LinearLayout(act)
             bar.tag = "fxxk_mode_bar"
             bar.orientation = android.widget.LinearLayout.HORIZONTAL
             bar.gravity = android.view.Gravity.CENTER
-            bar.addView(buildModeItem(act, MODE_OFF, "关闭"))
-            bar.addView(buildModeItem(act, MODE_ANC, "降噪"))
-            bar.addView(buildModeItem(act, MODE_TRANS, "透传"))
+            bar.addView(buildModeItem(act, MODE_OFF, if (zh) "关闭" else "Off"))
+            bar.addView(buildModeItem(act, MODE_ANC, if (zh) "降噪" else "ANC"))
+            bar.addView(buildModeItem(act, MODE_TRANS, if (zh) "透传" else "Transparency"))
             var showWind = true
             try {
                 val cur = act.applicationContext.contentResolver.query(
@@ -656,7 +659,7 @@ class FastPairHookEntry {
             } catch (t: Throwable) {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
-            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, AncProfileLib.ANC_MODE_NAMES[3]))
+            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, if (zh) AncProfileLib.ANC_MODE_NAMES[3] else "Wind"))
             val prof = resolveScreenProfile(act)
             val d = act.resources.displayMetrics.density
             val lp = android.widget.FrameLayout.LayoutParams(
@@ -715,6 +718,7 @@ class FastPairHookEntry {
     private fun injectSettingsButton(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
+            val zh = langZh(act)
             val old = decor.findViewWithTag<android.view.View>("fxxk_settings_btn")
             if (old != null) (decor as android.view.ViewGroup).removeView(old)
 
@@ -733,7 +737,7 @@ class FastPairHookEntry {
                 android.widget.TextView(act)
             }
             btn.tag = "fxxk_settings_btn"
-            btn.text = "设置"
+            btn.text = if (zh) "设置" else "Settings"
             btn.gravity = android.view.Gravity.CENTER
             btn.isSingleLine = true
 
@@ -1242,6 +1246,23 @@ class FastPairHookEntry {
     // ** alpha1.32: 应用请求 -> GMS 侧 BLE 扫描发现耳机 LE 地址（ColorOS 放行 GMS，第三方应用被拦） **
 
     /** alpha1.32b: 跨进程扫描锁——GMS 多子进程只允许一个扫描（文件锁，原子 createNewFile） */
+
+    /** alpha2.38.10: 读取弹窗显示语言（跨进程 content://...lang）返回是否中文 */
+    private fun langZh(ctx: android.content.Context): Boolean {
+        return try {
+            val cur = ctx.contentResolver.query(
+                    Uri.parse("content://com.fxxkmoondrop.secret.prefs/lang"),
+                    null, null, null, null)
+            var m = 0
+            if (cur != null) {
+                try { if (cur.moveToFirst()) m = cur.getInt(cur.getColumnIndexOrThrow("_value")) } finally { cur.close() }
+            }
+            when (m) { 1 -> true; 2 -> false; else -> java.util.Locale.getDefault().language.startsWith("zh") }
+        } catch (t: Throwable) {
+            java.util.Locale.getDefault().language.startsWith("zh")
+        }
+    }
+
     private fun gmsContext(): Context? {
         return try {
             val app = HookHelper.callStaticMethod(

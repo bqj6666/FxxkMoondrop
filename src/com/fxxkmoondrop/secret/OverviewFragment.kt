@@ -76,7 +76,7 @@ class OverviewFragment : Fragment() {
     private var dcControlCard: LinearLayout? = null  // alpha2.31
     // alpha2.28: ANC icon bitmap cache (4 modes x 2 colors = 8 slots)
     private var ancIconCache: Array<android.graphics.drawable.Drawable?>? = null
-    @Volatile private var moonProcState = "未知"
+    @Volatile private var moonProcState = Lang.t("未知", "Unknown")
     @Volatile private var cachedHasRoot: Boolean? = null // alpha2.28: cache root check result
     private val autoRefreshHandler = Handler(Looper.getMainLooper())
 
@@ -104,6 +104,7 @@ class OverviewFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, containerView: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
         super.onCreateView(inflater, containerView, savedInstanceState)
+        Lang.refresh(requireContext())
 
         // ── Material You 主题（alpha2.2：统一 ThemeUtil.Palette → 动态/种子/AMOLED 全支持）──
         val pal0 = ThemeUtil.Palette(requireContext())
@@ -196,7 +197,7 @@ class OverviewFragment : Fragment() {
         svcStatus!!.isSingleLine = true
         svcStatus!!.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         svcStatus!!.setTextColor(onContainer)
-        svcStatus!!.text = "运行中"
+        svcStatus!!.text = Lang.t("运行中", "Running")
         titleRow.addView(svcStatus)
         texts.addView(titleRow)
         texts.addView(spacer(dp(4)))
@@ -244,7 +245,7 @@ class OverviewFragment : Fragment() {
         root.addView(spacer(dp(16)))
 
         // ── 主操作：开始/停止监听（Filled 按钮）──
-        mainBtn = makeButton("开始后台监听", R.drawable.ic_play, primaryColor, onPrimaryColor) {
+        mainBtn = makeButton(Lang.t("开始后台监听", "Start background monitor"), R.drawable.ic_play, primaryColor, onPrimaryColor) {
             requestNeededPermissions()
             if (HeadsetDetectService.RUNNING) {
                 requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("enable", false).commit()
@@ -269,7 +270,7 @@ class OverviewFragment : Fragment() {
 
         // ── 降噪控制（GAIA 直连）──
         ancTitle = TextView(requireContext())
-        ancTitle!!.text = "降噪控制"
+        ancTitle!!.text = Lang.t("降噪控制", "Noise Control")
         ancTitle!!.textSize = 13f
         ancTitle!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         ancTitle!!.setTextColor(outline)
@@ -325,7 +326,7 @@ class OverviewFragment : Fragment() {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(dp(2)))
             val lbl = TextView(requireContext())
-            lbl.text = ANC_NAMES[fm]
+            lbl.text = AncProfileLib.modeNamesFull(requireContext())[fm]
             lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
@@ -360,7 +361,7 @@ class OverviewFragment : Fragment() {
         dcSpatialRow.gravity = Gravity.CENTER_VERTICAL
         dcSpatialRow.tag = "dc_spatial_row"
         val sLabel = TextView(requireContext())
-        sLabel.text = "空间音频"
+        sLabel.text = Lang.t("空间音频", "Spatial Audio")
         sLabel.textSize = 12f
         sLabel.setTextColor(onContainerColor)
         dcSpatialRow.addView(sLabel, LinearLayout.LayoutParams(-2, -2))
@@ -389,7 +390,7 @@ class OverviewFragment : Fragment() {
         dcTrackingRow.gravity = Gravity.CENTER_VERTICAL
         dcTrackingRow.tag = "dc_tracking_row"
         val tLabel = TextView(requireContext())
-        tLabel.text = "追踪模式"
+        tLabel.text = Lang.t("追踪模式", "Tracking Mode")
         tLabel.textSize = 11f
         tLabel.setTextColor(onContainerColor)
         dcTrackingRow.addView(tLabel, LinearLayout.LayoutParams(-2, -2))
@@ -441,7 +442,7 @@ class OverviewFragment : Fragment() {
         dcGainRow.gravity = Gravity.CENTER_VERTICAL
         dcGainRow.tag = "dc_gain_row"
         val gLabel = TextView(requireContext())
-        gLabel.text = "增益"
+        gLabel.text = Lang.t("增益", "Gain")
         gLabel.textSize = 12f
         gLabel.setTextColor(onContainerColor)
         dcGainRow.addView(gLabel, LinearLayout.LayoutParams(-2, -2))
@@ -493,12 +494,12 @@ class OverviewFragment : Fragment() {
         dcLedRow.gravity = Gravity.CENTER_VERTICAL
         dcLedRow.tag = "dc_led_row"
         val lLabel = TextView(requireContext())
-        lLabel.text = "指示灯"
+        lLabel.text = Lang.t("指示灯", "Indicator")
         lLabel.textSize = 12f
         lLabel.setTextColor(onContainerColor)
         dcLedRow.addView(lLabel, LinearLayout.LayoutParams(-2, -2))
         dcLedRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
-        val ledNames = arrayOf("开", "关")
+        val ledNames = arrayOf(Lang.t("开", "On"), Lang.t("关", "Off"))
         for (lm in 0..1) {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
@@ -543,7 +544,7 @@ class OverviewFragment : Fragment() {
         dcControlCard = dcCard
         root.addView(spacer(dp(8)))
 
-        root.addView(makeButton("刷新状态 / 检查 Moondrop", R.drawable.ic_refresh, container, onContainer) { refreshAnc() })
+        root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"), R.drawable.ic_refresh, container, onContainer) { refreshAnc() })
 
         root.addView(spacer(dp(12)))
 
@@ -762,10 +763,10 @@ class OverviewFragment : Fragment() {
             if (Build.VERSION.SDK_INT >= 31
                     && requireContext().checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                     != PackageManager.PERMISSION_GRANTED) {
-                return "缺少蓝牙权限，无法扫描"
+                return Lang.t("缺少蓝牙权限，无法扫描", "Missing BLUETOOTH permission, cannot scan")
             }
             val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter == null) return "此设备无蓝牙"
+            if (adapter == null) return Lang.t("此设备无蓝牙", "No Bluetooth on this device")
             val bonded = adapter.bondedDevices
             val sb = StringBuilder()
             if (bonded != null) {
@@ -776,10 +777,10 @@ class OverviewFragment : Fragment() {
                     }
                 }
             }
-            if (sb.length == 0) return "未找到已配对的 Moondrop 设备"
+            if (sb.length == 0) return Lang.t("未找到已配对的 Moondrop 设备", "No paired Moondrop device found")
             return sb.toString().trim()
         } catch (e: Exception) {
-            return "扫描失败: " + e.message
+            return Lang.t("扫描失败: ", "Scan failed: ") + e.message
         }
     }
 
@@ -850,7 +851,7 @@ class OverviewFragment : Fragment() {
 
         // 标题：缺失用主题色，全就绪用绿色（均已随深浅色取值）
         val head = TextView(requireContext())
-        head.text = if (missing == 0) "✅  所有必要权限均已就绪" else "⚠️  发现 " + missing + " 项权限缺失"
+        head.text = if (missing == 0) Lang.t("✅  所有必要权限均已就绪", "✅  All required permissions ready") else Lang.t("⚠️  发现 ", "⚠️  Found ") + missing + Lang.t(" 项权限缺失", " permission(s) missing")
         head.textSize = 22f
         head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         head.setTextColor(if (missing == 0) green else accent)
@@ -878,7 +879,7 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             val name = TextView(requireContext())
-            name.text = per.name + (if (per.ok) "" else (if (per.action == PermissionChecker.ACTION_NONE) "（需手动处理）" else "（点击修复）"))
+            name.text = per.name + (if (per.ok) "" else (if (per.action == PermissionChecker.ACTION_NONE) Lang.t("（需手动处理）", " (manual required)") else Lang.t("（点击修复）", " (tap to fix)")))
             name.textSize = 15f
             name.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             name.setTextColor(onSurf)
@@ -908,7 +909,7 @@ class OverviewFragment : Fragment() {
         // M3 TextButton 风格按钮（主题色文字 + 水波纹）
         val btnRow = LinearLayout(requireContext())
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton(if (missing == 0) "知道了" else "稍后处理",
+        btnRow.addView(makeMaterialTextButton(if (missing == 0) Lang.t("知道了", "Got it") else Lang.t("稍后处理", "Later"),
                 accent) { dlg.dismiss() })
         cardBody.addView(btnRow, lp(false))
 
@@ -951,7 +952,7 @@ class OverviewFragment : Fragment() {
                 else -> toast(it.detail)
             }
         } catch (e: Exception) {
-            toast("跳转失败: " + e.message)
+            toast(Lang.t("跳转失败: ", "Open failed: ") + e.message)
         }
     }
 
@@ -959,7 +960,7 @@ class OverviewFragment : Fragment() {
         updateRunStatus()
         val svc = HeadsetDetectService.RUNNING
         mainBtn?.let {
-            it.text = if (svc) "停止后台监听" else "开始后台监听"
+            it.text = if (svc) Lang.t("停止后台监听", "Stop background monitor") else Lang.t("开始后台监听", "Start background monitor")
             it.setIconResource(if (svc) R.drawable.ic_stop else R.drawable.ic_play)
         }
         // alpha2.4: onResume 同步刷新状态面板（修复模拟恢复后电量行残留显示）
@@ -970,25 +971,25 @@ class OverviewFragment : Fragment() {
     private fun updateRunStatus() {
         val svc = HeadsetDetectService.RUNNING
         var ancSt = moonProcState
-        if (ancSt == null) ancSt = "未知"
+        if (ancSt == null) ancSt = Lang.t("未知", "Unknown")
         val ancOk = ancSt.contains("✅")
         val ancFrozen = ancSt.contains("❄️")
         val text: String
         val color: Int
         if (svc && ancOk) {
-            text = "✅  运行中"
+            text = Lang.t("✅  运行中", "✅  Running")
             color = green
         } else if (svc && ancFrozen) {
-            text = "❄️  运行中（降噪控制已冻结）"
+            text = Lang.t("❄️  运行中（降噪控制已冻结）", "❄️  Running (ANC frozen)")
             color = onVariantColor
         } else if (svc) {
-            text = "⚠️  监听运行中 · 降噪控制未运行"
+            text = Lang.t("⚠️  监听运行中 · 降噪控制未运行", "⚠️  Monitor running · ANC not running")
             color = red
         } else if (ancOk) {
-            text = "⚠️  监听未运行 · 降噪控制运行中"
+            text = Lang.t("⚠️  监听未运行 · 降噪控制运行中", "⚠️  Monitor not running · ANC running")
             color = red
         } else {
-            text = "⛔  未运行"
+            text = Lang.t("⛔  未运行", "⛔  Not running")
             color = red
         }
         setHeroStatus(text, color)
@@ -1024,11 +1025,11 @@ class OverviewFragment : Fragment() {
         }
         // 官方 StatusHeader：品牌后跟短状态词（Active/…），完整说明交给 detail 行
         val shortWord: String
-        if (iconRes == R.drawable.ic_check) shortWord = "运行中"
-        else if (iconRes == R.drawable.ic_ac_unit) shortWord = "运行中"
-        else if (iconRes == R.drawable.ic_warning) shortWord = if (label.contains("监听未运行")) "已停止" else "监听中"
-        else if (iconRes == R.drawable.ic_block) shortWord = "未运行"
-        else shortWord = "检查中"
+        if (iconRes == R.drawable.ic_check) shortWord = Lang.t("运行中", "Running")
+        else if (iconRes == R.drawable.ic_ac_unit) shortWord = Lang.t("运行中", "Running")
+        else if (iconRes == R.drawable.ic_warning) shortWord = if (label.contains("监听未运行")) Lang.t("已停止", "Stopped") else Lang.t("监听中", "Monitoring")
+        else if (iconRes == R.drawable.ic_block) shortWord = Lang.t("未运行", "Not running")
+        else shortWord = Lang.t("检查中", "Checking")
         statusIcon?.let {
             it.setImageResource(iconRes)
             it.imageTintList = ColorStateList.valueOf(onContainerColor)
@@ -1117,7 +1118,7 @@ class OverviewFragment : Fragment() {
         card.addView(cardBody, android.widget.FrameLayout.LayoutParams(-1, -2))
 
         val head = TextView(requireContext())
-        head.text = "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）"
+        head.text = Lang.t("弹窗图标（当前：", "Popup icon (current: ") + (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + ")"
         head.textSize = 22f
         head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         head.setTextColor(accent)
@@ -1125,9 +1126,9 @@ class OverviewFragment : Fragment() {
         cardBody.addView(head, lp(false))
         cardBody.addView(spacer(dp(10)))
 
-        val items = if (custom) arrayOf("📷  从相册选择", "🧹  恢复默认图标") else arrayOf("📷  从相册选择")
-        val subs = if (custom) arrayOf("选择一张图片，替换 Google 弹窗显示的耳机图标", "删除自定义图标，恢复软件自带默认图")
-        else arrayOf("选择一张图片，替换 Google 弹窗显示的耳机图标")
+        val items = if (custom) arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"), Lang.t("🧹  恢复默认图标", "🧹  Restore default icon")) else arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"))
+        val subs = if (custom) arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"), Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"))
+        else arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"))
         for (i in items.indices) {
             val which = i
             val row = LinearLayout(requireContext())
@@ -1164,9 +1165,9 @@ class OverviewFragment : Fragment() {
                     pick.addCategory(Intent.CATEGORY_OPENABLE)
                     try {
                         requireActivity().startActivityForResult(
-                                Intent.createChooser(pick, "选择耳机图标"), REQ_PICK_ICON)
+                                Intent.createChooser(pick, Lang.t("选择耳机图标", "Choose earbud icon")), REQ_PICK_ICON)
                     } catch (t: Throwable) {
-                        toast("无法打开选择器: " + t.message)
+                        toast(Lang.t("无法打开选择器: ", "Cannot open picker: ") + t.message)
                     }
                 } else {
                     resetCustomIcon()
@@ -1178,7 +1179,7 @@ class OverviewFragment : Fragment() {
 
         val btnRow = LinearLayout(requireContext())
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", accent) { dlg.dismiss() })
+        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), accent) { dlg.dismiss() })
         cardBody.addView(btnRow, lp(false))
 
         dlg.setContentView(card)
@@ -1190,7 +1191,7 @@ class OverviewFragment : Fragment() {
         Thread {
             val r = runRoot("rm -f " + GMS_ICON_PATH + " && echo OK")
             val ok = r != null && r.contains("OK")
-            requireActivity().runOnUiThread { toast(if (ok) "已恢复默认图标（下次连接生效）" else "恢复失败，请检查 Root") }
+            requireActivity().runOnUiThread { toast(if (ok) Lang.t("已恢复默认图标（下次连接生效）", "Default icon restored (takes effect next connect)") else Lang.t("恢复失败，请检查 Root", "Restore failed, check Root")) }
         }.start()
     }
 
@@ -1199,13 +1200,13 @@ class OverviewFragment : Fragment() {
             try {
                 val input = requireContext().contentResolver.openInputStream(uri)
                 if (input == null) {
-                    requireActivity().runOnUiThread { toast("无法读取所选图片") }
+                    requireActivity().runOnUiThread { toast(Lang.t("无法读取所选图片", "Cannot read the selected image")) }
                     return@Thread
                 }
                 val bmp = BitmapFactory.decodeStream(input)
                 try { input.close() } catch (_: Exception) { }
                 if (bmp == null) {
-                    requireActivity().runOnUiThread { toast("图片解码失败") }
+                    requireActivity().runOnUiThread { toast(Lang.t("图片解码失败", "Image decode failed")) }
                     return@Thread
                 }
                 val w = bmp.width
@@ -1231,12 +1232,12 @@ class OverviewFragment : Fragment() {
                 }
                 val size = out.length()
                 if (size > 1024 * 1024) {
-                    requireActivity().runOnUiThread { toast("图片仍超 1MB，请换小图") }
+                    requireActivity().runOnUiThread { toast(Lang.t("图片仍超 1MB，请换小图", "Image still over 1MB, please pick a smaller one")) }
                     return@Thread
                 }
                 val uid = runRoot("stat -c %u:%g /data/user/0/com.google.android.gms")?.trim()
                 if (uid == null || !uid.contains(":")) {
-                    requireActivity().runOnUiThread { toast("读取 GMS 属主失败") }
+                    requireActivity().runOnUiThread { toast(Lang.t("读取 GMS 属主失败", "Failed to read GMS owner")) }
                     return@Thread
                 }
                 val cmd = "cp '" + out.absolutePath + "' " + GMS_ICON_PATH +
@@ -1244,11 +1245,11 @@ class OverviewFragment : Fragment() {
                         " && chmod 644 " + GMS_ICON_PATH + " && echo OK"
                 val r = runRoot(cmd)
                 val ok = r != null && r.contains("OK")
-                requireActivity().runOnUiThread { toast(if (ok) "弹窗图标已更新（下次连接生效）" else "写入图标失败，请检查 Root") }
+                requireActivity().runOnUiThread { toast(if (ok) Lang.t("弹窗图标已更新（下次连接生效）", "Popup icon updated (takes effect next connect)") else Lang.t("写入图标失败，请检查 Root", "Write icon failed, check Root")) }
                 if (scaled !== bmp) scaled.recycle()
                 if (bmp != null && !bmp.isRecycled) bmp.recycle()
             } catch (t: Throwable) {
-                requireActivity().runOnUiThread { toast("图标处理失败: " + t.message) }
+                requireActivity().runOnUiThread { toast(Lang.t("图标处理失败: ", "Icon process failed: ") + t.message) }
             }
         }.start()
     }
@@ -1264,17 +1265,25 @@ class OverviewFragment : Fragment() {
     // ── Root 强力保活 ──
     private fun showRootWarnDialog(sw: PillSwitch) {
         val (d, box) = M3Ui.materialDialog(requireContext(), primaryColor, cardSurfaceColor)
-        box.addView(M3Ui.dialogTitle(requireContext(), "权限风险警告", onSurfaceColor),
+        box.addView(M3Ui.dialogTitle(requireContext(), Lang.t("权限风险警告", "Permission risk warning"), onSurfaceColor),
                 LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
         val msg = TextView(requireContext())
-        msg.text = "开启后将使用 Root 权限执行系统命令：\n" +
+        msg.text = Lang.t(
+                "开启后将使用 Root 权限执行系统命令：\n" +
                 "• 将本应用加入系统电池优化白名单（防 Doze 杀后台）\n" +
                 "• 允许后台运行，写入 Magisk 开机脚本实现开机自启\n\n" +
                 "请确认：\n" +
                 "• 设备已获取 Root 权限\n" +
                 "• 你了解 Root 操作的风险\n" +
-                "• 本应用来源可信"
+                "• 本应用来源可信",
+                "This will run system commands with Root permission:\n" +
+                "• Add this app to the battery optimization whitelist (prevent Doze killing background)\n" +
+                "• Allow background run and write a Magisk boot script for auto-start\n\n" +
+                "Please confirm:\n" +
+                "• The device is rooted\n" +
+                "• You understand the risk of Root operations\n" +
+                "• This app source is trustworthy")
         msg.textSize = 14f
         msg.setTextColor(onVariantColor)
         msg.setLineSpacing(dp(3).toFloat(), 1.3f)
@@ -1283,12 +1292,12 @@ class OverviewFragment : Fragment() {
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", onVariantColor) {
+        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), onVariantColor) {
             sw.setChecked(false)
             d.dismiss()
         })
         btnRow.addView(spacer(dp(6)))
-        btnRow.addView(makeMaterialTextButton("继续开启", primaryColor) {
+        btnRow.addView(makeMaterialTextButton(Lang.t("继续开启", "Continue"), primaryColor) {
             d.dismiss()
             applyRootProtect(true)
         })
@@ -1464,7 +1473,7 @@ class OverviewFragment : Fragment() {
         // alpha1.4: 降噪控制区块仅随真实耳机连接显示（模拟按钮不影响）
         val realConnected = HeadsetGate.getConnectedMac(requireContext()) != null
         var st3 = moonProcState
-        if (st3 == null) st3 = "未知"
+        if (st3 == null) st3 = Lang.t("未知", "Unknown")
         val ancEnabled = realConnected && st3.contains("✅")
         ancTitle?.let {
             it.visibility = View.VISIBLE
@@ -1504,7 +1513,7 @@ class OverviewFragment : Fragment() {
     private fun serviceState(): String =
             if (HeadsetDetectService.RUNNING ||
                     requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("enable", true))
-                "✅ 运行中" else "❌ 未运行"
+                Lang.t("✅ 运行中", "✅  Running") else Lang.t("❌ 未运行", "❌  Not running")
 
     /** alpha2.4: 左右耳电量 → 运行状态面板（与弹窗同源 BatteryStore） */
     private fun updateBatteryStatus() {
@@ -1517,11 +1526,11 @@ class OverviewFragment : Fragment() {
             val l = BatteryStore.getLeft(mac)
             val r = BatteryStore.getRight(mac)
             if (l >= 0 && r >= 0) {
-                text = "左耳 " + l + "%  ·  右耳 " + r + "%"
+                text = Lang.t("左耳 ", "L ") + l + "%  ·  " + Lang.t("右耳 ", "R ") + r + "%"
             } else if (l >= 0) {
-                text = "左耳 " + l + "%"
+                text = Lang.t("左耳 ", "L ") + l + "%"
             } else if (r >= 0) {
-                text = "右耳 " + r + "%"
+                text = Lang.t("右耳 ", "R ") + r + "%"
             } else {
                 text = "--%"
             }
@@ -1568,11 +1577,11 @@ class OverviewFragment : Fragment() {
         bg.setColor(cardSurfaceColor)
         bg.cornerRadius = dp(20).toFloat()
         card.background = bg
-        card.addView(makeStatusRow(R.drawable.ic_bluetooth, "GAIA 状态", 0),
+        card.addView(makeStatusRow(R.drawable.ic_bluetooth, Lang.t("GAIA 状态", "GAIA Status"), 0),
                 LinearLayout.LayoutParams(-1, -2))
-        card.addView(makeStatusRow(R.drawable.ic_headphones, "耳机连接", 1),
+        card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
                 LinearLayout.LayoutParams(-1, -2))
-        battRow = makeStatusRow(R.drawable.ic_check, "左右耳电量", 2)
+        battRow = makeStatusRow(R.drawable.ic_check, Lang.t("左右耳电量", "L/R Battery"), 2)
         card.addView(battRow, LinearLayout.LayoutParams(-1, -2))
         root.addView(card, lp(false))
     }
@@ -1614,11 +1623,11 @@ class OverviewFragment : Fragment() {
         val gVal = gaiaStateVal ?: return
         val gaia = GaiaBleClient.getInstance()
         val g = gaia.isConnected()
-        gVal.text = if (g) "已连接" else "未连接"
+        gVal.text = if (g) Lang.t("已连接", "Connected") else Lang.t("未连接", "Not connected")
         gVal.setTextColor(if (g) green else onVariantColor)
         val mac = HeadsetGate.getConnectedMac(requireContext())
         val sim = GaiaBleClient.isSimConnected()
-        val hs = if (mac != null) "已连接" else (if (sim) "已连接（模拟）" else "未连接")
+        val hs = if (mac != null) Lang.t("已连接", "Connected") else (if (sim) Lang.t("已连接（模拟）", "Connected (simulated)") else Lang.t("未连接", "Not connected"))
         headsetStateVal?.text = hs
         headsetStateVal?.setTextColor(if (mac != null || sim) green else onVariantColor)
         updateBatteryStatus()
@@ -1694,7 +1703,7 @@ class OverviewFragment : Fragment() {
     private fun applyRootProtect(enable: Boolean) {
         if (enable) {
             if (!hasRoot()) {
-                showSimpleDialog("未检测到 Root", "未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。")
+                showSimpleDialog(Lang.t("未检测到 Root", "Root not detected"), Lang.t("未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。", "Root permission not detected. Cannot enable force keep-alive. Please confirm the device is rooted and allows su for this app."))
                 requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
                         .edit().putBoolean("root_protect", false).commit()
                 return
@@ -1711,12 +1720,12 @@ class OverviewFragment : Fragment() {
                     "appops set com.fxxkmoondrop.secret START_FOREGROUND allow; echo DONE")
             requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
                     .edit().putBoolean("root_protect", true).commit()
-            toast(if (out != null && out.contains("DONE")) "已启用：电池白名单 + 开机脚本" else "已写入配置，请重启后生效")
+            toast(if (out != null && out.contains("DONE")) Lang.t("已启用：电池白名单 + 开机脚本", "Enabled: battery whitelist + boot script") else Lang.t("已写入配置，请重启后生效", "Config written, restart to take effect"))
         } else {
             runRoot("rm -f /data/adb/service.d/50-moondrop-keepalive.sh")
             requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
                     .edit().putBoolean("root_protect", false).commit()
-            toast("已关闭强力保活")
+            toast(Lang.t("已关闭强力保活", "Force keep-alive disabled"))
         }
     }
 
@@ -1775,7 +1784,7 @@ class OverviewFragment : Fragment() {
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeSmallButton("知道了", true) { d.dismiss() })
+        btnRow.addView(makeSmallButton(Lang.t("知道了", "Got it"), true) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         d.show()
     }

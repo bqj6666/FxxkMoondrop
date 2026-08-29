@@ -74,7 +74,7 @@ class M3Ui {
             tb.setTitleTextColor(pal.onSurface)
             tb.setNavigationIcon(com.fxxkmoondrop.secret.R.drawable.abc_ic_ab_back_material)
             tb.setNavigationIconTint(pal.onSurface)
-            tb.setNavigationContentDescription("返回")
+            tb.setNavigationContentDescription(Lang.t(act, "返回", "Back"))
             if (onBack != null) tb.setNavigationOnClickListener { onBack.run() }
             bar.addView(tb, LinearLayout.LayoutParams(-1, -2))
             return bar
@@ -87,7 +87,7 @@ class M3Ui {
                     com.google.android.material.R.attr.materialIconButtonStyle)
             b.setIconResource(com.fxxkmoondrop.secret.R.drawable.abc_ic_ab_back_material)
             b.iconTint = ColorStateList.valueOf(pal.onSurface)
-            b.contentDescription = "返回"
+            b.contentDescription = Lang.t(c, "返回", "Back")
             b.layoutParams = LinearLayout.LayoutParams(dp(c, 48), dp(c, 48))
             if (onBack != null) b.setOnClickListener { onBack.run() }
             return b
@@ -281,10 +281,11 @@ class M3Ui {
                    onTab: OnNavTab): BottomNavigationView {
             val nav = BottomNavigationView(act)
             nav.setBackgroundColor(pal.surface)
+            Lang.refresh(act)
             val nm = nav.menu
-            nm.add(0, 1, 0, "概览").setIcon(R.drawable.ic_home)
-            nm.add(0, 2, 0, "设置").setIcon(R.drawable.ic_settings)
-            nm.add(0, 3, 0, "关于").setIcon(R.drawable.ic_info)
+            nm.add(0, 1, 0, Lang.t("概览", "Overview")).setIcon(R.drawable.ic_home)
+            nm.add(0, 2, 0, Lang.t("设置", "Settings")).setIcon(R.drawable.ic_settings)
+            nm.add(0, 3, 0, Lang.t("关于", "About")).setIcon(R.drawable.ic_info)
             nav.selectedItemId = selectedTab
             val navTint = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),

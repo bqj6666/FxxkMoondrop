@@ -173,12 +173,12 @@ class SettingsActivity : Activity() {
         box.addView(M3Ui.sectionTitle(this, pal, "通用"))
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
-        val rowPerm = M3Ui.listRow(this, pal, R.drawable.ic_search, "检查权限",
-                "蓝牙、通知、悬浮窗、Root/模块环境",
+        val rowPerm = M3Ui.listRow(this, pal, R.drawable.ic_search, Lang.t(this, "检查权限", "Check permissions"),
+                Lang.t(this, "蓝牙、通知、悬浮窗、Root/模块环境", "Bluetooth, notification, overlay, Root/module env"),
                 M3Ui.chevron(this, pal.onVariant),
                 { startActivity(Intent(this, PermissionActivity::class.java)) })
-        val rowLog = M3Ui.listRow(this, pal, R.drawable.ic_log, "日志抓取（设备适配）",
-                "收集设备信息与运行日志，导出 ZIP（含隐私声明）",
+        val rowLog = M3Ui.listRow(this, pal, R.drawable.ic_log, Lang.t(this, "日志抓取（设备适配）", "Log capture (device adaptation)"),
+                Lang.t(this, "收集设备信息与运行日志，导出 ZIP（含隐私声明）", "Collect device info & logs, export ZIP (incl. privacy notice)"),
                 M3Ui.chevron(this, pal.onVariant), { showLogDialog() })
         val iconState = TextView(this)
         iconCustomExistsAsync { exists ->
@@ -480,7 +480,7 @@ class SettingsActivity : Activity() {
         val btnRow = LinearLayout(this)
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", pal.onVariant) {
+        btnRow.addView(makeMaterialTextButton(Lang.t(this, "取消", "Cancel"), pal.onVariant) {
             sw.isChecked = false
             d.dismiss()
         })
@@ -527,16 +527,16 @@ class SettingsActivity : Activity() {
 
     // ── 日志抓取（alpha1.37）：Material 隐私声明弹窗 → 后台收集 → 显示路径 ──
     private fun showLogDialog() {
-        showMaterialConfirm("日志抓取 · 隐私声明",
-                LogCollector.PRIVACY_NOTICE,
-                "同意并抓取", {
-                    toast("⏳ 正在收集日志…")
+        showMaterialConfirm(Lang.t(this, "日志抓取 · 隐私声明", "Log capture · Privacy notice"),
+                LogCollector.privacyNotice(this),
+                Lang.t(this, "同意并抓取", "Agree & capture"), {
+                    toast(Lang.t(this, "⏳ 正在收集日志…", "⏳ Collecting logs…"))
                     Thread {
                         val path = LogCollector.collect(this@SettingsActivity)
                         runOnUiThread {
-                            showSimpleDialog("日志已保存",
-                                    "已打包为 ZIP（含 5 条分类日志）。\n\n路径：\n" + path +
-                                            "\n\n您可自行将文件分享给开发者进行设备适配分析。")
+                            showSimpleDialog(Lang.t(this, "日志已保存", "Log saved"),
+                                    Lang.t(this, "已打包为 ZIP（含 5 条分类日志）。\n\n路径：\n", "Packaged as ZIP (5 log categories).\n\nPath:\n") + path +
+                                            Lang.t(this, "\n\n您可自行将文件分享给开发者进行设备适配分析。", "\n\nYou may share this file with the developer for device adaptation analysis."))
                         }
                     }.start()
                 })
@@ -557,7 +557,7 @@ class SettingsActivity : Activity() {
         box.addView(spacer(dp(20)))
         val btnRow = LinearLayout(this)
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", pal.onVariant) { d.dismiss() })
+        btnRow.addView(makeMaterialTextButton(Lang.t(this, "取消", "Cancel"), pal.onVariant) { d.dismiss() })
         btnRow.addView(spacer(dp(10)))
         btnRow.addView(makeMaterialTextButton(okText, pal.primary) {
             d.dismiss()
@@ -581,7 +581,7 @@ class SettingsActivity : Activity() {
         box.addView(spacer(dp(20)))
         val btnRow = LinearLayout(this)
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("知道了", pal.primary) { d.dismiss() })
+        btnRow.addView(makeMaterialTextButton(Lang.t(this, "知道了", "Got it"), pal.primary) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         d.show()
     }

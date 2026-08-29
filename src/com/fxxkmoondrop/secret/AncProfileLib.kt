@@ -25,6 +25,22 @@ object AncProfileLib {
     val ANC_MODE_NAMES: Array<String> = arrayOf("关闭", "降噪", "透传", "抗风")
     val ANC_MODE_NAMES_FULL: Array<String> = arrayOf("关闭", "降噪", "透传", "抗风", "自适应", "直播")
 
+    /** 按当前语言返回 4 档模式名（显示层用）。zh 保留原中文，en 用英文。 */
+    fun modeNames(ctx: android.content.Context): Array<String> =
+        if (Lang.isZh(ctx)) ANC_MODE_NAMES else arrayOf("Off", "ANC", "Transparency", "Wind")
+
+    /** 按当前语言返回 6 档完整模式名（显示层用）。 */
+    fun modeNamesFull(ctx: android.content.Context): Array<String> =
+        if (Lang.isZh(ctx)) ANC_MODE_NAMES_FULL else arrayOf("Off", "ANC", "Transparency", "Wind", "Adaptive", "Live")
+
+    /** 按当前语言返回档位增益标签（低/中/高）。 */
+    fun gainLabels(ctx: android.content.Context): List<String> =
+        if (Lang.isZh(ctx)) listOf("低", "中", "高") else listOf("Low", "Mid", "High")
+
+    /** 按当前语言返回空间音频追踪标签（关闭追踪/30°/全方位）。 */
+    fun trackingLabels(ctx: android.content.Context): Array<String> =
+        if (Lang.isZh(ctx)) arrayOf("关闭追踪", "30°", "全方位") else arrayOf("Off", "30°", "Surround")
+
     private class Profile(val nameKey: String, val map: IntArray, val getMap: IntArray? = null)
 
     /** 型号档案表：设备名关键字（大写匹配，contains）→ 实测设备码映射。

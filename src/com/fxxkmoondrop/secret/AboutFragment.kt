@@ -41,6 +41,7 @@ class AboutFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
         super.onCreateView(inflater, container, savedInstanceState)
+        Lang.refresh(requireContext())
         val pal = ThemeUtil.Palette(requireContext())
 
         val root = LinearLayout(requireContext())
@@ -49,7 +50,7 @@ class AboutFragment : Fragment() {
         val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
         val statusBarH = if (resId > 0) resources.getDimensionPixelSize(resId) else 0
         root.setPadding(0, statusBarH, 0, 0)
-        root.addView(M3Ui.topBarTitle(requireActivity(), pal, "关于"),
+        root.addView(M3Ui.topBarTitle(requireActivity(), pal, Lang.t("关于", "About")),
                 LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(4)))
 
@@ -100,7 +101,7 @@ class AboutFragment : Fragment() {
 
         header.addView(spacer(dp(8)))
         val tagline = TextView(requireContext())
-        tagline.text = "Moondrop 蓝牙耳机助手 · GAIA 直连"
+        tagline.text = Lang.t("Moondrop 蓝牙耳机助手 · GAIA 直连", "Moondrop Bluetooth Earbud Assistant · GAIA Direct")
         tagline.textSize = 12f
         tagline.setTextColor(pal.onVariant)
         tagline.alpha = 0.85f
@@ -108,10 +109,10 @@ class AboutFragment : Fragment() {
         box.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         box.addView(spacer(dp(16)))
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "项目"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("项目", "Project")))
 
         // ── 项目分组卡：GitHub / 作者 / 协助者（官方 listRow 无描边组卡）──
-        val rowGithub = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_log, "GitHub 仓库",
+        val rowGithub = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_log, Lang.t("GitHub 仓库", "GitHub Repository"),
                 "github.com/bqj6666/FxxkMoondrop",
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             try {
@@ -119,15 +120,15 @@ class AboutFragment : Fragment() {
                         Uri.parse("https://github.com/bqj6666/FxxkMoondrop")))
             } catch (_: Exception) { }
         }
-        val rowAuthor = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_info, "作者",
+        val rowAuthor = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_info, Lang.t("作者", "Author"),
                 "bqj6666", null, null)
-        val rowHelper = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_headphones, "协助者",
+        val rowHelper = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_headphones, Lang.t("协助者", "Contributors"),
                 "Deepseek · Qwen · ChatGPT · Kimi", null, null)
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowGithub, rowAuthor, rowHelper),
                 LinearLayout.LayoutParams(-1, -2))
 
         box.addView(spacer(dp(16)))
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "说明"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("说明", "Notes")))
 
         // ── 说明卡 ──
         val desc = LinearLayout(requireContext())
@@ -138,14 +139,17 @@ class AboutFragment : Fragment() {
         dg.setCornerRadius(dp(20).toFloat())
         desc.background = dg
         val d1 = TextView(requireContext())
-        d1.text = "耳机连接时自动弹出 FastPair 卡片"
+        d1.text = Lang.t("耳机连接时自动弹出 FastPair 卡片", "Auto popup FastPair card when earbuds connect")
         d1.textSize = 15f
         d1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         d1.setTextColor(pal.onSurface)
         desc.addView(d1, LinearLayout.LayoutParams(-2, -2))
         val d2 = TextView(requireContext())
-        d2.text = "显示名称 / 电量 / MAC；通过 GAIA BLE 协议直连耳机读取状态" +
-                "（电量、ANC、模式等），地址全动态发现、零硬编码。"
+        d2.text = Lang.t(
+                "显示名称 / 电量 / MAC；通过 GAIA BLE 协议直连耳机读取状态" +
+                "（电量、ANC、模式等），地址全动态发现、零硬编码。",
+                "Name / battery / MAC; read state via GAIA BLE direct connection" +
+                " (battery, ANC, mode, etc.), address fully discovered, zero hardcode.")
         d2.textSize = 13f
         d2.setTextColor(pal.onVariant)
         d2.setLineSpacing(dp(2).toFloat(), 1.2f)

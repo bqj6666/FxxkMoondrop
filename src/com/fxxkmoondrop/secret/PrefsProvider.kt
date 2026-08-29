@@ -13,8 +13,11 @@ import android.net.Uri
  * （createPackageContext 可读 assets 但读不了 data 目录，静默失败导致 show_wind 恒为 true）。
  * 改用 exported ContentProvider：GMS 进程通过 content:// 查询模块配置，由系统拉起模块进程读取。
  *
+ * alpha2.38.10: 新增 "lang" 分支（显示语言：0=auto 1=zh 2=en），供弹窗跨进程读取。
+ *
  * 用法:
  *   content://com.fxxkmoondrop.secret.prefs/show_wind        -> _value=1/0
+ *   content://com.fxxkmoondrop.secret.prefs/lang             -> _value=0/1/2
  */
 class PrefsProvider : ContentProvider() {
 
@@ -31,6 +34,7 @@ class PrefsProvider : ContentProvider() {
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
         val value: Int = when (key) {
             "show_wind" -> if (sp.getBoolean("show_wind", true)) 1 else 0
+            "lang" -> sp.getInt("lang", 0)
             else -> return null
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))

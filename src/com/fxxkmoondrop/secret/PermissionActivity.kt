@@ -53,7 +53,7 @@ class PermissionActivity : Activity() {
         root.setPadding(dp(16), statusBarH + dp(10), dp(16), dp(24))
 
         // ── 官方 Top Bar（64dp MaterialToolbar + 返回箭头）──
-        root.addView(M3Ui.topBar(this, pal, "权限检测") { finish() }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(M3Ui.topBar(this, pal, Lang.t(this, "权限检测", "Permission Check")) { finish() }, LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(8)))
 
         // ── 官方 tonal 状态头：图标容器(44dp 圆角方) + 标题 + 副标题 ──
@@ -101,7 +101,7 @@ class PermissionActivity : Activity() {
         progressRow = LinearLayout(this)
         progressRow.gravity = Gravity.CENTER_HORIZONTAL
         val prog = TextView(this)
-        prog.text = "正在检查…"
+        prog.text = Lang.t(this, "正在检查…", "Checking…")
         prog.textSize = 13f
         prog.setTextColor(pal.onVariant)
         progressRow.addView(prog, LinearLayout.LayoutParams(-2, -2))
@@ -117,7 +117,7 @@ class PermissionActivity : Activity() {
 
         // ── 底部：全宽重新检查（官方 Filled 按钮）──
         val btnWrap = LinearLayout(this)
-        val refresh = M3Ui.filledButton(this, pal, "重新检查") { startCheck() }
+        val refresh = M3Ui.filledButton(this, pal, Lang.t(this, "重新检查", "Re-check")) { startCheck() }
         btnWrap.addView(refresh, LinearLayout.LayoutParams(-1, -2))
         root.addView(btnWrap, LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(6)))
@@ -138,8 +138,8 @@ class PermissionActivity : Activity() {
 
     /** 后台检查权限，完成后刷新 UI（不阻塞主线程） */
     private fun startCheck() {
-        headTitle.text = "正在检查…"
-        headSub.text = "设备权限与运行环境"
+        headTitle.text = Lang.t(this, "正在检查…", "Checking…")
+        headSub.text = Lang.t(this, "设备权限与运行环境", "Device permissions & runtime")
         headIcon.setImageResource(R.drawable.ic_refresh)
         headIcon.imageTintList = ColorStateList.valueOf(pal.onContainer)
         progressRow.visibility = View.VISIBLE
@@ -157,13 +157,13 @@ class PermissionActivity : Activity() {
     private fun applyResults(items: List<PermissionChecker.Item>) {
         val missing = PermissionChecker.countMissing(items)
         if (missing == 0) {
-            headTitle.text = "所有必要权限均已就绪"
-            headSub.text = "系统运行环境正常"
+            headTitle.text = Lang.t(this, "所有必要权限均已就绪", "All required permissions ready")
+            headSub.text = Lang.t(this, "系统运行环境正常", "System environment OK")
             headIcon.setImageResource(R.drawable.ic_check)
             headIcon.imageTintList = ColorStateList.valueOf(pal.green)
         } else {
-            headTitle.text = "发现 $missing 项权限缺失"
-            headSub.text = "点击缺失项可直接修复"
+            headTitle.text = Lang.tf("发现 %d 项权限缺失", "%d missing permission(s)", missing)
+            headSub.text = Lang.t(this, "点击缺失项可直接修复", "Tap missing items to fix")
             headIcon.setImageResource(R.drawable.ic_warning)
             headIcon.imageTintList = ColorStateList.valueOf(pal.primary)
         }
@@ -203,7 +203,7 @@ class PermissionActivity : Activity() {
         col.orientation = LinearLayout.VERTICAL
         val name = TextView(this)
         name.text = if (item.ok) item.name
-        else (if (item.action == PermissionChecker.ACTION_NONE) item.name + "（需手动处理）" else item.name)
+        else (if (item.action == PermissionChecker.ACTION_NONE) item.name + Lang.t(this, "（需手动处理）", " (manual)") else item.name)
         name.textSize = 16f
         name.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         name.setTextColor(pal.onSurface)
@@ -252,7 +252,7 @@ class PermissionActivity : Activity() {
                 else -> toast(it.detail)
             }
         } catch (e: Exception) {
-            toast("跳转失败: ${e.message}")
+            toast(Lang.t(this, "跳转失败: ", "Open failed: ") + e.message)
         }
     }
 

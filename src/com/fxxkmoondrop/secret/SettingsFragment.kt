@@ -57,6 +57,7 @@ class SettingsFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, containerView: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
         super.onCreateView(inflater, containerView, savedInstanceState)
+        Lang.refresh(requireContext())
         pal = ThemeUtil.Palette(requireContext())
 
         // alpha1.36: 窗口背景=surface + 系统栏透明（顶部完全铺满，无空白带；深浅色自适应）
@@ -69,7 +70,7 @@ class SettingsFragment : Fragment() {
         root.setPadding(0, statusBarH, 0, 0)
 
         // ── M3 Top App Bar：矢量返回按钮（alpha1.36 修复变形/错位）──
-        root.addView(M3Ui.topBarTitle(requireActivity(), pal, "设置"), LinearLayout.LayoutParams(-1, -2))
+        root.addView(M3Ui.topBarTitle(requireActivity(), pal, Lang.t("设置", "Settings")), LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(8)))
 
         // ── 内容（可滚动）──
@@ -78,7 +79,7 @@ class SettingsFragment : Fragment() {
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), 0, dp(16), dp(24))
 
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "外观"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
         // ── 外观（官方 HomeAppearanceSheet 对位：主题模式 / 动态取色 / AMOLED / 种子色）──
         val appear = LinearLayout(requireContext())
@@ -92,7 +93,7 @@ class SettingsFragment : Fragment() {
         val modeRow = LinearLayout(requireContext())
         modeRow.orientation = LinearLayout.HORIZONTAL
         modeRow.gravity = Gravity.CENTER
-        val modeNames = arrayOf("跟随系统", "浅色", "深色")
+        val modeNames = arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark"))
         val curMode = ThemeUtil.themeMode(requireContext())
         for (mi in 0 until 3) {
             val mb = TextView(requireContext())
@@ -119,12 +120,12 @@ class SettingsFragment : Fragment() {
         appear.addView(makeAppearDivider(), appearDividerLp())
 
         // 动态取色 + AMOLED 开关（官方主题设置）
-        val swDyn = makeSwitchRow("动态取色",
-                "跟随壁纸调色；关闭后使用下方种子颜色", makeThemeSwitch("dynamic_color", true, "动态取色"))
+        val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
+                Lang.t("跟随壁纸调色；关闭后使用下方种子颜色", "Follow wallpaper; uses seed color below when off"), makeThemeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
         appear.addView(swDyn, LinearLayout.LayoutParams(-1, -2))
         appear.addView(makeAppearDivider(), appearDividerLp())
-        val swAmoled = makeSwitchRow("AMOLED 纯黑",
-                "深色模式下使用纯黑背景", makeThemeSwitch("amoled", false, "AMOLED"))
+        val swAmoled = makeSwitchRow(Lang.t("AMOLED 纯黑", "AMOLED pure black"),
+                Lang.t("深色模式下使用纯黑背景", "Use pure black background in dark mode"), makeThemeSwitch("amoled", false, "AMOLED"))
         appear.addView(swAmoled, LinearLayout.LayoutParams(-1, -2))
 
         // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
@@ -132,7 +133,7 @@ class SettingsFragment : Fragment() {
         seedRow!!.orientation = LinearLayout.HORIZONTAL
         seedRow!!.gravity = Gravity.CENTER_VERTICAL
         val seedLabel = TextView(requireContext())
-        seedLabel.text = "种子颜色"
+        seedLabel.text = Lang.t("种子颜色", "Seed color")
         seedLabel.textSize = 14f
         seedLabel.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         seedLabel.setTextColor(pal.onSurface)
@@ -170,28 +171,31 @@ class SettingsFragment : Fragment() {
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "通用"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("通用", "General")))
+
+        // ── alpha2.38.10 语言（0=跟随系统 1=中文 2=English，三选一 pill）──
+        box.addView(makeLangRow())
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
-        val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_search, "检查权限",
-                "蓝牙、通知、悬浮窗、Root/模块环境",
+        val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_search, Lang.t("检查权限", "Check permissions"),
+                Lang.t("蓝牙、通知、悬浮窗、Root/模块环境", "Bluetooth, notifications, floating window, Root/module env"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             requireActivity().startActivity(Intent(requireContext(), PermissionActivity::class.java))
         }
-        val rowLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_log, "日志抓取（设备适配）",
-                "收集设备信息与运行日志，导出 ZIP（含隐私声明）",
+        val rowLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_log, Lang.t("日志抓取（设备适配）", "Log capture (device adaptation)"),
+                Lang.t("收集设备信息与运行日志，导出 ZIP（含隐私声明）", "Collect device info and logs, export ZIP (incl. privacy notice)"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) { showLogDialog() }
         val iconState = TextView(requireContext())
         iconState.textSize = 13f
         iconState.setTextColor(pal.primary)
         iconState.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         iconCustomExistsAsync { exists ->
-            iconState.text = if (exists) "已自定义" else "默认"
+            iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
         }
-        val rowIcon = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, "弹窗图标",
-                "Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", iconState) {
+        val rowIcon = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, Lang.t("弹窗图标", "Popup icon"),
+                Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", "Earbud icon shown in the Google popup (choose from gallery, or restore default)"), iconState) {
             iconCustomExistsAsync { exists ->
-                iconState.text = if (exists) "已自定义" else "默认"
+                iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
                 showIconDialog(exists)
             }
         }
@@ -199,13 +203,13 @@ class SettingsFragment : Fragment() {
 
         box.addView(spacer(dp(10)))
 
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "行为"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("行为", "Behavior")))
 
         // ── Root 强力保活 ──
         val swRoot = makeTintedSwitch()
         swRoot.isChecked = getSP().getBoolean("root_protect", false)
-        val rowRoot = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_power, "Root 强力保活",
-                "开机自启 + 后台防杀（需 Root）", swRoot, null)
+        val rowRoot = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_power, Lang.t("Root 强力保活", "Root force keep-alive"),
+                Lang.t("开机自启 + 后台防杀（需 Root）", "Auto-start + background anti-kill (requires Root)"), swRoot, null)
         swRoot.setOnCheckedChangeListener { _, checked ->
             if (checked) showRootWarnDialog(swRoot)
             else applyRootProtect(false)
@@ -214,8 +218,8 @@ class SettingsFragment : Fragment() {
         // ── 后台隐藏 ──
         val swBg = makeTintedSwitch()
         swBg.isChecked = getSP().getBoolean("bg_hide", false)
-        val rowBg = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_block, "后台隐藏",
-                "切到后台自动隐藏主界面（不驻留最近任务）", swBg, null)
+        val rowBg = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_block, Lang.t("后台隐藏", "Hide in background"),
+                Lang.t("切到后台自动隐藏主界面（不驻留最近任务）", "Auto-hide main UI when backgrounded (no recents task)"), swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("bg_hide", checked).commit()
         }
@@ -223,8 +227,8 @@ class SettingsFragment : Fragment() {
         // ── 启动自动监听 ──
         val swAuto = makeTintedSwitch()
         swAuto.isChecked = getSP().getBoolean("auto_service", true)
-        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_play, "启动自动监听",
-                "启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", swAuto, null)
+        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_play, Lang.t("启动自动监听", "Auto monitor on launch"),
+                Lang.t("启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", "Auto monitor on launch; auto-connect GAIA to read battery & ANC on connect"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("auto_service", checked).commit()
         }
@@ -232,8 +236,8 @@ class SettingsFragment : Fragment() {
         // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
         val swWind = makeTintedSwitch()
         swWind.isChecked = getSP().getBoolean("show_wind", true)
-        val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_ac_unit, "显示抗风噪按钮",
-                "在弹窗和主界面显示抗风噪模式；关闭后仅显示 关闭/降噪/透传", swWind, null)
+        val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_ac_unit, Lang.t("显示抗风噪按钮", "Show wind-noise button"),
+                Lang.t("在弹窗和主界面显示抗风噪模式；关闭后仅显示 关闭/降噪/透传", "Show wind-noise mode in popup & main UI; off shows only Off/ANC/Transparency"), swWind, null)
         swWind.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("show_wind", checked).commit()
         }
@@ -243,14 +247,14 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(14)))
 
                 // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "ANC 按钮映射"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("ANC 按钮映射", "ANC Button Mapping")))
         val ancMapHint = TextView(requireContext())
-        ancMapHint.text = "自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。"
+        ancMapHint.text = Lang.t("自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。", "Device code (0-5) sent by the ANC button. Editing makes it a custom mapping with priority.")
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
-        val ancMapNames = AncProfileLib.ANC_MODE_NAMES
+        val ancMapNames = AncProfileLib.modeNames(requireContext())
         val ancMapDefaults = GaiaBleClient.getInstance().getEffectiveAncMap()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
@@ -278,15 +282,15 @@ class SettingsFragment : Fragment() {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
             ancMapRows.add(M3Ui.listRow(requireActivity(), pal, 0, ancMapNames[i],
-                    "发送的设备码（当前生效 " + ancMapDefaults[i] + "）", et, null))
+                    Lang.t("发送的设备码（当前生效 ", "Device code (current active ") + ancMapDefaults[i] + ")", et, null))
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *ancMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
         // ── 增益映射（alpha2.37：用户自定义增益设备码，同 ANC 映射逻辑）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "增益按钮映射"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("增益按钮映射", "Gain Button Mapping")))
         val gainMapHint = TextView(requireContext())
-        gainMapHint.text = "自定义增益按钮发送的设备码（0-9）。留空或设为 -1 可隐藏对应档位。"
+        gainMapHint.text = Lang.t("自定义增益按钮发送的设备码（0-9）。留空或设为 -1 可隐藏对应档位。", "Device code (0-9) sent by gain button. Blank or -1 to hide that level.")
         gainMapHint.textSize = 12f
         gainMapHint.setTextColor(pal.onVariant)
         gainMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -321,16 +325,16 @@ class SettingsFragment : Fragment() {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
             gainMapRows.add(M3Ui.listRow(requireActivity(), pal, 0,
-                    gainLabels.getOrElse(i) { "档位 $i" },
-                    "发送的设备码（当前生效 " + gainDefaults.getOrElse(i) { i } + "）", et, null))
+                    gainLabels.getOrElse(i) { Lang.t("档位 ", "Level ") + i },
+                    Lang.t("发送的设备码（当前生效 ", "Device code (current active ") + gainDefaults.getOrElse(i) { i } + ")", et, null))
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *gainMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
         // ── 空间音频追踪模式（alpha2.37：用户自定义标签）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "空间音频追踪标签"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("空间音频追踪标签", "Spatial Audio Tracking Labels")))
         val trackHint = TextView(requireContext())
-        trackHint.text = "自定义空间音频各追踪模式显示名称。"
+        trackHint.text = Lang.t("自定义空间音频各追踪模式显示名称。", "Customize display names for each spatial audio tracking mode.")
         trackHint.textSize = 12f
         trackHint.setTextColor(pal.onVariant)
         trackHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -361,13 +365,13 @@ class SettingsFragment : Fragment() {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
             trackRows.add(M3Ui.listRow(requireActivity(), pal, 0,
-                    "模式 $i", "默认名称：" + trackLabels[i], et, null))
+                    Lang.t("模式 ", "Mode ") + i, Lang.t("默认名称：", "Default name: ") + trackLabels[i], et, null))
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *trackRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
         // ── 重置自定义映射（alpha2.37）──
-        val resetBtn = makeM3Button("重置所有自定义映射", R.drawable.ic_settings,
+        val resetBtn = makeM3Button(Lang.t("重置所有自定义映射", "Reset all custom mappings"), R.drawable.ic_settings,
                 pal.container, pal.onContainer) {
             val editor = getSP().edit()
             // 清除 ANC 映射
@@ -378,7 +382,7 @@ class SettingsFragment : Fragment() {
             // 清除追踪标签
             for (i in trackLabels.indices) editor.remove("track_label_" + i)
             editor.commit()
-            android.widget.Toast.makeText(requireContext(), "已重置所有自定义映射", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(requireContext(), Lang.t("已重置所有自定义映射", "All custom mappings reset"), android.widget.Toast.LENGTH_SHORT).show()
             // 刷新当前页面
             requireActivity().recreate()
         }
@@ -386,7 +390,7 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(10)))
 
         // ── 模拟测试（alpha2.3 从主页迁入；真实耳机连接时禁用）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, "模拟测试"))
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("模拟测试", "Simulation Test")))
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))
@@ -394,7 +398,7 @@ class SettingsFragment : Fragment() {
         simBg.setColor(pal.card)
         simBg.setCornerRadius(dp(24).toFloat())
         simBox.background = simBg
-        simConnBtn = makeM3Button("模拟连接 耳机", R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
+        simConnBtn = makeM3Button(Lang.t("模拟连接 耳机", "Simulate connect earbuds"), R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟连接：GAIA 模拟态 + 左右耳模拟电量 + 默认降噪模式 + 弹窗（可重复点击）
             GaiaBleClient.setSimConnected(true)
             BatteryStore.setGaiaLevel(SIM_MAC, 1, 86)
@@ -504,6 +508,53 @@ class SettingsFragment : Fragment() {
     private fun makeNavRow(iconRes: Int, title: String, sub: String, onNav: Runnable): LinearLayout =
             M3Ui.navRow(requireActivity(), pal, iconRes, title, sub, onNav)
 
+    /** alpha2.38.10: 语言切换行（0=跟随系统 1=中文 2=English，三段 pill） */
+    private fun makeLangRow(): LinearLayout {
+        val box = LinearLayout(requireContext())
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(14), dp(12), dp(14), dp(12))
+        val bg = GradientDrawable()
+        bg.setColor(pal.card)
+        bg.setCornerRadius(dp(24).toFloat())
+        box.background = bg
+
+        val title = TextView(requireContext())
+        title.text = "语言 / Language"
+        title.textSize = 14f
+        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        title.setTextColor(pal.onSurface)
+        box.addView(title, LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(10)))
+
+        val row = LinearLayout(requireContext())
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER
+        val items = arrayOf("跟随系统", "中文", "English")
+        val cur = Lang.mode(requireContext())
+        for (mi in 0 until 3) {
+            val mb = TextView(requireContext())
+            mb.text = items[mi]
+            mb.textSize = 12f
+            mb.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            mb.gravity = Gravity.CENTER
+            mb.setPadding(dp(8), dp(8), dp(8), dp(8))
+            val mg = GradientDrawable()
+            mg.setCornerRadius(dp(20).toFloat())
+            mg.setColor(if (mi == cur) pal.primary
+            else if (pal.dark) 0x14FFFFFF else 0x0A000000)
+            mb.background = mg
+            mb.setTextColor(if (mi == cur) pal.onPrimary else pal.onVariant)
+            mb.setOnClickListener {
+                getSP().edit().putInt("lang", mi).commit()
+                requireActivity().recreate()
+            }
+            row.addView(mb, LinearLayout.LayoutParams(0, -2, 1f))
+            if (mi < 2) row.addView(spacer(dp(6)))
+        }
+        box.addView(row, LinearLayout.LayoutParams(-1, -2))
+        return box
+    }
+
     /** 通用开关行（alpha1.36: M3Ui 卡片行） */
     private fun makeSwitchRow(title: String, sub: String, sw: MaterialSwitch): LinearLayout =
             M3Ui.switchRow(requireActivity(), pal, title, sub, sw)
@@ -578,17 +629,25 @@ class SettingsFragment : Fragment() {
 
     private fun showRootWarnDialog(sw: MaterialSwitch) {
         val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
-        box.addView(M3Ui.dialogTitle(requireContext(), "⚠️  权限风险警告", pal.onSurface),
+        box.addView(M3Ui.dialogTitle(requireContext(), Lang.t("⚠️  权限风险警告", "⚠️  Permission risk warning"), pal.onSurface),
                 LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
         val msg = TextView(requireContext())
-        msg.text = "开启后将使用 Root 权限执行系统命令：\n" +
+        msg.text = Lang.t(
+                "开启后将使用 Root 权限执行系统命令：\n" +
                 "• 将本应用加入系统电池优化白名单（防 Doze 杀后台）\n" +
                 "• 允许后台运行，写入 Magisk 开机脚本实现开机自启\n\n" +
                 "请确认：\n" +
                 "• 设备已获取 Root 权限\n" +
                 "• 你了解 Root 操作的风险\n" +
-                "• 本应用来源可信"
+                "• 本应用来源可信",
+                "This will run system commands with Root permission:\n" +
+                "• Add this app to the battery optimization whitelist (prevent Doze killing background)\n" +
+                "• Allow background run and write a Magisk boot script for auto-start\n\n" +
+                "Please confirm:\n" +
+                "• The device is rooted\n" +
+                "• You understand the risk of Root operations\n" +
+                "• This app source is trustworthy")
         msg.textSize = 14f
         msg.setTextColor(pal.onVariant)
         msg.setLineSpacing(dp(3).toFloat(), 1.3f)
@@ -597,12 +656,12 @@ class SettingsFragment : Fragment() {
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", pal.onVariant) {
+        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), pal.onVariant) {
             sw.isChecked = false
             d.dismiss()
         })
         btnRow.addView(spacer(dp(6)))
-        btnRow.addView(makeMaterialTextButton("继续开启", pal.primary) {
+        btnRow.addView(makeMaterialTextButton(Lang.t("继续开启", "Continue"), pal.primary) {
             d.dismiss()
             applyRootProtect(true)
         })
@@ -614,8 +673,8 @@ class SettingsFragment : Fragment() {
     private fun applyRootProtect(enable: Boolean) {
         if (enable) {
             if (!hasRoot()) {
-                showSimpleDialog("未检测到 Root",
-                        "未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。")
+                showSimpleDialog(Lang.t("未检测到 Root", "Root not detected"),
+                        Lang.t("未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。", "Root not detected. Cannot enable force keep-alive. Confirm rooted & allow su."))
                 getSP().edit().putBoolean("root_protect", false).commit()
                 return
             }
@@ -632,8 +691,8 @@ class SettingsFragment : Fragment() {
                     "appops set com.fxxkmoondrop.secret RUN_ANY_IN_BACKGROUND allow; " +
                     "appops set com.fxxkmoondrop.secret START_FOREGROUND allow; echo DONE")
             getSP().edit().putBoolean("root_protect", true).commit()
-            toast(if (out != null && out.contains("DONE")) "✅ 已启用：电池白名单 + 开机脚本"
-            else "已写入配置，请重启后生效")
+            toast(if (out != null && out.contains("DONE")) Lang.t("✅ 已启用：电池白名单 + 开机脚本", "✅ Enabled: battery whitelist + boot script")
+            else Lang.t("已写入配置，请重启后生效", "Config written, restart to take effect"))
         } else {
             runRoot("rm -f /data/adb/service.d/50-moondrop-keepalive.sh; " +
                     "dumpsys deviceidle whitelist -com.fxxkmoondrop.secret; " +
@@ -641,22 +700,22 @@ class SettingsFragment : Fragment() {
                     "appops set com.fxxkmoondrop.secret RUN_ANY_IN_BACKGROUND default; " +
                     "appops set com.fxxkmoondrop.secret START_FOREGROUND default; echo DONE")
             getSP().edit().putBoolean("root_protect", false).commit()
-            toast("已关闭 Root 强力保活")
+            toast(Lang.t("已关闭 Root 强力保活", "Root force keep-alive disabled"))
         }
     }
 
     // ── 日志抓取（alpha1.37）：Material 隐私声明弹窗 → 后台收集 → 显示路径 ──
     private fun showLogDialog() {
-        showMaterialConfirm("日志抓取 · 隐私声明",
-                LogCollector.PRIVACY_NOTICE,
-                "同意并抓取") {
-            toast("⏳ 正在收集日志…")
+        showMaterialConfirm(Lang.t("日志抓取 · 隐私声明", "Log capture · Privacy notice"),
+                LogCollector.privacyNotice(requireContext()),
+                Lang.t("同意并抓取", "Agree and capture")) {
+            toast(Lang.t("⏳ 正在收集日志…", "⏳ Collecting logs…"))
             Thread {
                 val path = LogCollector.collect(requireContext())
                 requireActivity().runOnUiThread {
-                    showSimpleDialog("日志已保存",
-                            "已打包为 ZIP（含 6 条分类日志：系统/应用/蓝牙/环境/logcat/运行日志）。\n\n路径：\n$path" +
-                                    "\n\n您可自行将文件分享给开发者进行设备适配分析。")
+                    showSimpleDialog(Lang.t("日志已保存", "Log saved"),
+                            Lang.t("已打包为 ZIP（含 6 条分类日志：系统/应用/蓝牙/环境/logcat/运行日志）。\n\n路径：\n", "Packaged as ZIP (6 log categories: system/app/bluetooth/env/logcat/run).\n\nPath:\n") + path +
+                                    Lang.t("\n\n您可自行将文件分享给开发者进行设备适配分析。", "\n\nYou can share it with the developer for device adaptation."))
                 }
             }.start()
         }
@@ -677,7 +736,7 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(20)))
         val btnRow = LinearLayout(requireContext())
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", pal.onVariant) { d.dismiss() })
+        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), pal.onVariant) { d.dismiss() })
         btnRow.addView(spacer(dp(10)))
         btnRow.addView(makeMaterialTextButton(okText, pal.primary) { d.dismiss(); onOk.run() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
@@ -698,7 +757,7 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(20)))
         val btnRow = LinearLayout(requireContext())
         btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("知道了", pal.primary) { d.dismiss() })
+        btnRow.addView(makeMaterialTextButton(Lang.t("知道了", "Got it"), pal.primary) { d.dismiss() })
         box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         d.show()
     }
@@ -720,15 +779,15 @@ class SettingsFragment : Fragment() {
         val accent = pal.primary
         val (dlg, card) = M3Ui.materialDialog(requireContext(), accent, pal.card)
         card.addView(M3Ui.dialogTitle(requireContext(),
-                "弹窗图标（当前：" + (if (custom) "已自定义" else "默认") + "）", accent),
+                Lang.t("弹窗图标（当前：", "Popup icon (current: ") + (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + "）", accent),
                 LinearLayout.LayoutParams(-1, -2))
         card.addView(spacer(dp(10)))
 
-        val items = if (custom) arrayOf("从相册选择", "恢复默认图标") else arrayOf("从相册选择")
+        val items = if (custom) arrayOf(Lang.t("从相册选择", "Choose from gallery"), Lang.t("恢复默认图标", "Restore default icon")) else arrayOf(Lang.t("从相册选择", "Choose from gallery"))
         val subs = if (custom) arrayOf(
-                "选择一张图片，替换 Google 弹窗显示的耳机图标",
-                "删除自定义图标，恢复软件自带默认图")
-        else arrayOf("选择一张图片，替换 Google 弹窗显示的耳机图标")
+                Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"),
+                Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"))
+        else arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"))
         for (i in items.indices) {
             val which = i
             val row = LinearLayout(requireContext())
@@ -764,7 +823,7 @@ class SettingsFragment : Fragment() {
                     pick.addCategory(Intent.CATEGORY_OPENABLE)
                     try {
                         requireActivity().startActivityForResult(
-                                Intent.createChooser(pick, "选择耳机图标"), REQ_PICK_ICON)
+                                Intent.createChooser(pick, Lang.t("选择耳机图标", "Choose earbud icon")), REQ_PICK_ICON)
                     } catch (t: Throwable) {
                         toast("无法打开选择器: ${t.message}")
                     }
