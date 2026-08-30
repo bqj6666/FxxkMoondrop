@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.40.1** (versionCode 273) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.0** (versionCode 274) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -147,7 +147,8 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
-- **alpha2.40.1** (current): The Fast Pair sheet's "Settings" button now opens the system Bluetooth device detail page (instead of the app's MainActivity); added resolveMoondropAddress() that dynamically matches the Moondrop headphone address from paired devices (no hardcoded MAC), opening Settings$BluetoothDeviceDetailActivity with :settings:show_fragment + device_address; falls back to the original MainActivity when no match.
+- **alpha2.41.0**: Bluetrum-side connection stability fixes + Space Travel 2 (BT8932F) adaptation — GaiaBleClient adds lastConnectedAddr + transportAutoTried, transportFor falls back to TRANSPORT_AUTO when dual-mode TWS is dropped by LE during service discovery (status=147), and single-candidate disconnect records the address for delayed reconnect; AncProfileLib adds a SPACE TRAVEL 2 DC profile (no spatial audio, 3-level gain, identity mapping).
+- **alpha2.40.1**: The Fast Pair sheet's "Settings" button now opens the system Bluetooth device detail page (instead of the app's MainActivity); added resolveMoondropAddress() that dynamically matches the Moondrop headphone address from paired devices (no hardcoded MAC), opening Settings$BluetoothDeviceDetailActivity with :settings:show_fragment + device_address; falls back to the original MainActivity when no match.
 - **alpha2.40.0**: Moved the control panel into the Bluetooth device detail page — injects the noise-control + feature panel into Settings device details; spatial-audio switch is triple-disabled (isEnabled+isClickable+isFocusable) while disconnected; noise-control title gets topMargin=dp(16) so it no longer touches the card top edge; pure injected UI (ControlPanel/DeviceDetailsPanel/CtrlBus) with no BLE/Gaia singleton and no main-screen changes.
 - **alpha2.38.10**: Display-layer Chinese/English switching. Text in the ANC panel, log popup (privacy notice / progress / save path / ZIP inner filenames), and permission-check page now follows the language preference (Follow system / Chinese / English); preference is exposed via an exported ContentProvider for the GMS popup to read cross-process.
 - **alpha2.38.9** (previous): Adapted PUDDING (MD-TWS-056) via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs — GAIA v4 over RFCOMM/SPP, 5-level ANC (Off / Adaptive / Transparency / Wind / Basic), triple-battery incl. charging case, gain & indicator control; also fixed a popup custom-icon crash caused by a duplicate `setContentView` in SettingsFragment.

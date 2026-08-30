@@ -5,6 +5,14 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.0 (2026-08-31)
+- **蓝讯系连接稳定性 + 太空漫游2（Space Travel 2）适配**：
+  - `GaiaBleClient`：dual-mode TWS（BR/EDR+LE）在服务发现阶段易被 LE 连接挤掉（status=147）；新增 `lastConnectedAddr` + `transportAutoTried`，纯 LE 持续失败时 `transportFor()` 回退 `TRANSPORT_AUTO`，单候选断连时记录地址延迟重连同一地址（900ms），成功发现 GAIA/9ECA service 时重置标记。
+  - `AncProfileLib`：新增 `SPACE TRAVEL 2`（BT8932F，中科蓝讯）DC 档案——无空间音频、三档增益、恒等映射（0=低 / 1=中 / 2=高）；为 `DC_PROFILES` 列表里的 PUDDING 条目结尾补逗号以容纳新档案。
+  - 说明：太空漫游2 ANC 走标准 GAIA ANC_V2 恒等映射（关=00 / 降噪=01 / 透传=02），无需 AudioCuration 映射表；ANC 能否切换取决于连接链路能否探测到 ANC_V2，本次连接稳定性修复即为其前置。
+- 版本号升至 **alpha2.41.0**（versionCode 274）
+
+
 ## alpha2.40.1 (2026-08-30)
 - **Fast Pair 弹窗「设置」按钮改为跳转系统蓝牙设备详情页**：不再跳转软件主界面 MainActivity。
   - 新增 `resolveMoondropAddress()`：从 `BluetoothAdapter` 已配对设备里用 `DeviceMatcher.isMoondrop()` 动态匹配 Moondrop 耳机蓝牙地址（**不硬编码 MAC**），找不到返回 null

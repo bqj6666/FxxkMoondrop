@@ -124,7 +124,12 @@ object AncProfileLib {
         // 协议来源: https://github.com/lingbai-rong/PuddingPods
         // 增益 0x00=低/0x01=中/0x02=高（恒等映射）; 指示灯 0x00=关/0x01=开
         DcProfile("PUDDING", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
-        trackingLabels = arrayOf("关闭追踪", "30°", "全方位"))
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
+
+        // 太空漫游2 / Space Travel 2 (BT8932F, 中科蓝讯): 无空间音频, 三档增益
+        // GAIA 蓝讯系; ANC 走 ANC_V2 恒等映射(0=关/1=降噪/2=透传), 增益恒等 0/1/2 = 低/中/高
+        DcProfile("SPACE TRAVEL 2", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
     )
 
     /** 默认 DC 档案：全部不支持（未知型号保守策略） */

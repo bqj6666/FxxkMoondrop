@@ -129,6 +129,8 @@ class GaiaBleClient private constructor() {
     @Volatile private var everConnected = false
     private val scanHits = CopyOnWriteArrayList<ScanResult>()
     @Volatile private var forceDirectConnect = false
+    @Volatile private var lastConnectedAddr: String? = null
+    @Volatile private var transportAutoTried = false
 
     private val scanTimeout = object : Runnable {
         override fun run() {
@@ -191,7 +193,11 @@ class GaiaBleClient private constructor() {
         @JvmField @Volatile var simConnected = false
     }
 
-    private fun transportFor(d: BluetoothDevice): Int = BluetoothDevice.TRANSPORT_LE
+    private fun transportFor(d: BluetoothDevice): Int {
+        // alpha2.40.x: dual-mode TWS (BR/EDR+LE) 在服务发现阶段易被 LE 连接挤掉(status=147)。
+        // 当纯 LE 持续失败时回退 TRANSPORT_AUTO 让系统自动选择；纯 LE 机型仍优先 LE。
+        return if (transportAutoTried) BluetoothDevice.TRANSPORT_AUTO else BluetoothDevice.TRANSPORT_LE
+    }
 
     @Synchronized
     fun init(ctx: Context) {
@@ -1128,6 +1134,7 @@ class GaiaBleClient private constructor() {
                 refreshGattCache(g)
                 AppLog.i(GaiaConstants.TAG, "GATT connected " + deviceAddress + " -> discovering services")
                 gattPendingSince = 0
+                if (deviceAddress != null) lastConnectedAddr = deviceAddress
                 if (leAddrVerified) deviceAddress?.let {
                     saveLeAddrFile(it)
                     try {
@@ -1157,6 +1164,22 @@ class GaiaBleClient private constructor() {
                         attemptCount = 0
                         handler.removeCallbacks(scanTimeout)
                         handler.postDelayed({ startGenericScan() }, 500)
+                    } else {
+                        // alpha2.40.x: 单候选或无候选时，服务发现阶段断连(如 status=147) 不能静默卡住。
+                        // 记录地址并延迟重连同一地址；首次失败后回退 TRANSPORT_AUTO（dual-mode TWS 更稳）。
+                        val retryAddr = lastConnectedAddr ?: deviceAddress
+                        if (retryAddr != null) {
+                            Log.w(GaiaConstants.TAG, "solo/single-candidate disconnect(status=" + status +
+                                    "), retry same addr=" + retryAddr + " transportAutoTried=" + transportAutoTried)
+                            if (!transportAutoTried) {
+                                transportAutoTried = true
+                                Log.d(GaiaConstants.TAG, "switch to TRANSPORT_AUTO for next attempt")
+                            }
+                            handler.removeCallbacks(scanTimeout)
+                            handler.postDelayed({
+                                if (!connected) connect(context!!, retryAddr)
+                            }, 900)
+                        }
                     }
                 }
                 try { context?.let { HeadsetGate.clearConnectedMac(it) } }
@@ -1178,6 +1201,8 @@ class GaiaBleClient private constructor() {
                 val hasGaia = service != null
                 if (hasGaia) {
                     AppLog.i(GaiaConstants.TAG, "protocol: GAIA service present (QCC 系)")
+                    transportAutoTried = false
+                    if (deviceAddress != null) lastConnectedAddr = deviceAddress
                     cmdChar = service.getCharacteristic(GaiaConstants.UUID_COMMAND)
                     respChar = service.getCharacteristic(GaiaConstants.UUID_RESPONSE)
                     dataChar = service.getCharacteristic(GaiaConstants.UUID_DATA)
@@ -1204,6 +1229,8 @@ class GaiaBleClient private constructor() {
                         enableNotification(srcRespChar)
                         enableNotification(srcNotifyChar)
                         hasSrc9 = true
+                        transportAutoTried = false
+                        if (deviceAddress != null) lastConnectedAddr = deviceAddress
                         Log.d(GaiaConstants.TAG, "BleSourceSwitch(9ECA) service ready, srcClient bound")
                         AppLog.i(GaiaConstants.TAG, "protocol: 9ECA(9ECA0000) service present (蓝讯系) -> srcClient bound")
                         try { if (srcCapChar != null) g.readCharacteristic(srcCapChar) } catch (_: Exception) { }
