@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.38.9**（versionCode 269） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.40.0**（versionCode 272） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -149,7 +149,8 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
-- **alpha2.38.9**（当前）：借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档完成布丁 PUDDING（MD-TWS-056）适配——GAIA v4 over RFCOMM/SPP 连接、5 档 ANC（关闭/自适应/通透/抗风/基础降噪）、三路电量含充电盒、增益与指示灯控制；并修复 SettingsFragment 重复 `setContentView` 导致的弹窗自定义图标闪退
+- **alpha2.40.0**（当前）：控制面板搬进蓝牙设备详情页——在Settings蓝牙设备详情注入降噪控制 + 功能控制面板；未连接时空间音频开关三重禁用（isEnabled+isClickable+isFocusable）；降噪控制标题 topMargin=dp(16) 不再贴卡片顶边；纯注入UI组件（ControlPanel/DeviceDetailsPanel/CtrlBus），不打BLE/Gaia单例、不动主界面链路
+- **alpha2.38.9**：借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 协议文档完成布丁 PUDDING（MD-TWS-056）适配——GAIA v4 over RFCOMM/SPP 连接、5 档 ANC（关闭/自适应/通透/抗风/基础降噪）、三路电量含充电盒、增益与指示灯控制；并修复 SettingsFragment 重复 `setContentView` 导致的弹窗自定义图标闪退
 - alpha2.38.7：弹窗电量文字恢复写进 GMS 原生 `subhead`（耳机名下方、图标上方），移除自绘 overlay + 硬编码坐标；仅 subhead 缺失时兜底自绘，位置从 `PopupProfile` 屏幕布局库读取
 - alpha2.38.5：修复弹窗电量显示丢失 + ANC 按钮无响应（模式条动态定位追踪 central_btn）
 - alpha2.38.4：弹窗图标+模式面板整体上抬 140px，给设置按钮腾出空间

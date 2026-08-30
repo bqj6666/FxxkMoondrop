@@ -5,7 +5,15 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.40.0 (2026-08-30)
+- **控制面板搬进蓝牙设备详情页**：在 Settings 蓝牙设备详情页（BluetoothDeviceDetailsFragment）注入**降噪控制** 与 **功能控制**（空间音频 / 追踪 / 增益 / 指示灯）面板。
+  - 纯注入 UI 组件（ControlPanel / DeviceDetailsPanel / CtrlBus），只调用回调，不持有 BLE / Gaia 单例引用，不动主界面 OverviewFragment / Moondrop 链路
+  - **空间音频开关**：未连接时三重禁用（`isEnabled` + `isClickable` + `isFocusable` 均按 `state.connected` 置 false），配合 `safeCommand` 命令拦截，彻底避免未连接时能点击 / 切换
+  - **降噪控制标题**：加 `topMargin = dp(16)`，不再紧贴卡片顶边
+- 版本号升至 **alpha2.40.0**（versionCode 272）
+
 ## alpha2.38.10 (2026-08-29)
+
 - **显示层中英文切换补全**：新增语言偏好（跟随系统 / 中文 / English，`cfg` 的 `lang` 键）。
   - **降噪面板**：ANC 模式按钮（关闭 / 降噪 / 透传 / 抗风 + 自适应 / 直播）与设置页 ANC 按钮映射行标签随语言切换
   - **日志弹窗**：日志抓取隐私声明弹窗、进度提示、保存路径提示、日志 ZIP 内分类文件名随语言切换

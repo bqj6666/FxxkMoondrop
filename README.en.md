@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.38.10** (versionCode 270) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.40.0** (versionCode 272) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -147,7 +147,8 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
-- **alpha2.38.10** (current): Display-layer Chinese/English switching. Text in the ANC panel, log popup (privacy notice / progress / save path / ZIP inner filenames), and permission-check page now follows the language preference (Follow system / Chinese / English); preference is exposed via an exported ContentProvider for the GMS popup to read cross-process.
+- **alpha2.40.0** (current): Moved the control panel into the Bluetooth device detail page — injects the noise-control + feature panel into Settings device details; spatial-audio switch is triple-disabled (isEnabled+isClickable+isFocusable) while disconnected; noise-control title gets topMargin=dp(16) so it no longer touches the card top edge; pure injected UI (ControlPanel/DeviceDetailsPanel/CtrlBus) with no BLE/Gaia singleton and no main-screen changes.
+- **alpha2.38.10**: Display-layer Chinese/English switching. Text in the ANC panel, log popup (privacy notice / progress / save path / ZIP inner filenames), and permission-check page now follows the language preference (Follow system / Chinese / English); preference is exposed via an exported ContentProvider for the GMS popup to read cross-process.
 - **alpha2.38.9** (previous): Adapted PUDDING (MD-TWS-056) via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs — GAIA v4 over RFCOMM/SPP, 5-level ANC (Off / Adaptive / Transparency / Wind / Basic), triple-battery incl. charging case, gain & indicator control; also fixed a popup custom-icon crash caused by a duplicate `setContentView` in SettingsFragment.
 - alpha2.38.7: Popup battery text written back into GMS native `subhead` (below earbud name, above icon); removed self-drawn overlay + hardcoded coordinates; self-drawn fallback only when `subhead` is missing, position read from `PopupProfile` screen-layout library.
 - alpha2.38.5: Fixed popup battery display loss + ANC button unresponsive (mode bar dynamic-position tracking of `central_btn`).
