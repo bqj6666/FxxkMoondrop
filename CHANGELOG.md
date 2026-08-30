@@ -5,6 +5,13 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.40.1 (2026-08-30)
+- **Fast Pair 弹窗「设置」按钮改为跳转系统蓝牙设备详情页**：不再跳转软件主界面 MainActivity。
+  - 新增 `resolveMoondropAddress()`：从 `BluetoothAdapter` 已配对设备里用 `DeviceMatcher.isMoondrop()` 动态匹配 Moondrop 耳机蓝牙地址（**不硬编码 MAC**），找不到返回 null
+  - 匹配到地址时，用 `:settings:show_fragment` + `:settings:show_fragment_args`(device_address) 打开 `Settings$BluetoothDeviceDetailActivity` 的 `BluetoothDeviceDetailsFragment`，进入系统蓝牙设备详情页（路径从 SettingsActivity 反编译确认）
+  - **兜底逻辑**：动态匹配不到 Moondrop 地址时才回退到原 MainActivity，避免异常
+- 版本号升至 **alpha2.40.1**（versionCode 273）
+
 ## alpha2.40.0 (2026-08-30)
 - **控制面板搬进蓝牙设备详情页**：在 Settings 蓝牙设备详情页（BluetoothDeviceDetailsFragment）注入**降噪控制** 与 **功能控制**（空间音频 / 追踪 / 增益 / 指示灯）面板。
   - 纯注入 UI 组件（ControlPanel / DeviceDetailsPanel / CtrlBus），只调用回调，不持有 BLE / Gaia 单例引用，不动主界面 OverviewFragment / Moondrop 链路

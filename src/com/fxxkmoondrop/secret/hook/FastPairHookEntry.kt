@@ -715,6 +715,29 @@ class FastPairHookEntry {
     /** alpha2.37: 在确定按钮旁注入"设置"入口 —— 动态定位 central_btn 同行对齐 */
     /** alpha2.38: 在确定按钮旁注入"设置"入口 —— 克隆 central_btn 插入同一父容器，共享布局流与动态取色 */
     /** alpha2.38.3: 设置按钮 —— overlay 到 central_btn 正上方，完全克隆宽高/minHeight/minWidth，上下平行对齐 */
+    /** 动态解析当前 Moondrop 耳机的蓝牙地址（不硬编码）；找不到返回 null。 */
+    private fun resolveMoondropAddress(act: android.app.Activity): String? {
+        try {
+            val ad = BluetoothAdapter.getDefaultAdapter() ?: return null
+            val devs = ad.bondedDevices ?: return null
+            var firstAddr: String? = null
+            for (d in devs) {
+                val n = d.name
+                val a = d.address
+                if (n == null || a == null) continue
+                if (DeviceMatcher.isMoondrop(n)) {
+                    Log.d(TAG, "[FastPairHook] resolveMoondropAddress hit: " + a + " name=" + n)
+                    return a
+                }
+                if (firstAddr == null && DeviceMatcher.isMoondrop(a)) firstAddr = a
+            }
+            return firstAddr
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] resolveMoondropAddress fail: " + t)
+            return null
+        }
+    }
+
     private fun injectSettingsButton(act: android.app.Activity) {
         try {
             val decor = act.window.decorView
@@ -765,11 +788,28 @@ class FastPairHookEntry {
 
             btn.setOnClickListener {
                 try {
-                    val i = android.content.Intent()
-                    i.setClassName(PKG_APP, "com.fxxkmoondrop.secret.MainActivity")
-                    i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    act.startActivity(i)
-                    Log.d(TAG, "[FastPairHook] settings btn -> launch MainActivity")
+                    val devAddr = resolveMoondropAddress(act)
+                    if (devAddr != null) {
+                        val argB = android.os.Bundle()
+                        argB.putString("device_address", devAddr)
+                        val i = android.content.Intent()
+                        i.setClassName("com.android.settings",
+                                "com.android.settings.Settings\$BluetoothDeviceDetailActivity")
+                        i.putExtra(":settings:show_fragment",
+                                "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")
+                        i.putExtra(":settings:show_fragment_args", argB)
+                        i.putExtra(":settings:show_fragment_as_subsetting", true)
+                        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        act.startActivity(i)
+                        Log.d(TAG, "[FastPairHook] settings btn -> BT device detail addr=" + devAddr)
+                        return@setOnClickListener
+                    }
+                    Log.d(TAG, "[FastPairHook] settings btn: no Moondrop addr, fallback to MainActivity")
+                    val i2 = android.content.Intent()
+                    i2.setClassName(PKG_APP, "com.fxxkmoondrop.secret.MainActivity")
+                    i2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    act.startActivity(i2)
+                    Log.d(TAG, "[FastPairHook] settings btn -> launch MainActivity (fallback)")
                 } catch (t: Throwable) {
                     Log.d(TAG, "[FastPairHook] settings btn launch fail: " + t)
                 }
