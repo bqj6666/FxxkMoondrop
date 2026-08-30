@@ -29,6 +29,7 @@ class AncBridge {
         @JvmStatic
         fun bind(ctx: Context?) {
             if (ctx != null) sCtx = ctx.applicationContext
+            CtrlBus.bind(ctx)
         }
 
         /** 最新 ANC 模式缓存 */
@@ -81,6 +82,7 @@ class AncBridge {
                 currentModeVersion++
                 Log.d(TAG, "ANC mode updated: $mode (${MODE_NAMES[mode]})")
                 sendModeState() // alpha1.20: 通知 GMS 弹窗同步高亮
+                CtrlBus.postDcChanged() // alpha2.39: 推送跨进程状态给设备详情页
             }
         }
 

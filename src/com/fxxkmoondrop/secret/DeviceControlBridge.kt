@@ -32,7 +32,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun setStateListener(l: (() -> Unit)?) { stateListener = l }
-    private fun notifyStateChanged() { bumpVersion(); stateListener?.invoke() }
+    private fun notifyStateChanged() { bumpVersion(); stateListener?.invoke(); CtrlBus.postDcChanged() }
 
     @JvmStatic
     fun applyProfile(profile: AncProfileLib.DcProfile) {
@@ -178,5 +178,6 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     fun reset() {
         spatialState = -1; headTracking = -1; gainLevel = -1; ledState = -1
         stateListener?.invoke()
+        CtrlBus.postDcChanged()
     }
 }

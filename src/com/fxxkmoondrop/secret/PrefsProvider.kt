@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.MatrixCursor
+import android.util.Log
 import android.net.Uri
 
 /**
@@ -21,7 +22,10 @@ import android.net.Uri
  */
 class PrefsProvider : ContentProvider() {
 
-    override fun onCreate(): Boolean = true
+    override fun onCreate(): Boolean {
+        CtrlBus.bind(context)
+        return true
+    }
 
     override fun query(
         uri: Uri,
@@ -31,6 +35,7 @@ class PrefsProvider : ContentProvider() {
         sortOrder: String?
     ): Cursor? {
         val key = uri.lastPathSegment ?: return null
+        if (key == "dc_cmd") return handleDcCmd(uri)
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
         val value: Int = when (key) {
             "show_wind" -> if (sp.getBoolean("show_wind", true)) 1 else 0
@@ -39,6 +44,42 @@ class PrefsProvider : ContentProvider() {
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))
         c.addRow(arrayOf(key, value))
+        return c
+    }
+
+    private fun handleDcCmd(uri: Uri): Cursor? {
+        val action = uri.getQueryParameter("action") ?: return null
+        try {
+            when (action) {
+                "set_anc" -> {
+                    val mode = uri.getQueryParameter("mode")?.toIntOrNull() ?: -1
+                    AncBridge.setAncMode(mode)
+                }
+                "set_spatial" -> {
+                    val enabled = uri.getQueryParameter("enabled")?.toBoolean() ?: false
+                    DeviceControlBridge.setSpatialEnabled(enabled)
+                }
+                "set_tracking" -> {
+                    val mode = uri.getQueryParameter("mode")?.toIntOrNull() ?: -1
+                    DeviceControlBridge.setTrackingMode(mode)
+                }
+                "set_gain" -> {
+                    val level = uri.getQueryParameter("level")?.toIntOrNull() ?: -1
+                    DeviceControlBridge.setGain(level)
+                }
+                "set_led" -> {
+                    val state = uri.getQueryParameter("state")?.toIntOrNull() ?: -1
+                    DeviceControlBridge.setLed(state)
+                }
+            }
+        } catch (th: Throwable) { Log.e("PrefsProvider", "dc_cmd err", th) }
+        val c = MatrixCursor(arrayOf("_key", "_value"))
+        c.addRow(arrayOf("anc", AncBridge.getCurrentMode()))
+        c.addRow(arrayOf("spatial", if (DeviceControlBridge.isSpatialOn()) 1 else 0))
+        c.addRow(arrayOf("headTracking", DeviceControlBridge.spatialUiMode()))
+        c.addRow(arrayOf("gain", DeviceControlBridge.getGainLevel()))
+        c.addRow(arrayOf("led", DeviceControlBridge.getLedState()))
+        c.addRow(arrayOf("connected", if (GaiaBleClient.getInstance().isConnected()) 1 else 0))
         return c
     }
 
@@ -54,4 +95,9 @@ class PrefsProvider : ContentProvider() {
         selection: String?,
         selectionArgs: Array<String>?
     ): Int = 0
+
+    companion object {
+        /** dc_cmd 跨进程 uri */
+        const val DC_CMD_URI = "content://com.fxxkmoondrop.secret.prefs/dc_cmd"
+    }
 }

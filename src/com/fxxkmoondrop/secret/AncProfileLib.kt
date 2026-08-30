@@ -139,4 +139,14 @@ object AncProfileLib {
         }
         return DEFAULT_DC
     }
+
+    /** 是否为 Moondrop 设备：设备名含 "MOONDROP"，或命中任一已知 DC 型号档案。用于限定蓝牙详情页面板注入。 */
+    fun isMoondrop(deviceName: String?): Boolean {
+        val n = deviceName?.uppercase()?.trim() ?: return false
+        if (n.contains("MOONDROP")) return true
+        for (p in DC_PROFILES) {
+            if (n.contains(p.nameKey)) return true
+        }
+        return false
+    }
 }
