@@ -4,6 +4,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.ContentValues
+import android.provider.MediaStore
 import android.os.Build
 import android.os.Environment
 import java.io.BufferedReader
@@ -69,9 +71,7 @@ class LogCollector {
                         buildRuntimeLog())
 
                 // 2) 先写入应用私有目录 files/logs/（打包 zip 的临时位置）
-                var base = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                if (base == null) base = ctx.filesDir
-                val dir = File(base, "logs")
+                val dir = File(ctx.filesDir, "logs")
                 if (!dir.exists() && !dir.mkdirs()) return Lang.t(ctx, "保存失败: 无法创建目录 ", "Save failed: cannot create dir ") + dir
                 val zipFile = File(dir, "$baseName.zip")
 
@@ -91,17 +91,33 @@ class LogCollector {
                 val rootPath = tryCopyToPublicRoot(zipFile, "$baseName.zip")
                 if (rootPath != null) return rootPath
 
-                // 5) 回退：直接尝试写公共根目录（旧系统 Scoped Storage 之前）
-                try {
-                    val pub = File(Environment.getExternalStorageDirectory(), "$baseName.zip")
-                    copy(zipFile, pub)
-                    if (pub.exists() && pub.length() > 0) return pub.absolutePath
-                } catch (_: Exception) { }
+                // 5) 无 Root：用 MediaStore 写入系统公共下载目录（Android 10+ 免存储权限，下载/文件里可见可分享）
+                val mediaPath = tryExportViaMediaStore(ctx, zipFile, "$baseName.zip")
+                if (mediaPath != null) return mediaPath
 
-                // 6) 最终回退：私有目录
-                return zipFile.absolutePath + Lang.t(ctx, "\n（Root 不可用，已存应用目录；分享前请自行导出）", "\n(Root unavailable, saved to app dir; export manually before sharing)")
+                // 6) 最终兜底：应用内部私有目录
+                return zipFile.absolutePath + Lang.t(ctx, "\n（Root 与公共下载均不可用，已存应用内部目录；分享前请自行导出）", "\n(Root & public download unavailable, saved to app internal dir; export manually before sharing)")
             } catch (e: Exception) {
                 return Lang.t(ctx, "保存失败: ", "Save failed: ") + e
+            }
+        }
+
+        /** 用 MediaStore 写入系统公共下载目录（Android 10+，免存储权限）；失败返回 null。 */
+        private fun tryExportViaMediaStore(ctx: Context, src: File, fileName: String): String? {
+            try {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    FileInputStream(src).use { it.copyTo(out) }
+                } ?: return null
+                return "Download/" + fileName
+            } catch (_: Exception) {
+                return null
             }
         }
 
@@ -147,6 +163,14 @@ class LogCollector {
             sb.append("硬件: ").append(Build.HARDWARE).append('\n')
             sb.append("系统: Android ").append(Build.VERSION.RELEASE)
                     .append(" (SDK ").append(Build.VERSION.SDK_INT).append(") ").append(Build.ID).append('\n')
+            // 设备 OS 详细信息（对适配与问题定位尤其有用）
+            sb.append("OS 版本: code=").append(Build.VERSION.CODENAME)
+                    .append(" incremental=").append(Build.VERSION.INCREMENTAL)
+                    .append(" 安全补丁=").append(Build.VERSION.SECURITY_PATCH).append('\n')
+            sb.append("OS 基底: ").append(Build.VERSION.BASE_OS)
+                    .append(" previewSdk=").append(Build.VERSION.PREVIEW_SDK_INT).append('\n')
+            sb.append("OS 显示: ").append(Build.DISPLAY).append('\n')
+            sb.append("内核: ").append(System.getProperty("os.version")).append('\n')
             sb.append("指纹: ").append(Build.FINGERPRINT).append('\n')
             sb.append("ABI: ").append(Arrays.toString(Build.SUPPORTED_ABIS)).append('\n')
             try {

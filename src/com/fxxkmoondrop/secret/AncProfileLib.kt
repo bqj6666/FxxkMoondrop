@@ -130,6 +130,20 @@ object AncProfileLib {
         // GAIA 蓝讯系; ANC 走 ANC_V2 恒等映射(0=关/1=降噪/2=透传), 增益恒等 0/1/2 = 低/中/高
         DcProfile("SPACE TRAVEL 2", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
+
+        // 猫饼 Nekocake (9ECA 蓝讯系): 【预置，待实测】空间音频=否, 三档增益, 无 LED
+        // 与 SPACE TRAVEL 2 同为 9ECA0000 BleSourceSwitch 蓝讯主控, 增益恒等 0/1/2 = 低/中/高
+        DcProfile("NEKOCAKE", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
+
+        // 音乐胶囊 Pill (9ECA 蓝讯系): 【预置，待实测】空间音频=否, 三档增益, 无 LED
+        DcProfile("PILL", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
+
+        // 猫咖 MOCA (独立新品, 2026-08-31 真机日志+用户确认): 无空间音频, 三档增益, 有 LED, 支持抗风噪
+        // DcProfile 暂无入耳检测字段(架构不支持, 未实现); gainMap 恒等 0/1/2 = 低/中/高 【预置，待实测】
+        DcProfile("MOCA", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
     )
 
     /** 默认 DC 档案：全部不支持（未知型号保守策略） */

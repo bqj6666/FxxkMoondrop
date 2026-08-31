@@ -12,6 +12,7 @@ class DeviceMatcher {
                     || n.contains("golden ages")
                     || n.contains("goldenages")
                     || n.contains("水月雨")
+                    || AncProfileLib.isMoondrop(name)
         }
     }
 }

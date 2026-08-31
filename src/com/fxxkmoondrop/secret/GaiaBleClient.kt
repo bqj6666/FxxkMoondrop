@@ -131,6 +131,7 @@ class GaiaBleClient private constructor() {
     @Volatile private var forceDirectConnect = false
     @Volatile private var lastConnectedAddr: String? = null
     @Volatile private var transportAutoTried = false
+    @Volatile private var rfcommFallbackTried = false
 
     private val scanTimeout = object : Runnable {
         override fun run() {
@@ -211,8 +212,8 @@ class GaiaBleClient private constructor() {
                         val hookOk = EnvProbe.isFastPairHookActive(context)
                         Log.d(GaiaConstants.TAG, "env: root=" + rooted + " module=" + hookOk)
                         if (hookOk) {
-                            AppLog.i(GaiaConstants.TAG, "env: fastpair hook alive -> GMS bridge scan")
-                            requestRemoteScan("boot-no-cache")
+                            AppLog.i(GaiaConstants.TAG, "env: fastpair hook alive -> app self-scan first, GMS bridge as fallback")
+                            handler.postDelayed({ startGenericScan() }, 800)
                         } else {
                             AppLog.i(GaiaConstants.TAG, "env: hook not reachable -> app self-scan fallback")
                             handler.postDelayed({ startGenericScan() }, 800)
@@ -340,6 +341,8 @@ class GaiaBleClient private constructor() {
                 } catch (_: Exception) { }
             }
         }
+        // alpha2.42: RFCOMM/SPP 已连时直接复用，避免 detect 轮询的 connect() 断开 RFCOMM
+        if (useRfcomm && connected) return true
         if (connected && address.equals(deviceAddress, ignoreCase = true)) return true
         if (!connected && gatt != null && address.equals(deviceAddress, ignoreCase = true)) {
             if (gattPendingSince > 0 && System.currentTimeMillis() - gattPendingSince > GaiaConstants.GATT_PENDING_TIMEOUT_MS) {
@@ -361,6 +364,8 @@ class GaiaBleClient private constructor() {
                 return true
             }
         }
+        // alpha2.42: 每次新连接尝试重置 RFCOMM 标志（默认兜底；detect 每5s触发一次 connect）
+        rfcommFallbackTried = false
         disconnectInternal()
         try {
             val adapter = BluetoothAdapter.getDefaultAdapter()
@@ -595,7 +600,7 @@ class GaiaBleClient private constructor() {
         val ok = startLeScan(
                 matcher = { n, addr, result ->
                     var hit = false
-                    if (!n.isNullOrEmpty() && DeviceMatcher.isMoondrop(n)) {
+                    if (!n.isNullOrEmpty() && (DeviceMatcher.isMoondrop(n) || AncProfileLib.isMoondrop(n))) {
                         hit = true
                     } else if (n.isNullOrEmpty()) {
                         if (addr.length >= 14 && prefixMatchesBonded(addr)) hit = true
@@ -1169,16 +1174,38 @@ class GaiaBleClient private constructor() {
                         // 记录地址并延迟重连同一地址；首次失败后回退 TRANSPORT_AUTO（dual-mode TWS 更稳）。
                         val retryAddr = lastConnectedAddr ?: deviceAddress
                         if (retryAddr != null) {
-                            Log.w(GaiaConstants.TAG, "solo/single-candidate disconnect(status=" + status +
-                                    "), retry same addr=" + retryAddr + " transportAutoTried=" + transportAutoTried)
                             if (!transportAutoTried) {
+                                // alpha2.40.x: 首次失败 -> 回退 TRANSPORT_AUTO（dual-mode TWS 更稳）
+                                Log.w(GaiaConstants.TAG, "solo/single-candidate disconnect(status=" + status +
+                                        "), retry same addr=" + retryAddr + " -> TRANSPORT_AUTO")
                                 transportAutoTried = true
-                                Log.d(GaiaConstants.TAG, "switch to TRANSPORT_AUTO for next attempt")
+                                handler.removeCallbacks(scanTimeout)
+                                handler.postDelayed({
+                                    if (!connected) connect(context!!, retryAddr)
+                                }, 900)
+                            } else if (!rfcommFallbackTried) {
+                                // alpha2.42: LE + TRANSPORT_AUTO 仍失败 -> 主动尝试 RFCOMM/SPP 兜底（默认，所有设备）
+                                rfcommFallbackTried = true
+                                Log.w(GaiaConstants.TAG, "LE/AUTO still failing(status=" + status +
+                                        "), try RFCOMM/SPP fallback (default) " + retryAddr)
+                                AppLog.w(GaiaConstants.TAG, "protocol: LE/TRANSPORT_AUTO failed, trying RFCOMM/SPP fallback (default)")
+                                try {
+                                    val remote = BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(retryAddr)
+                                    if (remote != null) {
+                                        tryRfcommFallback(remote)
+                                    } else {
+                                        handler.removeCallbacks(scanTimeout)
+                                        handler.postDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(GaiaConstants.TAG, "RFCOMM fallback fail: " + e)
+                                    handler.removeCallbacks(scanTimeout)
+                                    handler.postDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
+                                }
+                            } else {
+                                // alpha2.42: RFCOMM 已试过仍失败 -> 本连接会话不再重试，等 detect 下轮 re-scan
+                                Log.d(GaiaConstants.TAG, "RFCOMM fallback already tried, wait for next detect scan")
                             }
-                            handler.removeCallbacks(scanTimeout)
-                            handler.postDelayed({
-                                if (!connected) connect(context!!, retryAddr)
-                            }, 900)
                         }
                     }
                 }

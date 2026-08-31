@@ -627,9 +627,6 @@ class OverviewFragment : Fragment() {
         val connected = try { gaia.isConnected() } catch (e: Exception) { false }
         val devName = if (connected) gaia.getConnectedDeviceName() else null
         val profile = AncProfileLib.resolveDc(devName)
-        val hasSpatial = profile.hasSpatial || (connected && try { gaia.hasSpatialSupport() } catch (e: Exception) { false })
-        val hasGain = profile.hasGain || (connected && try { gaia.hasGainSupport() } catch (e: Exception) { false })
-        val hasLed = profile.hasLed || (connected && try { gaia.hasLedSupport() } catch (e: Exception) { false })
 
         val spatialOn = DeviceControlBridge.isSpatialOn()
         val sMode = DeviceControlBridge.spatialUiMode()

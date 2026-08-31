@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.0**（versionCode 274） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.2**（versionCode 276） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -149,6 +149,8 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **alpha2.41.2**：连接稳定性增强——MOCA 等 dual-mode 设备 RFCOMM/SPP 兜底。GaiaBleClient 单候选分支做 LE → TRANSPORT_AUTO → RFCOMM 三级升级兜底（默认，所有设备）；LE 与 TRANSPORT_AUTO 均失败（status=147）时主动尝试 RFCOMM/SPP，解决 MOCA（猫咖）等 LEE GATT 被 BR/EDR 挤掉无法建立 GAIA 控制通道的问题；新增 rfcommFallbackTried 标志防止 RFCOMM 失败刷屏；connect() 里 useRfcomm 已连时直接复用，避免 detect 轮询断开 RFCOMM。
+- **alpha2.41.1**：修复日志导出 EACCES（Permission denied）——部分 ColorOS 系统上 getExternalFilesDir 返回的 /Android/data/.../files/Download/logs/ 路径在写 ZIP 时被存储策略拦截，日志抓取报「保存失败」；LogCollector 打包目录改为应用内部 filesDir（绝对可写），导出链调整为 Root 复制公共根 → MediaStore 写入系统公共下载（Android 10+ 免存储权限）→ 兜底内部目录，确保日志 ZIP 任何 ROM / 有无 Root 都能保存并分享
 - **alpha2.41.0**：蓝讯系连接稳定性修复 + 太空漫游2（Space Travel 2，BT8932F）适配——GaiaBleClient 新增 lastConnectedAddr + transportAutoTried，dual-mode TWS 服务发现阶段被 LE 挤掉（status=147）时 transportFor 回退 TRANSPORT_AUTO，单候选断连记录地址延迟重连；AncProfileLib 新增 SPACE TRAVEL 2 DC 档案（无空间音频、三档增益、恒等映射）
 - **alpha2.40.1**：Fast Pair 弹窗「设置」按钮改为跳转系统蓝牙设备详情页（不再跳转软件主界面）；新增 resolveMoondropAddress() 从已配对设备动态匹配 Moondrop 耳机地址（不硬编码 MAC），用 :settings:show_fragment + device_address 打开系统蓝牙设备详情页；匹配不到时兜底回退原 MainActivity
 - **alpha2.40.0**：控制面板搬进蓝牙设备详情页——在Settings蓝牙设备详情注入降噪控制 + 功能控制面板；未连接时空间音频开关三重禁用（isEnabled+isClickable+isFocusable）；降噪控制标题 topMargin=dp(16) 不再贴卡片顶边；纯注入UI组件（ControlPanel/DeviceDetailsPanel/CtrlBus），不打BLE/Gaia单例、不动主界面链路

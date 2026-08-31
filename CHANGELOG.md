@@ -5,6 +5,17 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.2 (276)
+### 连接稳定性增强：MOCA 等 dual-mode 设备 RFCOMM/SPP 兜底
+- 单候选分支做 LE → TRANSPORT_AUTO → RFCOMM 三级升级兜底（默认，所有设备）
+- LE 与 TRANSPORT_AUTO 均失败(status=147)时，主动尝试 RFCOMM/SPP，解决 MOCA(猫咖) 等 LEE GATT 被 BR/EDR 挤掉无法建立 GAIA 控制通道的问题
+- 新增 rfcommFallbackTried 标志：每次连接会话重置，RFCOMM 失败不再刷屏，等 detect 下轮 re-scan
+- 防护：useRfcomm 已连时直接复用，避免 detect 轮询的 connect() 断开 RFCOMM
+- 日志增强：`LogCollector` 在系统信息一节补充设备 OS 详情——`Build.VERSION.CODENAME`/`INCREMENTAL`/`SECURITY_PATCH`（安全补丁）、`Build.VERSION.BASE_OS`/`PREVIEW_SDK_INT`、`Build.DISPLAY`（如 ColorOS 完整版本串）、内核版本 `System.getProperty("os.version")`，便于适配与定位问题。
+## alpha2.41.1 (2026-08-31)
+- **修复日志导出 EACCES（Permission denied）**：部分 ColorOS 系统上 `getExternalFilesDir` 返回的 `/Android/data/.../files/Download/logs/` 路径在写 ZIP 时被存储策略拦截，日志抓取报「保存失败」。`LogCollector` 打包目录改为应用内部 `filesDir`（绝对可写），导出链调整为 Root 复制公共根 → MediaStore 写入系统公共下载（Android 10+ 免存储权限）→ 兜底内部目录，确保日志 ZIP 任何 ROM / 有无 Root 都能保存并分享。
+
+---
 ## alpha2.41.0 (2026-08-31)
 - **蓝讯系连接稳定性 + 太空漫游2（Space Travel 2）适配**：
   - `GaiaBleClient`：dual-mode TWS（BR/EDR+LE）在服务发现阶段易被 LE 连接挤掉（status=147）；新增 `lastConnectedAddr` + `transportAutoTried`，纯 LE 持续失败时 `transportFor()` 回退 `TRANSPORT_AUTO`，单候选断连时记录地址延迟重连同一地址（900ms），成功发现 GAIA/9ECA service 时重置标记。
