@@ -95,10 +95,10 @@ class HeadsetReceiver : BroadcastReceiver() {
         if (name == null) name = "蓝牙设备"
         Log.i(TAG, "device: $name ($address) connected=$connected disconnected=$disconnected")
 
-        if (connected && name.lowercase().contains("moondrop")) {
+        if (connected && DeviceMatcher.isMoondrop(name)) {
             PopupGate.tryShowConnectedDeferred(c, address, name)
         } else if (disconnected) {
-            if (name.lowercase().contains("moondrop")) {
+            if (DeviceMatcher.isMoondrop(name)) {
                 // alpha1.40: 系统层断开（ACL/A2DP/HFP）立即清 HeadsetGate MAC 缓存，
                 // 主界面降噪面板/模拟区随真实状态刷新（GATT 断开由 GaiaBleClient 负责）
                 HeadsetGate.clearConnectedMac(c)

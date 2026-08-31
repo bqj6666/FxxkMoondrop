@@ -134,7 +134,7 @@ class XposedEntry : XposedModule() {
                 try { name = HookHelper.getObjectField(device, "mName") as String? } catch (_: Throwable) { }
             }
             if (name == null) return
-            if (!name.lowercase().contains("moondrop")) return
+            if (!DeviceMatcher.isMoondrop(name)) return
             if (to == 2) {
                 Log.d(TAG, "A2DP connected: $name -> silent launch + wake service")
                 execSilent("am start -n $PKG_MOONDROP/.MainActivity --ez fxxk_silent true --exclude-from-recents")

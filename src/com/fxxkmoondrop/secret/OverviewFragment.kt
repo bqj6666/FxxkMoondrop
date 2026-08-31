@@ -769,7 +769,7 @@ class OverviewFragment : Fragment() {
             if (bonded != null) {
                 for (d in bonded) {
                     val nm = d.name
-                    if (nm != null && nm.lowercase().contains("moondrop")) {
+                    if (nm != null && DeviceMatcher.isMoondrop(nm)) {
                         sb.append(nm).append(" · ").append(d.address).append("\n")
                     }
                 }

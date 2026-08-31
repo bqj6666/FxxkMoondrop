@@ -61,7 +61,7 @@ class HeadsetDetectService : Service() {
             if (devs == null) return null
             for (d in devs) {
                 val n = d.name
-                if (n != null && n.lowercase().contains("moondrop")) return d.address
+                if (n != null && DeviceMatcher.isMoondrop(n)) return d.address
             }
             return null
         }
@@ -295,7 +295,7 @@ class HeadsetDetectService : Service() {
             val now = HashSet<String>()
             for (d in all) {
                 val n = d.name
-                if (n != null && n.lowercase().contains("moondrop")) {
+                if (n != null && DeviceMatcher.isMoondrop(n)) {
                     now.add(d.address + "|" + n)
                 }
             }

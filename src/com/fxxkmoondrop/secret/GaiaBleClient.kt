@@ -175,7 +175,7 @@ class GaiaBleClient private constructor() {
                         Log.d(GaiaConstants.TAG, "resolveLeAddress: " + device.address + " -> " + d.address)
                         return d.address
                     }
-                    if (lower.contains("moondrop") && dn.lowercase().contains("moondrop")) {
+                    if (DeviceMatcher.isMoondrop(lower) && DeviceMatcher.isMoondrop(dn)) {
                         Log.d(GaiaConstants.TAG, "resolveLeAddress: " + device.address + " -> " + d.address + " (name match)")
                         return d.address
                     }
@@ -574,8 +574,8 @@ class GaiaBleClient private constructor() {
                     var match = false
                     if (n != null && targetName != null) {
                         match = n == targetName ||
-                                (n.lowercase().contains("moondrop") &&
-                                        targetName.lowercase().contains("moondrop"))
+                                (DeviceMatcher.isMoondrop(n) &&
+                                        DeviceMatcher.isMoondrop(targetName))
                     }
                     if (!match && ta.length == 17 && addr.length == 17 &&
                             ta.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)) {

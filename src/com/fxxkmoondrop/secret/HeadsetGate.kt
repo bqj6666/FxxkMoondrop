@@ -232,7 +232,7 @@ class HeadsetGate {
             if (devices == null) return null
             for (d in devices) {
                 val n = d.name
-                if (n != null && n.lowercase().contains("moondrop")) {
+                if (n != null && DeviceMatcher.isMoondrop(n)) {
                     return d.address
                 }
             }
