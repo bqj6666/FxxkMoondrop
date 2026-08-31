@@ -239,7 +239,7 @@ class PermissionActivity : Activity() {
             when (it.action) {
                 PermissionChecker.ACTION_RUNTIME -> {
                     if (it.requestCode == 1) {
-                        requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT), 1)
+                        requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_SCAN), 1)
                     } else if (it.requestCode == 2) {
                         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2)
                     }

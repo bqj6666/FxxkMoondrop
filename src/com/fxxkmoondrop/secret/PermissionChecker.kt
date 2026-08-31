@@ -24,8 +24,10 @@ class PermissionChecker {
 
             // 1. 蓝牙权限（Android 12+ 运行时）
             val btOk = Build.VERSION.SDK_INT < 31 ||
-                    ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                    PackageManager.PERMISSION_GRANTED
+                    (ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED &&
+                    ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) ==
+                    PackageManager.PERMISSION_GRANTED)
             list.add(Item(Lang.t(ctx, "蓝牙权限", "Bluetooth permission"),
                     btOk,
                     if (btOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，无法扫描 / 连接耳机", "Not granted, cannot scan / connect earbuds"),

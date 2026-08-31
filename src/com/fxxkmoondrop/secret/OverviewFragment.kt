@@ -785,7 +785,7 @@ class OverviewFragment : Fragment() {
         if (Build.VERSION.SDK_INT >= 31) {
             if (requireContext().checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                     != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
+                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), 1)
             }
         }
         if (Build.VERSION.SDK_INT >= 33) {
@@ -936,7 +936,7 @@ class OverviewFragment : Fragment() {
             when (it.action) {
                 PermissionChecker.ACTION_RUNTIME -> {
                     if (it.requestCode == 1) {
-                        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
+                        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), 1)
                     } else if (it.requestCode == 2) {
                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
                     }
