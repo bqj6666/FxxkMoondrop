@@ -7,9 +7,9 @@
 | 项目 | 说明 |
 |---|---|
 | 目标设备 | Moondrop 全系列高通 QCC 耳机（GAIA V3/V4）+ 中科蓝讯耳机（9ECA） |
-| 已实测 | 梦回2 / Golden Ages 2（GA2），TWS-01 定制 SoC；布丁 PUDDING（MD-TWS-056） |
-| 连接方式 | GA2: BLE GATT 直连；布丁: Classic Bluetooth RFCOMM / SPP |
-| 业务协议 | Qualcomm GAIA V3 over BLE（GA2）/ GAIA V4 over RFCOMM（布丁） |
+| 已实测 | 梦回2 / Golden Ages 2（GA2），TWS-01 定制 SoC；布丁 PUDDING（MD-TWS-056）；太空漫游2 / Space Travel 2（BT8932F 蓝讯） |
+| 连接方式 | GA2: BLE GATT 直连；布丁: Classic Bluetooth RFCOMM / SPP；太空漫游2: BLE GATT 直连 |
+| 业务协议 | Qualcomm GAIA V3 over BLE（GA2）/ GAIA V4 over RFCOMM（布丁）/ GAIA V3（ANC）+ 9ECA 私有协议（太空漫游2） |
 | 包名 | `com.fxxkmoondrop.secret` |
 
 ### BLE GATT 服务与特征 UUID
@@ -114,6 +114,8 @@ FxxkMoondrop 运行时自动探测耳机支持哪条 ANC 路径，不硬编码�
 ### 型号档案库（AncProfileLib）
 
 未实测型号回退默认映射（AC 名义编码 1=关 / 2=降噪 / 3=透传 / 4=抗风）。新型号实测确认后追加到 `AncProfileLib.PROFILES`，按设备名关键字匹配。用户可在设置页自定义映射，优先级最高。
+
+`SPACE TRAVEL 2` 档案（alpha2.41.0 加入，2026-09-01 真机双向实测）：BT8932F 蓝讯主控（9ECA），无空间音频、三档增益；ANC 走 AudioCuration 通道，映射 `[1,2,4,3]`（同 GA2：设备码 1=关/2=降/3=抗风/4=透传）；增益 `gainMap=[2,1,0]`（gainLabels=`["低","中","高"]`，设备码 0=高/1=中/2=低，反向于恒等，alpha2.41.5 修正）。
 
 ## 电量
 
