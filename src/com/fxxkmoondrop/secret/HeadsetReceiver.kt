@@ -39,6 +39,9 @@ class HeadsetReceiver : BroadcastReceiver() {
 
         // alpha2.7: GMS 连接弹窗关闭 -> 若处于模拟连接状态则自动恢复（真实连接不受影响）
         if (ACTION_FP_SHEET_CLOSED == action) {
+            // alpha2.41.5: 弹窗关闭后取消排队中的连接弹窗——用户已关闭弹窗，
+            // 之后 GAIA 就绪/超时不再触发第二次弹窗（用户可选等待弹窗变可控制，或关闭后在 App 操作）。
+            PopupGate.cancelPending()
             if (GaiaBleClient.isSimConnected()) {
                 GaiaBleClient.setSimConnected(false)
                 BatteryStore.clearGaia("AA:BB:CC:DD:EE:FF")

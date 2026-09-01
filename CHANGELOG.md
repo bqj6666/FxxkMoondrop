@@ -5,6 +5,12 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.5 (279)
+### Space Travel 2 映射写库 + 弹窗防重
+- **设备库**：Space Travel 2 加入 PROFILES（ANC AudioCuration 映射 `[1,2,4,3]`：关=1/降噪=2/透传=4/抗风=3，与 GOLDEN AGES 2 一致），实测不再需手动设置设备码；DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（真机实测 0x00=高/0x01=中/0x02=低 反向），档位名不再颠倒。
+- **弹窗防重**：`postShow` 增加统一防重——弹窗还开着（`sHalfSheetActivity != null`）或距上次显示低于 12s 不再弹新窗，ACL 与 PopupGate 两条通道汇聚到 postShow 后不会弹两次；弹窗关闭（HalfSheet onDestroy）时应用侧 `cancelPending()` 取消排队连接弹窗，GAIA 就绪/超时不再二次弹。行为：连上只弹一次，等待 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
+- **文档**：README 版本头与版本历史同步至 alpha2.41.5。
+
 ## alpha2.41.4 (278)
 ### RFCOMM 帧切分重构 + 能力探测响应驱动降级
 - **新增 GaiaRfcommFramer 流式状态机**：SPP 流按官方 TransportProtocol 精确切帧——FF 传输帧按 Len 字段切、裸 PDU（00 1D）按下一帧起始/ burst 结束切、半截帧跨 burst 保留续读；修复设备对每个响应双发（裸 PDU + FF 帧各一遍）时粘包错切、device info 串乱码尾巴的问题，GaiaRfcommTransport readLoop 改为逐 PDU 分发。

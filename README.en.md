@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.4** (versionCode 278) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.5** (versionCode 279) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -147,6 +147,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **alpha2.41.5**: Space Travel 2 mapping written to device DB + popup de-dup. Device DB: Space Travel 2 added to PROFILES (ANC mapping `[1,2,4,3]`, matching GOLDEN AGES 2); DcProfile gain `gainMap` fixed to `[2,1,0]` (device codes are reversed: 0x00=High/0x01=Mid/0x02=Low). Popup de-dup: postShow now suppresses a new sheet when one is already showing or the last show was under 12s ago, and cancels the queued popup on sheet close — it shows once, refreshes to controllable once GAIA is ready (or you close it and use the app).
 - **alpha2.41.4**: RFCOMM frame-framing rework + response-driven capability fallback — new GaiaRfcommFramer streaming state machine cuts the SPP stream per the official TransportProtocol (FF frames by Len field, bare PDUs by frame boundary, partial frames retained across bursts), fixing mis-split frames and garbled device-info strings when devices double-send responses; CapabilityProbe gains onFeatureResponseSeen/onBasicAlive so devices that never return the capability bitmap get capability flags driven by real responses (BASIC cmd0 GET_GAIA_VERSION handled too); startProbes is throttled to one full probe per 8s to prevent probe loops stacking during RFCOMM reconnect storms. TX path unchanged (bare PDU), so verified devices like GA2/Pudding behave exactly the same.
 - **alpha2.41.3**: Runtime permission request now includes BLUETOOTH_SCAN — the request array is expanded to CONNECT+SCAN (matching the official app) and PermissionChecker checks both; fixes 9ECA BLE-control devices like Space Travel 2 where a missing SCAN permission threw SecurityException, killed the BLE channel, forced RFCOMM fallback and left GAIA capabilities incomplete (ANC/gain could not be adjusted).
 

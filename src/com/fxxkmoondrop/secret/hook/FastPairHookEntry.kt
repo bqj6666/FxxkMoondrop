@@ -1451,6 +1451,16 @@ class FastPairHookEntry {
             return
         }
         Handler(Looper.getMainLooper()).post {
+            // alpha2.41.5: 弹窗统一防重。ACL_CONNECTED 与 PopupGate(ACTION_TRIGGER) 两条
+            // 通道最终都汇聚到 postShow；若弹窗还开着(sheetLive) 或 距上次显示 < 窗口
+            // (GAIA 就绪后的二次触发 / 双地址交替连接)，不再重复弹新窗，避免弹窗两次。
+            // 弹窗内容(降噪可用性/电量)由 ACTION_ANC_STATUS / ACTION_BATTERY_UPDATE 刷新已有弹窗。
+            val since = System.currentTimeMillis() - sLastShowMs
+            val sheetLive = sHalfSheetActivity != null
+            if (sheetLive || since < POPUP_REPEAT_GUARD_MS) {
+                Log.d(TAG, "[FastPairHook] postShow suppress (sheet=" + sheetLive + " since=" + since + "ms) -> " + deviceName)
+                return@post
+            }
             try {
                 showHalfSheet(ctx, cl, deviceName)
             } catch (t: Throwable) {
@@ -1693,6 +1703,9 @@ class FastPairHookEntry {
         const val ACL_POSTSHOW_DELAY_MS = 2000L // alpha2.26.3: 2s 即弹（GAIA 后台并行连接）
         /** 弹窗重复保护：距上次显示不足该时长则跳过兜底弹窗 */
         const val ACL_REPEAT_GUARD_MS = 60000L
+        /** alpha2.41.5: postShow 统一防重窗口——弹窗还开着或距上次显示 < 本值则不弹新窗。
+         *  覆盖 GAIA 就绪后的二次触发(约 2-8s)与双地址交替连接，避免弹窗两次。 */
+        const val POPUP_REPEAT_GUARD_MS = 12000L
         @JvmField @Volatile
         var sLastShowMs = 0L
         /** 最近一次弹窗的设备名（由广播 extra/provider/蓝牙真实名提供；null=未触发） */

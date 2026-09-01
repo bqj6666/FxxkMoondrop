@@ -50,6 +50,11 @@ object AncProfileLib {
         // SET（UI[关,降,透,抗] → dev）：1=关闭 2=降噪 4=透传 3=抗风
         // GET（dev → UI）：0=关闭 1=降噪 2=透传 3=抗风 —— 固件读回是 0-based 直传，与 SET 枚举不同！
         Profile("GOLDEN AGES 2", intArrayOf(1, 2, 4, 3), intArrayOf(0, 1, 2, 3))
+        ,
+        // 太空漫游2 / Space Travel 2 (BT8932F, 中科蓝讯 9ECA) —— 2026-09-01 真机双向实测：
+        // SET（UI[关,降,透,抗] → dev）：1=关闭 2=降噪 4=透传 3=抗风（同 GA2，非默认顺序）
+        // GET（dev → UI）：0=关闭 1=降噪 2=透传 3=抗风（0-based 直传）
+        Profile("SPACE TRAVEL 2", intArrayOf(1, 2, 4, 3), intArrayOf(0, 1, 2, 3))
     )
 
     /**
@@ -127,8 +132,9 @@ object AncProfileLib {
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
 
         // 太空漫游2 / Space Travel 2 (BT8932F, 中科蓝讯): 无空间音频, 三档增益
-        // GAIA 蓝讯系; ANC 走 ANC_V2 恒等映射(0=关/1=降噪/2=透传), 增益恒等 0/1/2 = 低/中/高
-        DcProfile("SPACE TRAVEL 2", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        // 2026-09-01 真机实测: 增益 0x00=高/0x01=中/0x02=低（反向），gainMap[低,中,高]=[2,1,0]
+        // ANC 走 AudioCuration 通道，实测 [1,2,4,3]（同 GA2），见上层 PROFILES
+        DcProfile("SPACE TRAVEL 2", hasSpatial = false, hasGain = true, hasLed = false, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"),
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
 
         // 猫饼 Nekocake (9ECA 蓝讯系): 【预置，待实测】空间音频=否, 三档增益, 无 LED
