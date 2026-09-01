@@ -73,22 +73,22 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 | 状态 | 耳机型号 | 主控 / 协议 | 依据 |
 |---|---|---|---|
-| ✅ 已实测 | 梦回2 / Golden Ages 2（GA2） | TWS-01 定制 SoC（GAIA） | 实机验证通过（ANC 设备码 1=关/2=降/3=抗风/4=透传 已入库） |
-| 🟢 理论上支持 | 爱丽丝 ALICE | QCC5151（GAIA） | 芯片理论支持 |
-| 🟢 理论上支持 | 火花 SPARKS | QCC3040（GAIA） | 芯片理论支持 |
-| 🟢 理论上支持 | 旅行者 VOYAGER（颈挂） | QCC5144（GAIA） | 芯片理论支持 |
-| 🟢 理论上支持 | 梦回1979 / Golden Ages | 与梦回2同平台同款主控（GAIA） | 芯片理论支持 |
-| 🟢 理论上支持 | 猫饼 NEKOCAKE | BT8922E（9ECA） | 芯片理论支持 |
-| 🟢 正在适配 | 太空漫游2 / Space Travel 2 | BT8932F（9ECA） | 芯片理论支持 |
-| 🟢 理论上支持 | 音乐胶囊 PILL | BT8932F（9ECA） | 芯片理论支持 |
-| 🟢 理论上支持 | 超声波 ULTRASONIC | BT8952F（9ECA） | 芯片理论支持 |
-| 🟢 理论上支持 | 知更鸟 Robin | BT8952F（9ECA） | 芯片理论支持 |
-| ⚪ 未知 | 太空漫游 / Space Travel（一代） | 疑似中科蓝讯（型号未确认） | 待实机验证 |
-| ⚪ 未知 | 猫咖 MOCA | 疑似蓝讯（蓝牙 5.4 / LC3 特征） | 待实机验证 |
-| ⚪ 未知 | 方糖 BLOCK | 疑似蓝讯 BT8922 系 | 待实机验证 |
-| ✅ 应该支持 | 布丁 PUDDING（MD-TWS-056） | 国产 SoC（GAIA V4，RFCOMM/SPP） | 借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 项目协议文档完成适配，5 档 ANC + 三路电量 + 增益 + 指示灯 |
-| ⚪ 未知 | 太空漫游2 ULTRA | 国产 SoC（型号未公开） | 待实机验证 |
-| ⚪ 未知 | 羽翼 EDGE / EDGE2 | 国产 SoC（型号未公开） | 待实机验证 |
+| 已实测 | 梦回2 / Golden Ages 2（GA2） | TWS-01 定制 SoC（GAIA） | 实机验证通过（ANC 设备码 1=关/2=降/3=抗风/4=透传 已入库） |
+| 理论上支持 | 爱丽丝 ALICE | QCC5151（GAIA） | 芯片理论支持 |
+| 理论上支持 | 火花 SPARKS | QCC3040（GAIA） | 芯片理论支持 |
+| 理论上支持 | 旅行者 VOYAGER（颈挂） | QCC5144（GAIA） | 芯片理论支持 |
+| 理论上支持 | 梦回1979 / Golden Ages | 与梦回2同平台同款主控（GAIA） | 芯片理论支持 |
+| 理论上支持 | 猫饼 NEKOCAKE | BT8922E（9ECA） | 芯片理论支持 |
+| 已实测 | 太空漫游2 / Space Travel 2 | BT8932F（9ECA） | 实机验证通过（ANC 设备码 1=关/2=降/3=抗风/4=透传；增益 设备码 0=高/1=中/2=低 已入库） |
+| 理论上支持 | 音乐胶囊 PILL | BT8932F（9ECA） | 芯片理论支持 |
+| 理论上支持 | 超声波 ULTRASONIC | BT8952F（9ECA） | 芯片理论支持 |
+| 理论上支持 | 知更鸟 Robin | BT8952F（9ECA） | 芯片理论支持 |
+| 未知 | 太空漫游 / Space Travel（一代） | 疑似中科蓝讯（型号未确认） | 待实机验证 |
+| 未知 | 猫咖 MOCA | 疑似蓝讯（蓝牙 5.4 / LC3 特征） | 待实机验证 |
+| 未知 | 方糖 BLOCK | 疑似蓝讯 BT8922 系 | 待实机验证 |
+| 应该支持 | 布丁 PUDDING（MD-TWS-056） | 国产 SoC（GAIA V4，RFCOMM/SPP） | 借助 [PuddingPods](https://github.com/lingbai-rong/PuddingPods) 项目协议文档完成适配，5 档 ANC + 三路电量 + 增益 + 指示灯 |
+| 未知 | 太空漫游2 ULTRA | 国产 SoC（型号未公开） | 待实机验证 |
+| 未知 | 羽翼 EDGE / EDGE2 | 国产 SoC（型号未公开） | 待实机验证 |
 
 - **已实测**：开发者实机验证过
 - **理论上支持**：主控芯片已确认且协议侧能自动识别，但尚未逐一实机跑通
@@ -102,9 +102,9 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 | 系统 | Fast Pair 弹窗 | 说明 |
 |---|---|---|
-| ✅ 已实测 | 类原生 / 原生系统（完整 GMS） | 功能完全正常 |
-| ⚠️ 需额外模块 | ColorOS（OPPO / realme / 一加） | 需搭配 [oplus-cn2global（Magisk 模块）](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool（Xposed，解除 GMS 限制）](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) 后 Fast Pair 弹窗才可用 |
-| ⚪ 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证） |
+| 已实测 | 类原生 / 原生系统（完整 GMS） | 功能完全正常 |
+| 需额外模块 | ColorOS（OPPO / realme / 一加） | 需搭配 [oplus-cn2global（Magisk 模块）](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool（Xposed，解除 GMS 限制）](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) 后 Fast Pair 弹窗才可用 |
+| 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证） |
 
 ---
 

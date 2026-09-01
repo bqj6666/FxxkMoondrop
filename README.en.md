@@ -71,22 +71,22 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 
 | Status | Earbud Model | SoC / Protocol | Evidence |
 |---|---|---|---|
-| ✅ Tested | 梦回2 / Golden Ages 2 (GA2) | TWS-01 custom SoC (GAIA) | Verified on real device (ANC device codes 1=OFF / 2=ANC / 3=Wind / 4=Transparency stored) |
-| 🟢 Theoretically supported | 爱丽丝 ALICE | QCC5151 (GAIA) | Chip-level support |
-| 🟢 Theoretically supported | 火花 SPARKS | QCC3040 (GAIA) | Chip-level support |
-| 🟢 Theoretically supported | 旅行者 VOYAGER (neckband) | QCC5144 (GAIA) | Chip-level support |
-| 🟢 Theoretically supported | 梦回1979 / Golden Ages | Same platform & SoC as GA2 (GAIA) | Chip-level support |
-| 🟢 Theoretically supported | 猫饼 NEKOCAKE | BT8922E (9ECA) | Chip-level support |
-| 🟢 Theoretically supported | 太空漫游2 / Space Travel 2 | BT8932F (9ECA) | Chip-level support |
-| 🟢 Theoretically supported | 音乐胶囊 PILL | BT8932F (9ECA) | Chip-level support |
-| 🟢 Theoretically supported | 超声波 ULTRASONIC | BT8952F (9ECA) | Chip-level support |
-| 🟢 Theoretically supported | 知更鸟 Robin | BT8952F (9ECA) | Chip-level support |
-| ⚪ Unknown | 太空漫游 / Space Travel (gen 1) | Suspected Bluetrum (model unconfirmed) | Pending real-device test |
-| ⚪ Unknown | 猫咖 MOCA | Suspected Bluetrum (BT 5.4 / LC3 characteristics) | Pending real-device test |
-| ⚪ Unknown | 方糖 BLOCK | Suspected Bluetrum BT8922 family | Pending real-device test |
-| ✅ Tested | 布丁 PUDDING (MD-TWS-056) | Domestic SoC (GAIA V4, RFCOMM/SPP) | Adapted via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs; 5-level ANC + triple-battery + gain + indicator |
-| ⚪ Unknown | 太空漫游2 ULTRA | Domestic SoC (model not public) | Pending real-device test |
-| ⚪ Unknown | 羽翼 EDGE / EDGE2 | Domestic SoC (model not public) | Pending real-device test |
+| Tested | 梦回2 / Golden Ages 2 (GA2) | TWS-01 custom SoC (GAIA) | Verified on real device (ANC device codes 1=OFF / 2=ANC / 3=Wind / 4=Transparency stored) |
+| Theoretically supported | 爱丽丝 ALICE | QCC5151 (GAIA) | Chip-level support |
+| Theoretically supported | 火花 SPARKS | QCC3040 (GAIA) | Chip-level support |
+| Theoretically supported | 旅行者 VOYAGER (neckband) | QCC5144 (GAIA) | Chip-level support |
+| Theoretically supported | 梦回1979 / Golden Ages | Same platform & SoC as GA2 (GAIA) | Chip-level support |
+| Theoretically supported | 猫饼 NEKOCAKE | BT8922E (9ECA) | Chip-level support |
+| Tested | 太空漫游2 / Space Travel 2 | BT8932F (9ECA) | Verified on real device (ANC device codes 1=OFF/2=ANC/3=Wind/4=Transparency; gain codes 0=High/1=Mid/2=Low stored) |
+| Theoretically supported | 音乐胶囊 PILL | BT8932F (9ECA) | Chip-level support |
+| Theoretically supported | 超声波 ULTRASONIC | BT8952F (9ECA) | Chip-level support |
+| Theoretically supported | 知更鸟 Robin | BT8952F (9ECA) | Chip-level support |
+| Unknown | 太空漫游 / Space Travel (gen 1) | Suspected Bluetrum (model unconfirmed) | Pending real-device test |
+| Unknown | 猫咖 MOCA | Suspected Bluetrum (BT 5.4 / LC3 characteristics) | Pending real-device test |
+| Unknown | 方糖 BLOCK | Suspected Bluetrum BT8922 family | Pending real-device test |
+| Tested | 布丁 PUDDING (MD-TWS-056) | Domestic SoC (GAIA V4, RFCOMM/SPP) | Adapted via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs; 5-level ANC + triple-battery + gain + indicator |
+| Unknown | 太空漫游2 ULTRA | Domestic SoC (model not public) | Pending real-device test |
+| Unknown | 羽翼 EDGE / EDGE2 | Domestic SoC (model not public) | Pending real-device test |
 
 - **Tested**: verified by the developer on a real device.
 - **Theoretically supported**: the SoC is confirmed and the protocol side auto-detects, but not every one has been run through on a real device.
@@ -100,9 +100,9 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 
 | System | Fast Pair Popup | Description |
 |---|---|---|
-| ✅ Tested | AOSP-like / stock (full GMS) | Fully functional |
-| ⚠️ Requires extra module | ColorOS (OPPO / realme / OnePlus) | Needs [oplus-cn2global (Magisk module)](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool (Xposed, unblock GMS restrictions)](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) for the Fast Pair popup to work |
-| ⚪ Pending test | Other systems | Any system with full GMS should theoretically work (not yet verified one by one) |
+| Tested | AOSP-like / stock (full GMS) | Fully functional |
+| Requires extra module | ColorOS (OPPO / realme / OnePlus) | Needs [oplus-cn2global (Magisk module)](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool (Xposed, unblock GMS restrictions)](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) for the Fast Pair popup to work |
+| Pending test | Other systems | Any system with full GMS should theoretically work (not yet verified one by one) |
 
 ---
 
