@@ -57,9 +57,13 @@ class GaiaPacketHandler(
             if (feature == GaiaConstants.FEATURE_BATTERY && command == GaiaConstants.CMD_GET_BATTERY_LEVELS) {
                 parseBatteryLevels(payload)
             } else if (feature == GaiaConstants.FEATURE_BASIC && command == GaiaConstants.CMD_GET_SUPPORTED_FEATURES) {
+                probe.onBasicAlive()  // alpha2.41.4: 位图响应同样证明链路活着
                 probe.handleFeatureResponse(payload)
             } else if (feature == GaiaConstants.FEATURE_BASIC &&
-                    (command == GaiaConstants.CMD_GET_VARIANT || command == GaiaConstants.CMD_GET_APP_VERSION)) {
+                    (command == GaiaConstants.CMD_GET_VARIANT || command == GaiaConstants.CMD_GET_APP_VERSION ||
+                            command == GaiaConstants.CMD_GET_GAIA_VERSION)) {
+                // alpha2.41.4: BASIC 版本/型号响应证明 GAIA 链路活着（Space Travel 2 只回 cmd0/cmd4）
+                probe.onBasicAlive()
                 // 设备型号/版本（仅记录日志，不驱动状态）
                 try {
                     val v = String(payload, Charsets.UTF_8).trim { it <= ' ' }
@@ -89,6 +93,7 @@ class GaiaPacketHandler(
                     val level = payload[0].toInt() and 0xFF
                     Log.d(TAG, "DAC gain GET RX level=" + level)
                     AppLog.d(TAG, "dacGain=" + level)
+                    probe.onFeatureResponseSeen(GaiaConstants.FEATURE_DAC_GAIN)  // alpha2.41.4: 响应驱动能力标记
                     deviceControlCallbackProvider()?.let { cb ->
                         handler.post { cb.onGainResult(level) }
                     }
@@ -105,6 +110,7 @@ class GaiaPacketHandler(
                     val state = payload[0].toInt() and 0xFF
                     Log.d(TAG, "LED GET RX state=" + state)
                     AppLog.d(TAG, "ledState=" + state)
+                    probe.onFeatureResponseSeen(GaiaConstants.FEATURE_LED)  // alpha2.41.4: 响应驱动能力标记
                     deviceControlCallbackProvider()?.let { cb ->
                         handler.post { cb.onLedResult(state) }
                     }
@@ -122,6 +128,7 @@ class GaiaPacketHandler(
                             val state = payload[0].toInt() and 0xFF
                             Log.d(TAG, "spatial GET RX state=" + state)
                             AppLog.d(TAG, "spatialState=" + state)
+                            probe.onFeatureResponseSeen(GaiaConstants.FEATURE_SPATIAL_AUDIO)  // alpha2.41.4: 响应驱动能力标记
                             deviceControlCallbackProvider()?.let { cb ->
                                 handler.post { cb.onSpatialResult(state) }
                             }

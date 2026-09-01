@@ -5,6 +5,15 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.4 (278)
+### RFCOMM 帧切分重构 + 能力探测响应驱动降级
+- **新增 GaiaRfcommFramer 流式状态机**：SPP 流按官方 TransportProtocol 精确切帧——FF 传输帧按 Len 字段切、裸 PDU（00 1D）按下一帧起始/ burst 结束切、半截帧跨 burst 保留续读；修复设备对每个响应双发（裸 PDU + FF 帧各一遍）时粘包错切、device info 串乱码尾巴的问题，GaiaRfcommTransport readLoop 改为逐 PDU 分发。
+- **CapabilityProbe 响应驱动能力降级**：不回能力位图的设备（如 Space Travel 2 走 RFCOMM）由真实回包驱动——新增 onFeatureResponseSeen()（DAC/LED/空间音频任何响应都标记能力，无硬编码）、onBasicAlive()（BASIC 版本/型号响应证明链路活着，超时"无 ANC"结论可信）；GaiaPacketHandler 处理 BASIC cmd0（GET_GAIA_VERSION）。
+- **探测节流防重连风暴**：startProbes() 8 秒内重复调用（RFCOMM 抖动重连风暴）只轻量补发 cmd1/cmd4，跳过 ANC 阶梯与超时重发链，探测循环不再叠加刷屏；reset() 清零节流基准。
+- TX 路径零改动：仍发裸 PDU，GA2/布丁等已验证设备行为不变。
+## alpha2.41.3 (277)
+- **运行时权限申请补 BLUETOOTH_SCAN**：OverviewFragment.requestNeededPermissions/fixPermission 与 PermissionActivity.fixPermission 把 BLUETOOTH_CONNECT 申请数组扩为 CONNECT+SCAN（与官方 Moondrop App 一致）；PermissionChecker 蓝牙权限改为同时检测 CONNECT 与 SCAN。实测 Space Travel 2 依赖 BLE(9ECA0000) 控制，LE 扫描缺 BLUETOOTH_SCAN 抛 SecurityException 导致 BLE 通道挂掉、App 被逼回退 RFCOMM、GAIA 能力不完整的问题。
+
 ## alpha2.41.2 (276)
 ### 连接稳定性增强：MOCA 等 dual-mode 设备 RFCOMM/SPP 兜底
 - 单候选分支做 LE → TRANSPORT_AUTO → RFCOMM 三级升级兜底（默认，所有设备）

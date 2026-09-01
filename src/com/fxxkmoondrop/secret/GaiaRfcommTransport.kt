@@ -17,11 +17,15 @@ import java.util.UUID
  * 收到的完整帧通过 onPacket 回调交给 GaiaPacketHandler 解析，
  * 与 BLE GATT 路径共用同一套上层逻辑。
  *
- * 帧边界处理：SPP 流没有内置消息边界（不像 BLE 特征值），
- * 采用 50ms 间隔判断法——读到首字节后短暂等待，
- * 将同一 burst 的数据拼接为完整帧。
+ * alpha2.41.4: 帧边界处理重构。
+ * 旧逻辑（50ms 等待 + 找到 0x001D 头即"剩余全部当一个帧"）无法处理：
+ * a) 设备对每个响应双发（裸 PDU + FF 传输帧各一遍）导致粘包错切；
+ * b) FF 传输帧（SOF=0xFF，官方 RFCOMM 封装）被当垃圾跳过。
+ * 现由 GaiaRfcommFramer 流式状态机按官方 TransportProtocol 格式精确切分，
+ * FF 帧按 Len 字段切、裸 PDU 按下一帧起始/burst 结束切，半截帧保留续读。
  *
  * 协议来源: https://github.com/lingbai-rong/PuddingPods
+ *           + 官方 Moondrop App 反编译 TransportProtocol.java（FF 帧格式）
  */
 class GaiaRfcommTransport(
     private val handler: Handler,
@@ -33,7 +37,7 @@ class GaiaRfcommTransport(
         private const val TAG = "GaiaRfcomm"
         /** 标准 SPP UUID */
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-        /** 帧完成等待时间（ms） */
+        /** burst 完成等待时间（ms）：读到首字节后稍候，让同 burst 后续字节到达 */
         private const val FRAME_WAIT_MS = 50L
     }
 
@@ -41,6 +45,9 @@ class GaiaRfcommTransport(
     @Volatile private var running = false
     @Volatile private var connected = false
     private var readThread: Thread? = null
+
+    /** alpha2.41.4: 流式帧切分器（跨 burst 保留半截帧） */
+    private val framer = GaiaRfcommFramer()
 
     /**
      * 建立 RFCOMM 连接（阻塞调用，应在非主线程执行）。
@@ -53,6 +60,7 @@ class GaiaRfcommTransport(
             socket = s
             connected = true
             running = true
+            framer.reset()
             readThread = Thread({ readLoop() }, "GaiaRfcomm-Reader").apply { isDaemon = true }
             readThread?.start()
             Log.i(TAG, "RFCOMM connected to " + device.address + " name=" + device.name)
@@ -94,6 +102,7 @@ class GaiaRfcommTransport(
         socket = null
         try { readThread?.interrupt() } catch (_: Exception) { }
         readThread = null
+        framer.reset()
         Log.d(TAG, "RFCOMM disconnected")
     }
 
@@ -104,8 +113,9 @@ class GaiaRfcommTransport(
      * 读取线程主循环。
      *
      * SPP 的 InputStream 是流式的，没有消息边界。
-     * 策略：阻塞读到首批字节 → 短暂等待 50ms → 读取已到达的后续字节 → 拼接为完整帧。
-     * 如果一次读到多帧（含多个 0x001D vendor 头），则逐帧切分分发。
+     * 策略：阻塞读到首批字节 → 短暂等待 50ms → 读走已到达的后续字节拼成 burst →
+     * 交给 GaiaRfcommFramer 切分（FF 帧按 Len 精确切、裸 PDU 按帧起始/burst 结束切），
+     * 切出的每个 PDU 逐个回调 onPacket。
      */
     private fun readLoop() {
         val input = try {
@@ -123,10 +133,10 @@ class GaiaRfcommTransport(
                 if (n <= 0) continue
                 if (!running) break
 
-                // 等待短暂时间让后续字节到达（帧完成）
+                // 等待短暂时间让后续字节到达（同 burst）
                 Thread.sleep(FRAME_WAIT_MS)
                 val avail = try { input.available() } catch (_: Exception) { 0 }
-                val frame = if (avail > 0) {
+                val burst = if (avail > 0) {
                     val full = ByteArray(n + avail)
                     System.arraycopy(buf, 0, full, 0, n)
                     input.read(full, n, avail)
@@ -134,24 +144,17 @@ class GaiaRfcommTransport(
                 } else {
                     buf.copyOfRange(0, n)
                 }
+                val burstEnd = try { input.available() <= 0 } catch (_: Exception) { true }
 
-                // 逐帧切分（可能一次读到多个 GAIA 帧）
-                var off = 0
-                while (off + 4 <= frame.size) {
-                    val vendor = ((frame[off].toInt() and 0xFF) shl 8) or
-                            (frame[off + 1].toInt() and 0xFF)
-                    if (vendor != GaiaConstants.GAIA_VENDOR) {
-                        // 非 GAIA 帧，跳过单字节继续寻找
-                        off++
-                        continue
-                    }
-                    // 找到 GAIA 帧头，剩余全部作为一个帧分发
-                    // （GAIA V3 无长度字段，无法精确切分多帧，实际设备单次响应为单帧）
-                    val single = frame.copyOfRange(off, frame.size)
-                    Log.d(TAG, "RX " + single.contentToString())
-                    val copyForCallback = single.copyOf()
+                // alpha2.41.4: 流式切分，逐 PDU 分发
+                val pdus = framer.feed(burst, burstEnd)
+                for (pdu in pdus) {
+                    Log.d(TAG, "RX pdu " + pdu.contentToString())
+                    val copyForCallback = pdu.copyOf()
                     handler.post { onPacket(copyForCallback) }
-                    off = frame.size
+                }
+                if (pdus.isEmpty() && framer.pendingSize() > 0) {
+                    Log.d(TAG, "framer pending " + framer.pendingSize() + " bytes (partial frame)")
                 }
             } catch (e: IOException) {
                 if (running) {

@@ -38,6 +38,7 @@ object GaiaConstants {
     const val CMD_GET_BATTERY_LEVELS = 0x01
     const val CMD_GET_CURRENT_MODE = 0x03
     const val CMD_SET_CURRENT_MODE = 0x04
+    const val CMD_GET_GAIA_VERSION = 0x00         // alpha2.41.4: BASIC cmd0（Space Travel 2 等设备回此命令）
     const val CMD_GET_SUPPORTED_FEATURES = 0x01
     const val CMD_REGISTER_NOTIFICATION = 0x07
     const val CMD_GET_VARIANT = 0x04

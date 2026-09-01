@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.2**（versionCode 276） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.4**（versionCode 278） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -148,6 +148,9 @@ FxxkMoondrop-repo/
 - 各AI 协助进行开发
 
 ## 版本历史
+
+- **alpha2.41.4**：RFCOMM 帧切分重构 + 能力探测响应驱动降级——新增 GaiaRfcommFramer 流式状态机，SPP 流按官方 TransportProtocol 精确切帧（FF 帧按 Len 切、裸 PDU 按帧边界切、半截帧跨 burst 保留），修复设备响应双发时粘包错切/乱码；CapabilityProbe 新增 onFeatureResponseSeen/onBasicAlive，不回能力位图的设备靠真实回包驱动能力标记，BASIC cmd0（GET_GAIA_VERSION）一并处理；startProbes 8 秒节流防 RFCOMM 重连风暴探测循环叠加，TX 裸 PDU 路径零改动。
+- **alpha2.41.3**：运行时权限申请补 BLUETOOTH_SCAN——申请数组扩为 CONNECT+SCAN（与官方 App 一致），PermissionChecker 同时检测两者；修复 Space Travel 2 等 9ECA BLE 控制设备因缺 SCAN 权限抛 SecurityException、BLE 通道挂掉被迫回退 RFCOMM、GAIA 能力不完整导致降噪/增益无法调节的问题。
 
 - **alpha2.41.2**：连接稳定性增强——MOCA 等 dual-mode 设备 RFCOMM/SPP 兜底。GaiaBleClient 单候选分支做 LE → TRANSPORT_AUTO → RFCOMM 三级升级兜底（默认，所有设备）；LE 与 TRANSPORT_AUTO 均失败（status=147）时主动尝试 RFCOMM/SPP，解决 MOCA（猫咖）等 LEE GATT 被 BR/EDR 挤掉无法建立 GAIA 控制通道的问题；新增 rfcommFallbackTried 标志防止 RFCOMM 失败刷屏；connect() 里 useRfcomm 已连时直接复用，避免 detect 轮询断开 RFCOMM。
 - **alpha2.41.1**：修复日志导出 EACCES（Permission denied）——部分 ColorOS 系统上 getExternalFilesDir 返回的 /Android/data/.../files/Download/logs/ 路径在写 ZIP 时被存储策略拦截，日志抓取报「保存失败」；LogCollector 打包目录改为应用内部 filesDir（绝对可写），导出链调整为 Root 复制公共根 → MediaStore 写入系统公共下载（Android 10+ 免存储权限）→ 兜底内部目录，确保日志 ZIP 任何 ROM / 有无 Root 都能保存并分享

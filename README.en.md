@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.2** (versionCode 276) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.4** (versionCode 278) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -146,6 +146,9 @@ The project maintains several development docs in the repo root; read as needed:
 - Various AIs assisted in development.
 
 ## Version History
+
+- **alpha2.41.4**: RFCOMM frame-framing rework + response-driven capability fallback — new GaiaRfcommFramer streaming state machine cuts the SPP stream per the official TransportProtocol (FF frames by Len field, bare PDUs by frame boundary, partial frames retained across bursts), fixing mis-split frames and garbled device-info strings when devices double-send responses; CapabilityProbe gains onFeatureResponseSeen/onBasicAlive so devices that never return the capability bitmap get capability flags driven by real responses (BASIC cmd0 GET_GAIA_VERSION handled too); startProbes is throttled to one full probe per 8s to prevent probe loops stacking during RFCOMM reconnect storms. TX path unchanged (bare PDU), so verified devices like GA2/Pudding behave exactly the same.
+- **alpha2.41.3**: Runtime permission request now includes BLUETOOTH_SCAN — the request array is expanded to CONNECT+SCAN (matching the official app) and PermissionChecker checks both; fixes 9ECA BLE-control devices like Space Travel 2 where a missing SCAN permission threw SecurityException, killed the BLE channel, forced RFCOMM fallback and left GAIA capabilities incomplete (ANC/gain could not be adjusted).
 
 - **alpha2.41.2**: Connection-stability boost — RFCOMM/SPP fallback for dual-mode devices like MOCA. GaiaBleClient single-candidate branch now upgrades LE → TRANSPORT_AUTO → RFCOMM (default, all devices); when both LE and TRANSPORT_AUTO fail (status=147) it actively tries RFCOMM/SPP to fix devices like MOCA whose LEE GATT is dropped by BR/EDR and cannot establish the GAIA control channel; adds an rfcommFallbackTried flag so RFCOMM failure does not spam, and connect() reuses an established RFCOMM (useRfcomm && connected) to avoid detect polling disconnecting it.
 - **alpha2.41.1**: Fix log export EACCES (Permission denied) — on some ColorOS builds getExternalFilesDir returns a /Android/data/.../files/Download/logs/ path blocked by storage policy when writing the ZIP, so log capture failed with "Save failed"; LogCollector now packages into app internal filesDir (always writable) and exports via Root → MediaStore public Downloads (Android 10+, no storage permission) → internal dir fallback, so the log ZIP saves on any ROM with or without Root
