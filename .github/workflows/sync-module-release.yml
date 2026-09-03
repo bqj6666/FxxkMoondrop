@@ -76,42 +76,65 @@ jobs:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
         run: |
+          set -e
           TAG="${{ steps.tag.outputs.tag }}"
           REPO="${MIRROR_REPO}"
           AUTH="Authorization: Bearer ${MIRROR_TOKEN}"
           ACCEPT="Accept: application/vnd.github+json"
           VNAME="FxxkMoondrop-${TAG}.apk"
 
-          # 1) 判断镜像仓该 tag 的 release 是否已存在
-          REL_ID=$(curl -sS -H "$AUTH" -H "$ACCEPT" \
+          # 1) 目标 release 是否已存在
+          EXIST=$(curl -sS -H "$AUTH" -H "$ACCEPT" \
             "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
             | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id','') if isinstance(d,dict) else '')")
-          if [ -z "$REL_ID" ] || [ "$REL_ID" = "None" ]; then
-            echo "镜像仓无此 tag，新建 release"
+
+          # 2) 已存在且该 release 是版本号（正式版）时，必须删除重建，因为 GitHub 的 latest
+          #    只在 release 首次创建那一刻锁定；事后 PATCH prerelease/name 永远无法让它重算 latest。
+          CURR_PRE=$(curl -sS -H "$AUTH" -H "$ACCEPT" \
+            "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print(str(d.get('prerelease','')).lower() if isinstance(d,dict) else '')")
+          if [ -n "$EXIST" ] && [ "$EXIST" != "None" ]; then
+            echo "镜像仓已有 release id=${EXIST} (prerelease=${CURR_PRE})"
+            # 干净重建：删除旧 release，再以目标 prerelease 新建。
+            # 对正式版尤其必要：避免旧的预发行状态锁死 latest。
+            if [ "$PRERELEASE" != "$CURR_PRE" ]; then
+              echo "预先状态不一致，删除重建 (${TAG})，让 latest 重算"
+              curl -sS -X DELETE -H "$AUTH" -H "$ACCEPT" \
+                "https://api.github.com/repos/${REPO}/releases/${EXIST}" >/dev/null || true
+              REL_ID=""
+            else
+              # 状态一致，直接复用（保留下载数），仅修正 name
+              curl -sS -X PATCH -H "$AUTH" -H "$ACCEPT" \
+                "https://api.github.com/repos/${REPO}/releases/${EXIST}" \
+                -d "{\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE}}" >/dev/null || true
+              REL_ID="${EXIST}"
+            fi
+          else
+            REL_ID=""
+          fi
+
+          # 3) 需要新建或刚删除时，正式创建
+          if [ -z "$REL_ID" ]; then
+            echo "新建 release ${TAG} (prerelease=${PRERELEASE})"
             curl -sS -X POST -H "$AUTH" -H "$ACCEPT" \
               "https://api.github.com/repos/${REPO}/releases" \
-              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE},\"generate_release_notes\":true}" > /dev/null || true
+              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE},\"body\":\"正式发布 ${TAG}\"}" >/dev/null || true
             REL_ID=$(curl -sS -H "$AUTH" -H "$ACCEPT" \
               "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
               | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id','') if isinstance(d,dict) else '')")
-          else
-            echo "镜像仓已有 release ${REL_ID}，PATCH 修正 prerelease/name"
-            curl -sS -X PATCH -H "$AUTH" -H "$ACCEPT" \
-              "https://api.github.com/repos/${REPO}/releases/${REL_ID}" \
-              -d "{\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE}}" > /dev/null || true
           fi
           echo "release_id=${REL_ID}"
 
-          # 2) 删除旧的同名 APK asset（含旧命名 app-release.apk），避免 422
+          # 4) 删除该 release 下旧的同名 APK asset（含旧命名 app-release.apk 与误带的 ci-N 命名），避免 422
           curl -sS -H "$AUTH" -H "$ACCEPT" \
             "https://api.github.com/repos/${REPO}/releases/${REL_ID}/assets" \
-            | ASSET_NAME="${VNAME}" python3 -c "import sys,json,os;t=os.environ['ASSET_NAME'];d=json.load(sys.stdin);print('\n'.join(str(a['id']) for a in d if isinstance(d,list) and (a.get('name')==t or a.get('name')=='app-release.apk')))" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print('\n'.join(str(a['id']) for a in d if isinstance(d,list) and (a.get('name')=='${VNAME}' or a.get('name')=='app-release.apk' or a.get('name').startswith('FxxkMoondrop-ci-'))))" \
             | while read -r AID; do
                 echo "删除旧 asset ${AID}"
-                curl -sS -X DELETE -H "$AUTH" "https://api.github.com/repos/${REPO}/releases/assets/${AID}" > /dev/null || true
+                curl -sS -X DELETE -H "$AUTH" "https://api.github.com/repos/${REPO}/releases/assets/${AID}" >/dev/null || true
               done
 
-          # 3) 上传新 APK（带版本号命名）
+          # 5) 上传新 APK（带版本号命名）
           for f in apk/*.apk; do
             [ -e "$f" ] || continue
             echo "上传 ${VNAME}"
