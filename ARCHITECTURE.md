@@ -140,6 +140,26 @@ XposedEntry (META-INF/xposed/java_init.list)
   → 连接成功 → 写回缓存 → 下次秒连
 ```
 
+### 4. 蓝牙设备详情页控制面板注入
+
+alpha2.39 起，向系统设置（`com.android.settings`）的蓝牙设备详情页注入降噪 + 功能控制面板（仅 Settings 进程）。纯 UI 注入组件，不打 BLE/Gaia 单例：
+
+```
+Settings 进程 hookDeviceDetailsPanel(ClassLoader)
+├── ① onBindViewHolder(Preference) 拦截
+│     命中 DeviceDetailsPanel.KEY → 把该条目 itemView 替换为 ControlPanel(降噪卡片+功能控制卡片)
+│     → 回调 sendDeviceCommand() 发设备命令 → fetchDcState() 拉状态刷新
+├── ② onCreatePreferences(DashboardFragment) 拦截
+│     只对 AncProfileLib.isMoondrop(deviceName) 为真 → 追加 DeviceDetailsPanel.KEY 的 Preference
+│     （标题/摘要按 langZh 显示中英文）
+└── ③ updatePreferenceOrder(BluetoothDetailsConfigurableFragment) 拦截
+      把 DeviceDetailsPanel.KEY 注入 displayOrder 白名单，避免被移进 invisible_profile_category 隐藏
+
+跨进程自动刷新（推模式）：
+面板 View 挂载时注册 ContentObserver 监听 content://com.fxxkmoondrop.secret.prefs/dc_cmd
+→ 模块端状态变化 notifyChange → 重新 fetchDcState() 并刷新面板；卸载时注销
+```
+
 ## 弹窗布局架构
 
 ### PopupProfile 屏幕布局表

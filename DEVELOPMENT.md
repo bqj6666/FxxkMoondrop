@@ -189,6 +189,18 @@ alpha2.38.7 起，电量文字优先写入 GMS 原生 `subhead`（耳机名副�
 3. 用户自定义映射优先级最高，会覆盖档案库
 4. 布丁 PUDDING 为 5 档 ANC（增加「自适应降噪」），SET 映射 [0, 4, 2, 3, 1]，需 UI 侧适配第 5 档按钮
 
+### 蓝牙设备详情页控制面板注入
+
+alpha2.39 起，在 Settings 进程注入 `com.android.settings` 蓝牙设备详情页（`BluetoothDeviceDetailsFragment`）。改动集中在 `XposedEntry.hookDeviceDetailsPanel`，注意点：
+
+- **纯 UI 注入**：`ControlPanel` / `DeviceDetailsPanel` / `CtrlBus` 只负责渲染与回调，不打 BLE/Gaia 单例，也不动主界面链路。
+- **注入层次（3 个 Hook）**：
+  1. `Preference.onBindViewHolder`：命中 `DeviceDetailsPanel.KEY` 时把条目 itemView 替换为控制面板；回调 `sendDeviceCommand()` + `fetchDcState()` 刷新。
+  2. `DashboardFragment.onCreatePreferences`：仅当 `AncProfileLib.isMoondrop(deviceName)` 为真才追加该 Preference（标题/摘要按 `langZh` 中英文）。
+  3. `BluetoothDetailsConfigurableFragment.updatePreferenceOrder`：把 `DeviceDetailsPanel.KEY` 注入 `displayOrder` 白名单，避免面板被移进 `invisible_profile_category` 隐藏。
+- **跨进程自动刷新（推模式）**：面板挂载时注册 `ContentObserver` 监听 `content://com.fxxkmoondrop.secret.prefs/dc_cmd`，模块端状态变化 `notifyChange` → 重新拉取刷新；卸载（`onViewDetachedFromWindow`）时注销 observer。
+- **未连接禁态**：未连接时功能开关三重禁用（`isEnabled` + `isClickable` + `isFocusable`），避免无效点击。
+
 ### 跨进程广播
 
 新增跨进程通信时：
