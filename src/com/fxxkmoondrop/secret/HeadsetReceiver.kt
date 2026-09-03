@@ -41,7 +41,10 @@ class HeadsetReceiver : BroadcastReceiver() {
         if (ACTION_FP_SHEET_CLOSED == action) {
             // alpha2.41.5: 弹窗关闭后取消排队中的连接弹窗——用户已关闭弹窗，
             // 之后 GAIA 就绪/超时不再触发第二次弹窗（用户可选等待弹窗变可控制，或关闭后在 App 操作）。
-            PopupGate.cancelPending()
+            // alpha2.41.6: 用户关闭弹窗后登记设备，本连接断开前不再自动重弹（防止 GAIA 就绪后二次弹窗）
+            val closedName = i.getStringExtra("device_name")
+            val closedAddr = i.getStringExtra("android.bluetooth.device.extra.ADDRESS")
+            PopupGate.markUserClosed(closedAddr, closedName)
             if (GaiaBleClient.isSimConnected()) {
                 GaiaBleClient.setSimConnected(false)
                 BatteryStore.clearGaia("AA:BB:CC:DD:EE:FF")

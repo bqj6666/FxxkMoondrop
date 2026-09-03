@@ -12,6 +12,8 @@ class PopupGate {
         private const val TAG = "MoondropHeadset"
         private val connectedShown = HashSet<String?>()
         private val disconnectedShown = HashSet<String?>()
+        /** alpha2.41.6: 用户主动关闭弹窗后，本次连接（断开前）不再自动重弹 */
+        private val userClosedKeys = HashSet<String?>()
 
         // ── Google Fast Pair 弹窗（FastPairHook 模块）──
         private const val ACTION_FP_TRIGGER = "com.fxxkmoondrop.secret.FASTPAIR_TRIGGER"
@@ -107,6 +109,10 @@ class PopupGate {
                 return false
             }
             val key = if (isSimKey(address, name)) address else (name ?: address)
+            if (userClosedKeys.contains(key)) {
+                Log.i(TAG, "connected popup skip (user closed): $name")
+                return false
+            }
             if (connectedShown.contains(key)) return false
             connectedShown.add(key)
             disconnectedShown.remove(key)
@@ -128,6 +134,10 @@ class PopupGate {
                 return false
             }
             val key = name ?: address
+            if (userClosedKeys.contains(key)) {
+                Log.i(TAG, "deferred connected popup skip (user closed): $name")
+                return false
+            }
             if (connectedShown.contains(key)) return false
             appContext = c.applicationContext
             pendingName = name
@@ -168,6 +178,16 @@ class PopupGate {
             popupHandler.removeCallbacks(pendingTimeout)
         }
 
+        /** alpha2.41.6: 用户主动关闭弹窗后登记该设备，本次连接断开前不再自动重弹 */
+        @JvmStatic
+        @Synchronized
+        fun markUserClosed(address: String?, name: String?) {
+            val key = if (isSimKey(address, name)) address else (name ?: address)
+            if (key != null) userClosedKeys.add(key)
+            cancelPending()
+            Log.i(TAG, "user closed popup, suppress reconnect: " + name + " (" + address + ")")
+        }
+
         /** alpha2.38: 断开不再弹窗（Google Fast Pair 无断开弹窗），仅更新内部状态 */
         @JvmStatic
         @Synchronized
@@ -181,6 +201,7 @@ class PopupGate {
             if (disconnectedShown.contains(key)) return false
             disconnectedShown.add(key)
             connectedShown.remove(key)
+            userClosedKeys.remove(key)
             headsetConnected = false
             Log.i(TAG, "disconnected (Google Fast Pair only, no popup): $name")
             return true

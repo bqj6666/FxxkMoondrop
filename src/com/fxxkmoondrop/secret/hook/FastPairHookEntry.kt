@@ -206,12 +206,16 @@ class FastPairHookEntry {
                     if (!act.javaClass.name.contains("HalfSheet")) return@intercept null
                     if (act !== sHalfSheetActivity) return@intercept null
                     sHalfSheetActivity = null
+                    // alpha2.41.6: 用户关闭弹窗后把最近显示时间刷新，让 postShow 的 12s 防重窗口生效，
+                    // 并随广播带出设备名，供应用侧 PopupGate.markUserClosed 登记（本连接不再自动重弹）
+                    sLastShowMs = System.currentTimeMillis()
                     val ctx = sAppContext
                     if (ctx != null) {
                         val i = Intent(ACTION_FP_SHEET_CLOSED)
+                        i.putExtra(EXTRA_DEVICE_NAME, sLastDeviceName)
                         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         ctx.sendBroadcast(i)
-                        Log.d(TAG, "[FastPairHook] half sheet closed -> sim restore signal")
+                        Log.d(TAG, "[FastPairHook] half sheet closed -> sim restore signal name=" + sLastDeviceName)
                     }
                     null
                 } catch (t: Throwable) {
