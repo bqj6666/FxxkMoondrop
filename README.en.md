@@ -17,7 +17,8 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 - **FastPairHook (LSPosed module, injected into Google Play services)**: leverages GMS's BLE scanning to dynamically discover the earbud's LE address and push it to the app.
 - **Self-healing loop**: no cache → REQ scan → GMS push → connection success writes back to file / SP → instant reconnect next time; address changes trigger automatic rediscovery (**fully dynamic address discovery, zero hardcoding**).
 - **Popup mode**: Google Fast Pair half-sheet popup (injected into GMS's HalfSheetActivity); the popup "Settings" button jumps to the system Bluetooth device detail page.
-- **Extended device control (DC)**: spatial audio / head tracking / gain / LED; injects a noise-cancellation + function control panel into the system Bluetooth device detail page.
+- **System Bluetooth device detail injection (LSPosed)**: hooks `com.android.settings`' Bluetooth device detail page (`BluetoothDeviceDetailsFragment`) to inject a noise-cancellation + function-control panel (spatial audio / tracking / gain / LED) that you can adjust directly on the settings screen; function toggles are auto-disabled when disconnected.
+- **Extended device control (DC)**: spatial audio / head tracking / gain / LED control; the panel is the device-detail injection described above, with device-code mappings supplied by `AncProfileLib.DcProfile` per model.
 - **Three-protocol auto-detection**: GAIA V3 (BLE) / GAIA V4 (RFCOMM/SPP, PUDDING) / Moondrop private 9ECA0000 auto-routing; falls back to RFCOMM/SPP when BLE fails on dual-mode devices.
 - **9ECA private protocol client**: source switching / EQ / MIC / SN (reuses the same GATT connection, coexists with GAIA).
 - **Material 3 UI**: home page (hero card + status panel + ANC buttons), settings page (Appearance / General / Behavior, follows system dark/light + Material You dynamic color), about page; all using Material 3 components.

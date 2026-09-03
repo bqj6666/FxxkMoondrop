@@ -19,7 +19,8 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **FastPairHook（LSPosed 模块，注入 Google Play 服务）**：借道 GMS 的 BLE 扫描能力动态发现耳机 LE 地址并推送给应用
 - **自愈闭环**：无缓存 → REQ 扫描 → GMS 推送 → 连接成功写回文件 / SP → 下次秒连；地址变化自动重新发现（**地址全动态发现**）
 - **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）；弹窗「设置」按钮跳转系统蓝牙设备详情页
-- **扩展设备控制（DC）**：空间音频 / 头部追踪 / 增益 / 指示灯；在系统蓝牙设备详情页注入降噪 + 功能控制面板
+- **系统设置蓝牙详情注入（LSPosed）**：Hook `com.android.settings` 的蓝牙设备详情页（`BluetoothDeviceDetailsFragment`），注入降噪 + 功能控制面板（空间音频 / 追踪 / 增益 / 指示灯），靠近设置界面即点即调；未连接时功能开关自动禁用
+- **扩展设备控制（DC）**：空间音频 / 头部追踪 / 增益 / 指示灯控制，面板即上条所述详情页注入组件；设备码映射由 `AncProfileLib.DcProfile` 按型号提供
 - **三协议自动识别**：GAIA V3（BLE）/ GAIA V4（RFCOMM/SPP，布丁）/ Moondrop 私有 9ECA0000 自动路由；dual-mode 设备 BLE 失败回退 RFCOMM/SPP
 - **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接，与 GAIA 并存）
 - **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 通用 / 行为，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
