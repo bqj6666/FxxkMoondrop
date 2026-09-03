@@ -152,7 +152,8 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
-- **alpha2.41.6**：首次关闭弹窗后 GAIA 就绪不再二次弹窗——弹窗关闭时 PopupGate.markUserClosed() 登记设备（本连接断开前不再自动重弹），HalfSheet 关闭广播带设备名并刷新弹窗防重时间戳；断开自动清除登记，不影响下次连接与其他型号回归。：Space Travel 2 映射写库 + 弹窗防重。设备库：Space Travel 2 加入 PROFILES（ANC 映射 `[1,2,4,3]`，与 GOLDEN AGES 2 一致），DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（实测 0x00=高/0x01=中/0x02=低 反向）。弹窗防重：postShow 统一防重（弹窗还开着或距上次显示<12s 不弹新窗），弹窗关闭时 cancelPending() 取消排队——连上只弹一次，等 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
+- **alpha2.41.6**：首次关闭弹窗后 GAIA 就绪不再二次弹窗——弹窗关闭时 PopupGate.markUserClosed() 登记设备（本连接断开前不再自动重弹），HalfSheet 关闭广播带设备名并刷新弹窗防重时间戳；断开自动清除登记，不影响下次连接与其他型号回归。
+- **alpha2.41.5**：Space Travel 2 映射写库 + 弹窗防重。设备库：Space Travel 2 加入 PROFILES（ANC 映射 `[1,2,4,3]`，与 GOLDEN AGES 2 一致），DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（实测 0x00=高/0x01=中/0x02=低 反向）。弹窗防重：postShow 统一防重（弹窗还开着或距上次显示<12s 不弹新窗），弹窗关闭时 cancelPending() 取消排队——连上只弹一次，等 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
 - **alpha2.41.4**：RFCOMM 帧切分重构 + 能力探测响应驱动降级——新增 GaiaRfcommFramer 流式状态机，SPP 流按官方 TransportProtocol 精确切帧（FF 帧按 Len 切、裸 PDU 按帧边界切、半截帧跨 burst 保留），修复设备响应双发时粘包错切/乱码；CapabilityProbe 新增 onFeatureResponseSeen/onBasicAlive，不回能力位图的设备靠真实回包驱动能力标记，BASIC cmd0（GET_GAIA_VERSION）一并处理；startProbes 8 秒节流防 RFCOMM 重连风暴探测循环叠加，TX 裸 PDU 路径零改动。
 - **alpha2.41.3**：运行时权限申请补 BLUETOOTH_SCAN——申请数组扩为 CONNECT+SCAN（与官方 App 一致），PermissionChecker 同时检测两者；修复 Space Travel 2 等 9ECA BLE 控制设备因缺 SCAN 权限抛 SecurityException、BLE 通道挂掉被迫回退 RFCOMM、GAIA 能力不完整导致降噪/增益无法调节的问题。
 
