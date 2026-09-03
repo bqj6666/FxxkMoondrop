@@ -81,6 +81,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | **OverviewFragment** | `OverviewFragment.kt` | 1789 | 主页 Fragment；英雄卡 + 状态面板 + ANC 三按钮 + 权限检测 |
 | **M3Ui** | `M3Ui.kt` | 412 | Material 3 UI 组件工厂 |
 | **DeviceControlBridge** | `DeviceControlBridge.kt` | 182 | 增益/指示灯/空间音频等扩展设备控制回调 |
+| **DeviceDetailsPanel** / **ControlPanel** / **CtrlBus** | `DeviceDetailsPanel.kt` `ControlPanel.kt` `CtrlBus.kt` | - | 注入系统蓝牙设备详情页的降噪 + 功能控制面板（纯 UI 组件，只回调不持 BLE/Gaia 单例） |
 
 ### GMS 进程（Hook 注入）
 
@@ -95,7 +96,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 ```
 XposedEntry (META-INF/xposed/java_init.list)
 ├── onPackageReady("com.google.android.gms") → FastPairHookEntry.onGmsLoaded()
-├── onPackageReady("com.android.settings")  → hookSettings() 注入耳机入口
+├── onPackageReady("com.android.settings")  → hookSettings() 注入耳机入口 + 蓝牙设备详情页降噪/功能控制面板
 ├── onPackageReady("com.android.bluetooth") → hookBluetooth() A2DP 状态监听
 └── onPackageReady("com.moondroplab...")     → hookMoondrop() 逆向参考
 ```

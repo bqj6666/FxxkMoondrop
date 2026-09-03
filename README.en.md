@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.5** (versionCode 279) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.6** (versionCode 280) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -16,7 +16,10 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 - **ANC model profile library**: `AncProfileLib` automatically applies tested device-code mappings by device name (e.g., GA2 tested 1=OFF / 2=ANC / 3=Wind / 4=Transparency); untested models fall back to the default mapping; custom mappings in Settings take precedence.
 - **FastPairHook (LSPosed module, injected into Google Play services)**: leverages GMS's BLE scanning to dynamically discover the earbud's LE address and push it to the app.
 - **Self-healing loop**: no cache → REQ scan → GMS push → connection success writes back to file / SP → instant reconnect next time; address changes trigger automatic rediscovery (**fully dynamic address discovery, zero hardcoding**).
-- **Popup mode**: Google Fast Pair half-sheet popup (injected into GMS's HalfSheetActivity).
+- **Popup mode**: Google Fast Pair half-sheet popup (injected into GMS's HalfSheetActivity); the popup "Settings" button jumps to the system Bluetooth device detail page.
+- **Extended device control (DC)**: spatial audio / head tracking / gain / LED; injects a noise-cancellation + function control panel into the system Bluetooth device detail page.
+- **Three-protocol auto-detection**: GAIA V3 (BLE) / GAIA V4 (RFCOMM/SPP, PUDDING) / Moondrop private 9ECA0000 auto-routing; falls back to RFCOMM/SPP when BLE fails on dual-mode devices.
+- **9ECA private protocol client**: source switching / EQ / MIC / SN (reuses the same GATT connection, coexists with GAIA).
 - **Material 3 UI**: home page (hero card + status panel + ANC buttons), settings page (Appearance / General / Behavior, follows system dark/light + Material You dynamic color), about page; all using Material 3 components.
 - **Permission check** (full secondary screen): Bluetooth / Notifications / Overlay / Battery whitelist / Root / FastPairHook / GAIA direct — 7 real-time checks, one-tap jump to fix when missing.
 - **Log capture** (device adaptation): one-tap collect system info / app settings / Bluetooth / runtime environment / logcat — five categories packaged as a ZIP.
@@ -147,7 +150,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
-- **alpha2.41.5**: Space Travel 2 mapping written to device DB + popup de-dup. Device DB: Space Travel 2 added to PROFILES (ANC mapping `[1,2,4,3]`, matching GOLDEN AGES 2); DcProfile gain `gainMap` fixed to `[2,1,0]` (device codes are reversed: 0x00=High/0x01=Mid/0x02=Low). Popup de-dup: postShow now suppresses a new sheet when one is already showing or the last show was under 12s ago, and cancels the queued popup on sheet close — it shows once, refreshes to controllable once GAIA is ready (or you close it and use the app).
+- **alpha2.41.6**: No second popup after first close once GAIA becomes ready — PopupGate.markUserClosed() registers the device on popup close (suppresses auto re-show until this connection disconnects); the half-sheet close broadcast carries the device name and refreshes the popup anti-repeat timestamp; the registration is cleared on disconnect, so the next connection and other models are unaffected.: Space Travel 2 mapping written to device DB + popup de-dup. Device DB: Space Travel 2 added to PROFILES (ANC mapping `[1,2,4,3]`, matching GOLDEN AGES 2); DcProfile gain `gainMap` fixed to `[2,1,0]` (device codes are reversed: 0x00=High/0x01=Mid/0x02=Low). Popup de-dup: postShow now suppresses a new sheet when one is already showing or the last show was under 12s ago, and cancels the queued popup on sheet close — it shows once, refreshes to controllable once GAIA is ready (or you close it and use the app).
 - **alpha2.41.4**: RFCOMM frame-framing rework + response-driven capability fallback — new GaiaRfcommFramer streaming state machine cuts the SPP stream per the official TransportProtocol (FF frames by Len field, bare PDUs by frame boundary, partial frames retained across bursts), fixing mis-split frames and garbled device-info strings when devices double-send responses; CapabilityProbe gains onFeatureResponseSeen/onBasicAlive so devices that never return the capability bitmap get capability flags driven by real responses (BASIC cmd0 GET_GAIA_VERSION handled too); startProbes is throttled to one full probe per 8s to prevent probe loops stacking during RFCOMM reconnect storms. TX path unchanged (bare PDU), so verified devices like GA2/Pudding behave exactly the same.
 - **alpha2.41.3**: Runtime permission request now includes BLUETOOTH_SCAN — the request array is expanded to CONNECT+SCAN (matching the official app) and PermissionChecker checks both; fixes 9ECA BLE-control devices like Space Travel 2 where a missing SCAN permission threw SecurityException, killed the BLE channel, forced RFCOMM fallback and left GAIA capabilities incomplete (ANC/gain could not be adjusted).
 

@@ -5,6 +5,16 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.6 (280)
+### 首次关闭弹窗后 GAIA 就绪不再二次弹窗
+- **根因**：弹窗有两条触发通道都汇聚到 `postShow` 防重，但首次弹窗走 ACL 通道（FastPairHook 直接弹，设备名未写入 `connectedShown`）；用户关闭后走 PopupGate 通道，`pollConnected` 每轮对同一设备反复 `tryShowConnectedDeferred` 重建 pending，旧 `cancelPending()` 只清一次，等 GAIA 就绪再次弹窗。旧 12s 窗口 + 关一次 pending 治标不治本。
+- **修复（3 文件）**：
+  - `PopupGate.kt`：新增 `userClosedKeys` 集合；`tryShowConnectedDeferred`/`tryShowConnected` 入口加"用户已关闭则跳过"拦截；新增 `markUserClosed()` 登记设备并清除 pending；断开时清除登记（`tryShowDisconnected`），允许下次连接再弹。
+  - `FastPairHookEntry.kt`：HalfSheet onDestroy 发 `SHEET_CLOSED` 广播时 `sLastShowMs = System.currentTimeMillis()`（让 postShow 12s 防重窗口生效）并带出设备名。
+  - `HeadsetReceiver.kt`：`SHEET_CLOSED` 分支取设备名/地址调 `PopupGate.markUserClosed()`。
+- **行为**：仅在"用户关闭弹窗"这条路径增加拦截，不影响正常连接与其他型号（GA2/布丁/猫咖/MOCA）回归；断开清除登记，下次连接仍正常弹窗。
+- 版本号升至 **alpha2.41.6**（versionCode 280）
+
 ## alpha2.41.5 (279)
 ### Space Travel 2 映射写库 + 弹窗防重
 - **设备库**：Space Travel 2 加入 PROFILES（ANC AudioCuration 映射 `[1,2,4,3]`：关=1/降噪=2/透传=4/抗风=3，与 GOLDEN AGES 2 一致），实测不再需手动设置设备码；DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（真机实测 0x00=高/0x01=中/0x02=低 反向），档位名不再颠倒。

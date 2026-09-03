@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.5**（versionCode 279） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.6**（versionCode 280） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -18,7 +18,10 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **ANC 型号档案库**：`AncProfileLib` 按设备名自动套用实测设备码映射（如 GA2 实测 1=关/2=降/3=抗风/4=透传），未实测型号回退默认映射；设置页可自定义映射优先生效
 - **FastPairHook（LSPosed 模块，注入 Google Play 服务）**：借道 GMS 的 BLE 扫描能力动态发现耳机 LE 地址并推送给应用
 - **自愈闭环**：无缓存 → REQ 扫描 → GMS 推送 → 连接成功写回文件 / SP → 下次秒连；地址变化自动重新发现（**地址全动态发现**）
-- **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）
+- **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）；弹窗「设置」按钮跳转系统蓝牙设备详情页
+- **扩展设备控制（DC）**：空间音频 / 头部追踪 / 增益 / 指示灯；在系统蓝牙设备详情页注入降噪 + 功能控制面板
+- **三协议自动识别**：GAIA V3（BLE）/ GAIA V4（RFCOMM/SPP，布丁）/ Moondrop 私有 9ECA0000 自动路由；dual-mode 设备 BLE 失败回退 RFCOMM/SPP
+- **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接，与 GAIA 并存）
 - **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 通用 / 行为，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
 - **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
@@ -149,7 +152,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
-- **alpha2.41.5**：Space Travel 2 映射写库 + 弹窗防重。设备库：Space Travel 2 加入 PROFILES（ANC 映射 `[1,2,4,3]`，与 GOLDEN AGES 2 一致），DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（实测 0x00=高/0x01=中/0x02=低 反向）。弹窗防重：postShow 统一防重（弹窗还开着或距上次显示<12s 不弹新窗），弹窗关闭时 cancelPending() 取消排队——连上只弹一次，等 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
+- **alpha2.41.6**：首次关闭弹窗后 GAIA 就绪不再二次弹窗——弹窗关闭时 PopupGate.markUserClosed() 登记设备（本连接断开前不再自动重弹），HalfSheet 关闭广播带设备名并刷新弹窗防重时间戳；断开自动清除登记，不影响下次连接与其他型号回归。：Space Travel 2 映射写库 + 弹窗防重。设备库：Space Travel 2 加入 PROFILES（ANC 映射 `[1,2,4,3]`，与 GOLDEN AGES 2 一致），DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（实测 0x00=高/0x01=中/0x02=低 反向）。弹窗防重：postShow 统一防重（弹窗还开着或距上次显示<12s 不弹新窗），弹窗关闭时 cancelPending() 取消排队——连上只弹一次，等 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
 - **alpha2.41.4**：RFCOMM 帧切分重构 + 能力探测响应驱动降级——新增 GaiaRfcommFramer 流式状态机，SPP 流按官方 TransportProtocol 精确切帧（FF 帧按 Len 切、裸 PDU 按帧边界切、半截帧跨 burst 保留），修复设备响应双发时粘包错切/乱码；CapabilityProbe 新增 onFeatureResponseSeen/onBasicAlive，不回能力位图的设备靠真实回包驱动能力标记，BASIC cmd0（GET_GAIA_VERSION）一并处理；startProbes 8 秒节流防 RFCOMM 重连风暴探测循环叠加，TX 裸 PDU 路径零改动。
 - **alpha2.41.3**：运行时权限申请补 BLUETOOTH_SCAN——申请数组扩为 CONNECT+SCAN（与官方 App 一致），PermissionChecker 同时检测两者；修复 Space Travel 2 等 9ECA BLE 控制设备因缺 SCAN 权限抛 SecurityException、BLE 通道挂掉被迫回退 RFCOMM、GAIA 能力不完整导致降噪/增益无法调节的问题。
 
