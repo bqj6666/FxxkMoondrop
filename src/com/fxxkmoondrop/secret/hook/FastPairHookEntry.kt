@@ -288,14 +288,29 @@ class FastPairHookEntry {
             val iv = ImageView(act)
             iv.setImageBitmap(bmp)
             iv.tag = "fxxk_quickpair_icon"
-            // alpha2.38.x: 从 Profile 读取集中配置坐标（不再动态追 view）
+            // alpha2.41.7: 图标 top 动态避开电量（subhead）。此前固定 iconTopPx，
+            // 在 Poco F6 等 subhead 原生位置与图标坐标重叠的设备上会盖住电量百分比。
+            // 取 max(profile.iconTopPx, subhead底部 + gap)，保证图标压在电量下方。
             val size = prof.iconSizePx
             val lp = android.widget.FrameLayout.LayoutParams(size, size)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            // 用固定 top 定位在标题上方区间，避免与标题/模式条叠字
-            lp.topMargin = prof.iconTopPx
+            var top = prof.iconTopPx
+            try {
+                val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+                val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+                if (sub != null && sub.visibility == android.view.View.VISIBLE && sub.width > 0 && sub.height > 0) {
+                    val dLoc = screenXY(decor)
+                    val sLoc = screenXY(sub)
+                    val subBottom = (sLoc[1] - dLoc[1]) + sub.height
+                    val gap = prof.iconTitleGapPx
+                    val avoidTop = subBottom + gap
+                    if (avoidTop > top) top = avoidTop
+                    Log.d(TAG, "[FastPairHook] icon avoid subhead: subBottom=" + subBottom + " gap=" + gap + " -> top=" + top)
+                }
+            } catch (t: Throwable) { Log.d(TAG, "[FastPairHook] icon avoid subhead fail: " + t) }
+            lp.topMargin = top
             (decor as android.view.ViewGroup).addView(iv, lp)
-            Log.d(TAG, "[FastPairHook] icon overlay added (profile=" + prof.tag + " size=" + size + " top=" + prof.iconTopPx + ")")
+            Log.d(TAG, "[FastPairHook] icon overlay added (profile=" + prof.tag + " size=" + size + " top=" + top + ")")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] icon overlay fail: " + t)
         }
@@ -1629,20 +1644,34 @@ class FastPairHookEntry {
             modeBarGapPx = 103,
         )
 
-        /** 依据屏幕参数解析当前设备所属档位。6.1 寸=1216x2640/density 3.0 精确匹配，其余走 6.3 档。 */
+        /** 依据屏幕参数动态计算布局档位。以 6.1 寸档（1216x2640）为基准，
+        / *  按当前屏幕相对基准的宽度/高度比例缩放所有绝对像素字段，
+        / *  使不同分辨率/尺寸的机型都能自适应，不再落入固定的 6.3 占位档。
+        / *  注意：iconTopPx 等绝对 px 字段按屏幕比例缩放；modeItem*Px 为 dp
+        / *  字段（调用处乘 density），保持原值即可。 */
         @JvmStatic
         fun resolveScreenProfile(act: android.app.Activity): PopupProfile {
             return try {
                 val dm = act.resources.displayMetrics
-                val w = dm.widthPixels; val h = dm.heightPixels; val dens = dm.density
-                Log.d(TAG, "[FastPairHook] screen profile query: " + w + "x" + h + " density=" + dens)
-                if (w == 1216 && h == 2640 && Math.abs(dens - 3.0f) < 0.05f) {
-                    Log.d(TAG, "[FastPairHook] screen profile -> 6.1in (1216x2640)")
-                    PROFILE_61
-                } else {
-                    Log.d(TAG, "[FastPairHook] screen profile -> 6.3in (fallback)")
-                    PROFILE_63
-                }
+                val w = dm.widthPixels; val h = dm.heightPixels
+                Log.d(TAG, "[FastPairHook] screen profile query: " + w + "x" + h)
+                val sX = w / 1216.0f
+                val sY = h / 2640.0f
+                val base = PROFILE_61
+                PopupProfile(
+                    tag = "dyn-" + w + "x" + h,
+                    iconSizePx = Math.round(base.iconSizePx * sX),
+                    iconTopPx = Math.round(base.iconTopPx * sY),
+                    batteryTopPx = Math.round(base.batteryTopPx * sY),
+                    modeBarTopPx = Math.round(base.modeBarTopPx * sY),
+                    modeItemBtnPx = base.modeItemBtnPx,
+                    modeItemIconPx = base.modeItemIconPx,
+                    modeItemLabelTopPx = base.modeItemLabelTopPx,
+                    modeItemLabelMarginPx = base.modeItemLabelMarginPx,
+                    settingsOffsetFromBtnPx = base.settingsOffsetFromBtnPx,
+                    iconTitleGapPx = base.iconTitleGapPx,
+                    modeBarGapPx = base.modeBarGapPx,
+                )
             } catch (t: Throwable) {
                 Log.d(TAG, "[FastPairHook] screen profile fail: " + t)
                 PROFILE_61
