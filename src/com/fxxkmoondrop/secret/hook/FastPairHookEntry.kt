@@ -288,34 +288,58 @@ class FastPairHookEntry {
             val iv = ImageView(act)
             iv.setImageBitmap(bmp)
             iv.tag = "fxxk_quickpair_icon"
-            // alpha2.41.7: 图标 top 动态避开电量（subhead）。此前固定 iconTopPx，
-            // 在 Poco F6 等 subhead 原生位置与图标坐标重叠的设备上会盖住电量百分比。
-            // 取 max(profile.iconTopPx, subhead底部 + gap)，保证图标压在电量下方。
+            // alpha2.41.8: 先按档位放置，加视图后轮询等待 subhead 完成布局，
+            // 再把图标 top 压到电量文字(subhead)下方；修复 Poco F6 / Android 17 遮挡电量问题。
             val size = prof.iconSizePx
             val lp = android.widget.FrameLayout.LayoutParams(size, size)
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
-            var top = prof.iconTopPx
-            try {
-                val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
-                val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
-                if (sub != null && sub.visibility == android.view.View.VISIBLE && sub.width > 0 && sub.height > 0) {
-                    val dLoc = screenXY(decor)
-                    val sLoc = screenXY(sub)
-                    val subBottom = (sLoc[1] - dLoc[1]) + sub.height
-                    val gap = prof.iconTitleGapPx
-                    val avoidTop = subBottom + gap
-                    if (avoidTop > top) top = avoidTop
-                    Log.d(TAG, "[FastPairHook] icon avoid subhead: subBottom=" + subBottom + " gap=" + gap + " -> top=" + top)
-                }
-            } catch (t: Throwable) { Log.d(TAG, "[FastPairHook] icon avoid subhead fail: " + t) }
-            lp.topMargin = top
+            lp.topMargin = prof.iconTopPx
             (decor as android.view.ViewGroup).addView(iv, lp)
-            Log.d(TAG, "[FastPairHook] icon overlay added (profile=" + prof.tag + " size=" + size + " top=" + top + ")")
+            Log.d(TAG, "[FastPairHook] icon overlay added (profile=" + prof.tag + " size=" + size + " top=" + lp.topMargin + ")")
+            scheduleAvoidSubhead(act, decor, iv, prof.iconTopPx, prof.iconTitleGapPx, 0)
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] icon overlay fail: " + t)
         }
     }
 
+    /** alpha2.41.8: 轮询等待 subhead 布局完成后，把图标 top 压到 subhead 底部下方，避免遮挡电量文字。
+     *  最多重试 20 次 * 50ms（约 1s）；每轮记录 subhead 状态，便于远程定位（Poco F6 / Android 17）。 */
+    private fun scheduleAvoidSubhead(act: android.app.Activity, decor: android.view.View,
+                                     iv: ImageView, baseTop: Int, gap: Int, attempt: Int) {
+        try {
+            val subId = act.resources.getIdentifier("subhead", "id", PKG_GMS)
+            val sub = if (subId != 0) decor.findViewById<android.view.View>(subId) else null
+            if (sub != null && sub.visibility == android.view.View.VISIBLE && sub.width > 0 && sub.height > 0) {
+                val dLoc = screenXY(decor)
+                val sLoc = screenXY(sub)
+                val subTop = sLoc[1] - dLoc[1]
+                val subBottom = subTop + sub.height
+                var top = baseTop
+                val avoidTop = subBottom + gap
+                if (avoidTop > top) top = avoidTop
+                val lp = iv.layoutParams as? android.widget.FrameLayout.LayoutParams
+                if (lp != null && lp.topMargin != top) {
+                    lp.topMargin = top
+                    iv.layoutParams = lp
+                    iv.requestLayout()
+                }
+                Log.d(TAG, "[FastPairHook] icon avoid subhead: subId=" + subId + " subTop=" + subTop
+                        + " subBottom=" + subBottom + " gap=" + gap + " baseTop=" + baseTop + " finalTop=" + top)
+                return
+            }
+            Log.d(TAG, "[FastPairHook] avoid subhead wait#" + attempt + ": subId=" + subId + " found=" + (sub != null)
+                    + (if (sub != null) " w=" + sub.width + " h=" + sub.height + " vis=" + sub.visibility else ""))
+            if (attempt < 20) {
+                iv.postDelayed({
+                    if (iv.parent != null) scheduleAvoidSubhead(act, decor, iv, baseTop, gap, attempt + 1)
+                }, 50)
+            } else {
+                Log.d(TAG, "[FastPairHook] avoid subhead give up after " + attempt + " attempts")
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] avoid subhead fail: " + t)
+        }
+    }
 
     /** 递归遍历视图树：给无 drawable 的 ImageView 注入自定义图标 */
     private fun injectIconIntoTree(root: android.view.View?) {
