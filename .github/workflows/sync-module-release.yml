@@ -43,7 +43,10 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           PRE="${{ steps.tag.outputs.prerelease }}"
+          # SHA 取 tag 指向的提交（dispatch 时 HEAD 可能已前移）
+          SHA=$(git rev-parse "${TAG}^{commit}" 2>/dev/null || git rev-parse HEAD)
           python3 tools/release_notes.py --tag "$TAG" --repo "$REPO_SLUG" \
+            --sha "$SHA" \
             --prerelease "$PRE" \
             --output release_body.md \
             --meta-json release_body.json \
