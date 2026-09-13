@@ -110,6 +110,24 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | 需额外模块 | ColorOS（OPPO / realme / 一加） | 需搭配 [oplus-cn2global（Magisk 模块）](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool（Xposed，解除 GMS 限制）](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) 后 Fast Pair 弹窗才可用 |
 | 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证） |
 
+### 启用作用域与 Hook 覆盖
+
+模块的 LSPosed **启用作用域只需两项**：`com.android.settings` 与 `com.google.android.gms`。
+
+| Hook 目标 | 所在作用域 | 状态 |
+|---|---|---|
+| 设置页入口 | `com.android.settings` | 启用 |
+| 蓝牙设备详情面板 | `com.android.settings` | 启用 |
+| Fast Pair 弹窗（卡片 \/ 连接态） | `com.google.android.gms` | 启用 |
+
+源码中另保留两条链——`hookMoondrop`（官方水月雨 App 的 GAIA 命令通道）与 `hookBluetooth`（`com.android.bluetooth`：A2DP 状态变化 → `BT_EVENT` 广播，用于识别耳机接入）：
+
+- **当前不在启用作用域内，因此不会执行**；
+- **代码完整保留、未被删除**，以备后续多设备适配时启用；
+- 模块**不 hook 官方水月雨 App**（避免与其自身逻辑冲突）。
+
+> Fast Pair 弹窗的混淆类名（`dtes` \/ `dthi` \/ `dtok`）随上游重编译可能改名，已由 DexKit 特征定位自动兜底（详见版本历史 2.50）；仅当原类名加载失败时才启用，失败仍回退原类名，**不影响上述任何行为**。
+
 ---
 
 ## 目录结构

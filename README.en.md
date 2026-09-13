@@ -108,6 +108,24 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 | Requires extra module | ColorOS (OPPO / realme / OnePlus) | Needs [oplus-cn2global (Magisk module)](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool (Xposed, unblock GMS restrictions)](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) for the Fast Pair popup to work |
 | Pending test | Other systems | Any system with full GMS should theoretically work (not yet verified one by one) |
 
+### Enabled Scope & Hook Coverage
+
+The module's LSPosed **scope only needs two entries**: `com.android.settings` and `com.google.android.gms`.
+
+| Hook target | Scope | Status |
+|---|---|---|
+| Settings entry | `com.android.settings` | Enabled |
+| Bluetooth device details panel | `com.android.settings` | Enabled |
+| Fast Pair popup (card / connected state) | `com.google.android.gms` | Enabled |
+
+Two further chains are kept in the source — `hookMoondrop` (GAIA command channel for the official Moondrop app) and `hookBluetooth` (`com.android.bluetooth`: A2DP state changes -> `BT_EVENT` broadcast, used to detect earbud connection):
+
+- **They are outside the enabled scope, so they never run**;
+- **The code is kept intact, not deleted**, ready to be enabled for future multi-device adaptation;
+- The module **does not hook the official Moondrop app** (to avoid conflicting with its own logic).
+
+> The Fast Pair obfuscated class names (`dtes` / `dthi` / `dtok`) may be renamed by any upstream rebuild; this is now covered by DexKit signature-based fallback (see version history 2.50). It only engages when the original names fail to load and still falls back to them, so **none of the behaviour above is affected**.
+
 ---
 
 ## Directory Structure
