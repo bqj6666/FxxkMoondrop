@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 TAG_RE = re.compile(r"^(\d+)-(.+)$")
-HEAD_RE = re.compile(r"^##\s+((?:alpha|beta|v)\d[\w.]*)")
+HEAD_RE = re.compile(r"^##\s+((?:alpha|beta|v)?\d[\w.]*)")  # 前缀可选：兼容 alpha2.41.10 与 2.50
 FENCE_RE = re.compile(r"^-{3,}$")
 
 
