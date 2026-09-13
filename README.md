@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.10**（versionCode 284） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**2.50**（versionCode 285） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -153,6 +153,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **2.50**：引入 DexKit 特征定位——GMS Fast Pair 混淆类名（`dtes`/`dthi`/`dtok`）随上游重编译可能改名，硬编码迟早失效；现新增 `DexKitLocator`，用 dex 内稳定特征串反查，仅当原硬编码类名加载失败时才启用（快路径与改造前逐字等价、零开销），定位失败仍回退硬编码名，**只增强不替代**；`dtok` 无特征串，由 `dtes` 字段 `c` 的类型反推。同时 `abiFilters` 收敛 ABI，APK 减约 0.8MB。实机以假类名强制触发兜底路径验证成功，无任何 hook / 协议 / 设备库行为改动。
 - **alpha2.41.10**：监听开关合并——主界面「开始/停止后台监听」按钮移除，统一由设置「后台监听」总开关控制（开启即启动监听并双写 `enable`/`auto_service`，启动应用自动恢复、开机自启、后台防杀随之生效；关闭即停止服务并取消保活）；主界面保留英雄卡运行状态展示。
 - **alpha2.41.9**：issue #3 三连修——①后台隐藏误退出（`MainActivity.onStop` 无条件 `finishAndRemoveTask` 改为仅 `onUserLeaveHint` 用户主动离开时隐藏，并用全局可见界面计数 + 延迟复核保护应用内跳转与授权流程）；②GAIA 地址缓存污染（FastPairHook 推送地址按 `DeviceMatcher` 设备名过滤；三处「未验证即落盘」改为只驻内存，仅服务确认后持久化；无 GAIA/9ECA 服务时清坏缓存 + 移出候选自愈）；③后台弹窗随之恢复，设置页「后台隐藏」文案同步澄清。
 - **alpha2.41.8**：图标避开电量改为布局完成后轮询定位——等电量 subhead 布局完成再计算 top 偏移，避免偏移取 0 仍被遮挡，并加定位日志。

@@ -1,6 +1,6 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.41.10** (versionCode 284) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **2.50** (versionCode 285) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -151,6 +151,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **2.50**: DexKit signature-based resolution introduced — the GMS Fast Pair obfuscated class names (`dtes`/`dthi`/`dtok`) can be renamed by any upstream rebuild, so hard-coding them is doomed to break; a new `DexKitLocator` resolves them from stable in-dex signature strings, and is only engaged when the original hard-coded name fails to load (the fast path is byte-for-byte the old behaviour, zero overhead), always falling back to the hard-coded name on failure — enhance-only, never replace; `dtok` has no usable signature string and is derived from the type of the `c` field of `dtes`. `abiFilters` also trims the ABI set, shrinking the APK by ~0.8MB. Verified on-device by forcing the fallback path with fake class names; no hook / protocol / device-DB behaviour changed.
 - **alpha2.41.10**: Monitor switch consolidated - the Overview "Start/Stop background monitor" button was removed and unified into the Settings "Background monitor" master switch (on = start monitoring immediately and write both `enable`/`auto_service`, so launch auto-resume, boot auto-start and keep-alive follow; off = stop the service and cancel keep-alive); the Overview hero card still shows the live running state.
 - **alpha2.41.9**: issue #3 triple fix — (1) "hide in background" no longer kills the app: `MainActivity.onStop` stopped calling `finishAndRemoveTask()` unconditionally and now hides only on `onUserLeaveHint` (user-initiated leave), guarded by a global visible-activity counter plus a 500ms re-check, so in-app navigation and permission flows are unaffected; (2) GAIA LE address cache poisoning fixed — FastPairHook now filters pushed addresses by real device name via `DeviceMatcher` (no hard-coded model/MAC), the three "persist before verification" paths only keep an in-memory candidate, persistence happens solely after GAIA/9ECA service confirmation, and a service-less address is invalidated plus its poisoned cache cleared for self-healing; (3) the background connect popup recovers accordingly, and the "Hide in background" description was clarified.
 - **alpha2.41.8**: Icon offset around the battery subhead now waits for the subhead layout to complete (polling) instead of a one-shot measurement, so the offset can no longer be 0 and hide the battery percentage; added positioning logs.

@@ -5,6 +5,18 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## 2.50 (285)
+### 引入 DexKit 特征定位：GMS Fast Pair 混淆类名失效时自动兜底
+- **新增 `DexKitLocator`**：用 dex 内的**稳定特征串**（日志格式串）反查被 R8 混淆的类，针对 Fast Pair 弹窗那几个只剩两三个字母的短类名（`dtes` / `dthi` / `dtok`）——它们随上游每次重编译都可能改名，硬编码类名迟早失效。
+- **改动范围仅 3 处 hook 点**（`FastPairHookEntry` 的 `dtes.f`、`dthi.O`、`dthi.q`）：把 `Class.forName(x)` 换成 `DexKitLocator.resolveOrFallback(cl, key, x)`。作用域（`com.android.settings` + `com.google.android.gms`）与包名不变。
+- **快路径零开销**：先按**原硬编码类名**加载（与改造前逐字等价），只有加载失败（上游改版改名）才启用 DexKit 按特征定位；单进程单 bridge 缓存复用，定位耗时约 200–460ms，仅发生在兜底时。
+- **只增强、不替代**：定位失败统一回退原硬编码名，并把原始异常原样抛出——任何机型 / 版本都不会因为定位器失效而丢功能。
+- **`dtok` 的特殊处理**：该类内部几乎全是 protobuf 字段、字符串常量只有单字母枚举名，**没有可用特征串**，改为「由持有它的 `dtes` 字段 `c` 的类型反推」——字段 `c:Ldtok;` 本就是现有 hook 依赖的成员，零新增风险。
+- **依赖与体积**：引入 `org.luckypray:dexkit:2.2.0`；APK 内置 `libdexkit.so`。同时用 `ndk.abiFilters` 限定 `arm64-v8a` / `armeabi-v7a`，剔除只服务模拟器的 x86 / x86_64，单 APK 减约 0.8MB。
+- **实机验证**：把硬编码名临时改成假名（`dtes__FAKE_TEST` 等）强制走兜底路径，DexKit 正确反查回真实类 `dtes` / `dthi` / `dtok`，GMS 三进程 hook 全部成功，证明兜底链真实可用。
+- **无行为改动**：未触碰任何 hook 逻辑、GAIA / 9ECA 协议、设备库、弹窗逻辑；`hookMoondrop` / `hookBluetooth` 两条链保持原样（当前不在启用作用域内，代码保留以备多设备适配）。
+- 版本号升至 **2.50**（versionCode 285）
+
 ## alpha2.41.10 (284)
 ### 监听开关合并：主界面按钮并入设置，单一入口
 - **主界面「开始/停止后台监听」按钮移除**：该按钮与设置页开关职责重叠（一个管立即启停、一个管启动时自动监听），统一收敛到 **设置 → 行为 → 后台监听**，避免两处入口互相打架。

@@ -21,6 +21,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
+import com.fxxkmoondrop.secret.DexKitLocator
 import com.fxxkmoondrop.secret.DeviceMatcher
 import com.fxxkmoondrop.secret.AncProfileLib
 import com.fxxkmoondrop.secret.HookHelper
@@ -77,7 +78,7 @@ class FastPairHookEntry {
 
         // 2. hook dtes.f：真实配对弹窗 UI 设置时改写设备名
         try {
-            val dtesClass = Class.forName("dtes", true, cl)
+            val dtesClass = DexKitLocator.resolveOrFallback(cl, DexKitLocator.DTES, "dtes")
             val m = dtesClass.getDeclaredMethod("f", Context::class.java,
                     Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
             module.hook(m).intercept { chain ->
@@ -103,8 +104,8 @@ class FastPairHookEntry {
 
         // 3. hook dthi.O(ImageView, dtok)：弹窗图片注入（原图为 dtok.h 字节，为空时替换）
         try {
-            val dthiClass = Class.forName("dthi", true, cl)
-            val dtokClass = Class.forName("dtok", true, cl)
+            val dthiClass = DexKitLocator.resolveOrFallback(cl, DexKitLocator.DTHI, "dthi")
+            val dtokClass = DexKitLocator.resolveDtokClassFallback(cl, "dtok")
             val m = dthiClass.getDeclaredMethod("O", ImageView::class.java, dtokClass)
             module.hook(m).intercept { chain ->
                 chain.proceed()
@@ -124,8 +125,8 @@ class FastPairHookEntry {
 
         // 4. hook dthi.q(ImageView, dtok, boolean)：HalfSheetModuleFragment 图片渲染主入口
         try {
-            val dthiClass = Class.forName("dthi", true, cl)
-            val dtokClass = Class.forName("dtok", true, cl)
+            val dthiClass = DexKitLocator.resolveOrFallback(cl, DexKitLocator.DTHI, "dthi")
+            val dtokClass = DexKitLocator.resolveDtokClassFallback(cl, "dtok")
             val m = dthiClass.getDeclaredMethod("q", ImageView::class.java, dtokClass,
                     Boolean::class.javaPrimitiveType)
             module.hook(m).intercept { chain ->

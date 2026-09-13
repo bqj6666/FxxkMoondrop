@@ -11,8 +11,14 @@ android {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 26
         targetSdk = 36
-        versionCode = 284
-        versionName = "alpha2.41.10"
+        versionCode = 285
+        versionName = "2.50"
+
+        // DexKit 自带 4 个 ABI 的 libdexkit.so；x86/x86_64 只服务模拟器，
+        // 剔除后单 APK 省约 0.8MB（模块只跑在真机上）。
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -112,6 +118,12 @@ dependencies {
 
     // Xposed API：仅编译期（运行时由 LSPosed 提供）
     compileOnly("io.github.libxposed:api:102.0.0")
+
+    // DexKit（org.luckypray:dexkit）：运行时解析目标 APK 的 dex，
+    // 用特征（字符串/调用关系/修饰符）反查被混淆的类与方法，
+    // 避免把混淆名硬编码进来。
+    // 文档：https://luckypray.org/DexKit/
+    implementation("org.luckypray:dexkit:2.2.0")
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
     testImplementation("junit:junit:4.13.2")
