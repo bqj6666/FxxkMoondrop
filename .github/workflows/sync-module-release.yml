@@ -19,8 +19,11 @@ jobs:
     env:
       MIRROR_REPO: Xposed-Modules-Repo/com.fxxkmoondrop.secret
     steps:
-      - name: Checkout
+      - name: Checkout（全量历史 + tag，供生成更新日志）
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          tags: true
 
       - name: Resolve tag + prerelease flag
         id: tag
@@ -33,6 +36,20 @@ jobs:
           else
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: 生成更新日志（供镜像 release 使用）
+        env:
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          PRE="${{ steps.tag.outputs.prerelease }}"
+          python3 tools/release_notes.py --tag "$TAG" --repo "$REPO_SLUG" \
+            --prerelease "$PRE" \
+            --output release_body.md \
+            --meta-json release_body.json \
+            --payload-json release_payload.json
+          echo "----- 更新日志预览（前 15 行）-----"
+          head -15 release_body.md
 
       - name: Download APK from triggering release
         id: download
@@ -105,8 +122,9 @@ jobs:
             else
               # 状态一致，直接复用（保留下载数），仅修正 name
               curl -sS -X PATCH -H "$AUTH" -H "$ACCEPT" \
+                -H "Content-Type: application/json" \
                 "https://api.github.com/repos/${REPO}/releases/${EXIST}" \
-                -d "{\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE}}" >/dev/null || true
+                --data-binary @release_payload.json >/dev/null || true
               REL_ID="${EXIST}"
             fi
           else
@@ -117,8 +135,9 @@ jobs:
           if [ -z "$REL_ID" ]; then
             echo "新建 release ${TAG} (prerelease=${PRERELEASE})"
             curl -sS -X POST -H "$AUTH" -H "$ACCEPT" \
+              -H "Content-Type: application/json" \
               "https://api.github.com/repos/${REPO}/releases" \
-              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"prerelease\":${PRERELEASE},\"body\":\"正式发布 ${TAG}\"}" >/dev/null || true
+              --data-binary @release_payload.json >/dev/null || true
             REL_ID=$(curl -sS -H "$AUTH" -H "$ACCEPT" \
               "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" \
               | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id','') if isinstance(d,dict) else '')")
