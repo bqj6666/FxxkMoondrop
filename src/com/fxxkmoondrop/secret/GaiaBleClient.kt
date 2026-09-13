@@ -123,6 +123,9 @@ class GaiaBleClient private constructor() {
     @Volatile private var scanning = false
     private var gattPendingSince = 0L
     @Volatile private var leAddrVerified = false
+
+    /** alpha2.41.9: 本进程内已被证伪（无 GAIA/9ECA 服务）的地址，不再作为缓存首选 */
+    private val invalidLeAddrs = java.util.Collections.synchronizedSet(HashSet<String>())
     @Volatile private var candidates: Array<String>? = null
     @Volatile private var candidateIdx = 0
     @Volatile private var attemptCount = 0
@@ -271,12 +274,9 @@ class GaiaBleClient private constructor() {
                         return
                     }
                     Log.d(GaiaConstants.TAG, "LE addr from FastPairHook: " + a)
+                    // alpha2.41.9: 广播来源只作内存候选，等 GAIA/9ECA 服务确认后才持久化
                     cachedLeAddress = a
-                    saveLeAddrFile(a)
-                    try {
-                        context?.getSharedPreferences("cfg", 0)
-                                ?.edit()?.putString("gaia_le_addr", a)?.commit()
-                    } catch (_: Throwable) { }
+                    invalidLeAddrs.remove(a)
                     if (!connected) {
                         candidates = arrayOf(a)
                         candidateIdx = 0
@@ -382,6 +382,7 @@ class GaiaBleClient private constructor() {
             } else {
                 val targetName = device?.name
                 val canUseCachedLe = cachedLeAddress != null &&
+                        !invalidLeAddrs.contains(cachedLeAddress!!.uppercase()) &&
                         (cachedLeName == null || cachedLeName.equals(targetName, ignoreCase = true))
                 val cand2 = candidates
                 if (cand2 == null || cand2.isEmpty()) {
@@ -519,15 +520,10 @@ class GaiaBleClient private constructor() {
                     if (matcher(n, addr, result)) {
                         if (onHitImmediate) {
                             stopScan()
+                            // alpha2.41.9: 扫描命中只作内存候选，等 GAIA/9ECA 服务确认后才持久化
                             cachedLeAddress = addr
-                            try {
-                                if (context != null) {
-                                    context!!.getSharedPreferences("cfg", 0)
-                                            .edit().putString("gaia_le_addr", addr).commit()
-                                    saveLeAddrFile(addr)
-                                    Log.d(GaiaConstants.TAG, "LE address cached: " + addr)
-                                }
-                            } catch (_: Exception) { }
+                            invalidLeAddrs.remove(addr.uppercase())
+                            Log.d(GaiaConstants.TAG, "LE address candidate: " + addr)
                             doConnectLe(result)
                         } else {
                             scanHits.add(result)
@@ -689,13 +685,9 @@ class GaiaBleClient private constructor() {
             }
             deviceAddress = leAddress
             connected = false
+            // alpha2.41.9: 未经验证只驻内存，不再写持久缓存
             cachedLeAddress = leAddress
             cachedLeName = device.name
-            try {
-                context?.getSharedPreferences("cfg", 0)
-                        ?.edit()?.putString("gaia_le_addr", leAddress)?.commit()
-                saveLeAddrFile(leAddress)
-            } catch (_: Exception) { }
             gattPendingSince = System.currentTimeMillis()
             Log.d(GaiaConstants.TAG, "connectGatt(scan-result) " + leAddress)
         } catch (e: Exception) {
@@ -717,9 +709,9 @@ class GaiaBleClient private constructor() {
             }
             deviceAddress = leAddress
             connected = false
+            // alpha2.41.9: 未经验证只驻内存，不再写持久缓存
             cachedLeAddress = leAddress
             cachedLeName = device.name
-            saveLeAddrFile(leAddress)
             candidates = arrayOf(leAddress.uppercase())
             candidateIdx = 0
             attemptCount = 0
@@ -781,6 +773,45 @@ class GaiaBleClient private constructor() {
         if (candidates == null || candidates!!.isEmpty()) { candidateIdx = 0; return }
         candidateIdx = (candidateIdx + 1) % candidates!!.size
         Log.d(GaiaConstants.TAG, "advance candidate -> " + candidates!![candidateIdx])
+    }
+
+    /**
+     * alpha2.41.9: 只有被 GAIA / 9ECA 服务确认过的地址才写入持久缓存。
+     * 修复"任意蓝牙设备地址被写进 gaia_le_addr，导致 GAIA 永远连错设备"的污染链。
+     */
+    @Synchronized
+    private fun cacheVerifiedLeAddr(addr: String) {
+        cachedLeAddress = addr
+        invalidLeAddrs.remove(addr.uppercase())
+        try {
+            context?.getSharedPreferences("cfg", 0)
+                    ?.edit()?.putString("gaia_le_addr", addr)?.commit()
+            saveLeAddrFile(addr)
+            Log.d(GaiaConstants.TAG, "verified LE addr cached: " + addr)
+        } catch (_: Exception) { }
+    }
+
+    /** alpha2.41.9: 清除被证伪的 LE 地址持久缓存（prefs + 文件）；addr 为 null 时无条件清除 */
+    private fun clearLeAddrCache(addr: String?) {
+        try {
+            val ctx = context ?: return
+            val sp = ctx.getSharedPreferences("cfg", 0)
+            val cur = sp.getString("gaia_le_addr", null)
+            if (addr == null || cur == null || cur.equals(addr, ignoreCase = true)) {
+                sp.edit().remove("gaia_le_addr").commit()
+                Log.w(GaiaConstants.TAG, "gaia_le_addr removed: " + (cur ?: "-"))
+            }
+            val f = File(ctx.filesDir, "gaia_le_addr.txt")
+            if (f.exists()) {
+                val v = try { f.readText().trim() } catch (_: Exception) { null }
+                if (addr == null || v == null || v.equals(addr, ignoreCase = true)) {
+                    f.delete()
+                    Log.w(GaiaConstants.TAG, "gaia_le_addr.txt removed: " + (v ?: "-"))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(GaiaConstants.TAG, "clear le addr cache failed", e)
+        }
     }
 
     private fun saveLeAddrFile(addr: String?) {
@@ -1135,18 +1166,14 @@ class GaiaBleClient private constructor() {
                     connectedDeviceName = cachedLeName
                 }
                 Log.d(GaiaConstants.TAG, "connected name=" + connectedDeviceName +
-                        " ancProfile=" + AncProfileLib.matchedProfileName(connectedDeviceName))
+                        " ancProfile=" + AncProfileLib.matchedProfileName(connectedDeviceName) +
+                        " leAddrVerified=" + leAddrVerified)
                 refreshGattCache(g)
                 AppLog.i(GaiaConstants.TAG, "GATT connected " + deviceAddress + " -> discovering services")
                 gattPendingSince = 0
                 if (deviceAddress != null) lastConnectedAddr = deviceAddress
-                if (leAddrVerified) deviceAddress?.let {
-                    saveLeAddrFile(it)
-                    try {
-                        context?.getSharedPreferences("cfg", 0)
-                                ?.edit()?.putString("gaia_le_addr", it)?.commit()
-                    } catch (_: Exception) { }
-                }
+                // alpha2.41.9: GATT 已连接 != 服务已验证，持久化统一交给 onServicesDiscovered
+                // 确认 GAIA/9ECA 之后再写（此前这里会把"只有 GATT、没有 GAIA"的地址写进缓存）
                 g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(GaiaConstants.TAG, "gatt disconnected status=" + status)
@@ -1269,6 +1296,22 @@ class GaiaBleClient private constructor() {
                 if (!hasGaia && !hasSrc9) {
                     Log.d(GaiaConstants.TAG, "no GATT services found, trying RFCOMM/SPP fallback")
                     AppLog.i(GaiaConstants.TAG, "protocol: no GATT services, trying RFCOMM/SPP fallback")
+                    // alpha2.41.9: 该地址未提供 GAIA/9ECA 服务 -> 判为不可用地址：
+                    // 移出候选并清除它的持久缓存，让下次连接重新发现正确地址
+                    val badAddr = deviceAddress?.uppercase()
+                    if (badAddr != null) {
+                        invalidLeAddrs.add(badAddr)
+                        if (cachedLeAddress?.uppercase() == badAddr) {
+                            cachedLeAddress = null
+                            cachedLeName = null
+                            candidates = null
+                            candidateIdx = 0
+                            clearLeAddrCache(badAddr)
+                            Log.w(GaiaConstants.TAG, "cached LE addr cleared (no GAIA/9ECA on " + badAddr + ")")
+                            AppLog.w(GaiaConstants.TAG, "protocol: LE addr " + badAddr
+                                    + " has no GAIA/9ECA service, bad cache cleared")
+                        }
+                    }
                     tryRfcommFallback(g.device)
                     return
                 }
@@ -1277,13 +1320,9 @@ class GaiaBleClient private constructor() {
                 val okAddr = deviceAddress
                 if (okAddr != null) {
                     everConnected = true
-                    if (leAddrVerified) {
-                        cachedLeAddress = okAddr
-                        try {
-                            context?.getSharedPreferences("cfg", 0)
-                                    ?.edit()?.putString("gaia_le_addr", okAddr)?.commit()
-                        } catch (_: Exception) { }
-                    }
+                    // alpha2.41.9: 服务已确认（GAIA 或 9ECA）-> 此时才允许写持久缓存
+                    leAddrVerified = true
+                    cacheVerifiedLeAddr(okAddr)
                     cachedLeName = runCatching { g.getDevice()?.name }.getOrNull()
                     candidates = arrayOf(okAddr.uppercase())
                     candidateIdx = 0

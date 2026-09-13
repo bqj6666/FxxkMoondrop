@@ -5,6 +5,35 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.41.10 (284)
+### 监听开关合并：主界面按钮并入设置，单一入口
+- **主界面「开始/停止后台监听」按钮移除**：该按钮与设置页开关职责重叠（一个管立即启停、一个管启动时自动监听），统一收敛到 **设置 → 行为 → 后台监听**，避免两处入口互相打架。
+- **设置「启动自动监听」升级为「后台监听」总开关**：开启 = 立即开始监听，并把 `enable` / `auto_service` 双写为真（启动应用自动恢复、开机自启、后台防杀随之生效）；关闭 = 停止监听服务、取消保活、双写为假。因原开关只管「启动应用时是否自动监听」、无法表达「立即启停」，与主界面按钮**功能并不等价**，故按合并处理而非直接删除。
+- 主界面保留英雄卡运行状态（运行中 / 未运行）实时展示，状态可见性不变。
+- `SettingsActivity`（遗留页）同步为总开关语义，避免代码库残留旧行为。
+- 版本号升至 **alpha2.41.10**（versionCode 284）
+
+## alpha2.41.9 (283)
+### issue #3 三连修：后台隐藏误退出 / GAIA 地址缓存污染 / 后台弹窗失效
+- **①「权限检查导致应用退出」（根因定位）**：`MainActivity.onStop()` 里无条件 `finishAndRemoveTask()`——`bg_hide` 打开后，只要离开主界面（进入「权限检测」二级页、跳系统授权页）就会销毁整个任务，用户回来时应用「自己退出了」。现改为只有 `onUserLeaveHint`（Home / 最近任务等**用户主动离开**）才隐藏，并用 `Application.registerActivityLifecycleCallbacks` 维护全局可见界面计数：还有其他本应用界面可见时不隐藏；配置变更（旋转/主题）直接跳过；隐藏前再延迟 500ms 复核一次，避免快速返回被误杀。应用内跳转与授权流程完全不受影响。
+- **②「能连耳机但所有功能失效」**：`gaia_le_addr` 持久缓存污染链（坏地址写入后永不自愈），三处修复：
+  - `FastPairHookEntry`：`ACL_CONNECTED` 推送地址时**只校验 MAC 格式，不校验设备身份**，任何蓝牙设备（键鼠/车机/其他耳机）连接都会把地址推给应用并落盘。现按真实设备名经 `DeviceMatcher.isMoondrop()` 过滤（不硬编码型号/MAC）。
+  - `GaiaBleClient`：广播来源、LE 扫描命中、`doConnectLe()` 三处**未经验证即写持久缓存**（prefs + `gaia_le_addr.txt`）已全部改为只驻内存候选；只有 `onServicesDiscovered` 确认存在 GAIA 或 9ECA0000 服务后才 `cacheVerifiedLeAddr()` 落盘。
+  - 服务发现确认该地址**无 GAIA/9ECA 服务**时，把地址加入 `invalidLeAddrs` 移出候选，并 `clearLeAddrCache()` 清除被污染的 prefs + 文件缓存，下次连接重新发现正确地址（自愈）。
+- **③「后台连耳机不弹窗」**：与 ② 同源——GAIA 永远不就绪导致 `PopupGate.flushPendingIfReady()` 拿不到电量；叠加 `bg_hide` 误销毁任务，应用无法后台驻留。①② 修复后链路自愈。
+- 设置页「后台隐藏」文案同步澄清为「用户切到后台时隐藏主界面（不驻留最近任务）；应用内跳转与授权流程不受影响」，避免与后台监听/弹窗功能互相误解。
+- 版本号升至 **alpha2.41.9**（versionCode 283）
+
+## alpha2.41.8 (282)
+### 图标避开电量改为布局完成后轮询定位
+- 图标避让电量 subhead 的 top 偏移由「一次性计算」改为轮询等待 subhead 布局完成后再定位，避免 subhead 尚未测量时偏移量取 0、图标仍被电量百分比遮挡；新增详细定位日志便于排查。
+- 版本号升至 **alpha2.41.8**（versionCode 282）
+
+## alpha2.41.7 (281)
+### 图标 top 动态避开电量 subhead
+- 设备详情/概览卡图标 top 由固定值改为动态计算，避开电量 subhead 区域，防止图标遮挡电量百分比。
+- 版本号升至 **alpha2.41.7**（versionCode 281）
+
 ## alpha2.41.6 (280)
 ### 首次关闭弹窗后 GAIA 就绪不再二次弹窗
 - **根因**：弹窗有两条触发通道都汇聚到 `postShow` 防重，但首次弹窗走 ACL 通道（FastPairHook 直接弹，设备名未写入 `connectedShown`）；用户关闭后走 PopupGate 通道，`pollConnected` 每轮对同一设备反复 `tryShowConnectedDeferred` 重建 pending，旧 `cancelPending()` 只清一次，等 GAIA 就绪再次弹窗。旧 12s 窗口 + 关一次 pending 治标不治本。

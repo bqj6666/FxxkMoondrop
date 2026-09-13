@@ -58,7 +58,6 @@ class OverviewFragment : Fragment() {
     private var surfaceColor = 0
     private var onVariantColor = 0
     private var cardSurfaceColor = 0
-    private var mainBtn: MaterialButton? = null
     private var ancStatus: TextView? = null
     private var ancTitle: TextView? = null
     private var ancBtnRow: LinearLayout? = null
@@ -242,26 +241,10 @@ class OverviewFragment : Fragment() {
         statusPanel.addView(heroRow, heroLp)
         root.addView(statusPanel, lp(false))
 
-        root.addView(spacer(dp(16)))
+        root.addView(spacer(dp(14)))
 
-        // ── 主操作：开始/停止监听（Filled 按钮）──
-        mainBtn = makeButton(Lang.t("开始后台监听", "Start background monitor"), R.drawable.ic_play, primaryColor, onPrimaryColor) {
-            requestNeededPermissions()
-            if (HeadsetDetectService.RUNNING) {
-                requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("enable", false).commit()
-                AliveReceiver.cancel(requireContext())
-                HeadsetDetectService.RUNNING = false
-                requireContext().stopService(Intent(requireContext(), HeadsetDetectService::class.java))
-            } else {
-                requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("enable", true).commit()
-                HeadsetDetectService.RUNNING = true
-                requireContext().startService(Intent(requireContext(), HeadsetDetectService::class.java))
-            }
-            updateStatus()
-        }
-        root.addView(mainBtn, lp(false))
-
-        root.addView(spacer(dp(10)))
+        // ── alpha2.41.10: 主界面「开始/停止后台监听」按钮已移除 ──
+        // 监听启停统一由 设置 → 行为 → 后台监听 总开关控制，避免两处重复入口。
 
         // ── alpha2.4: 运行状态面板（GAIA 连接 / 耳机连接 / 左右耳电量）──
         buildStatusPanel(root)
@@ -955,11 +938,7 @@ class OverviewFragment : Fragment() {
 
     private fun updateStatus() {
         updateRunStatus()
-        val svc = HeadsetDetectService.RUNNING
-        mainBtn?.let {
-            it.text = if (svc) Lang.t("停止后台监听", "Stop background monitor") else Lang.t("开始后台监听", "Start background monitor")
-            it.setIconResource(if (svc) R.drawable.ic_stop else R.drawable.ic_play)
-        }
+        // alpha2.41.10: 主按钮已移除，运行状态统一由英雄卡展示
         // alpha2.4: onResume 同步刷新状态面板（修复模拟恢复后电量行残留显示）
         updateStatusPanel()
     }

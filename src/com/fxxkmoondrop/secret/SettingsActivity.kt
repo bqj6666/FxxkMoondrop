@@ -225,12 +225,12 @@ class SettingsActivity : Activity() {
                 intArrayOf(pal.onPrimary, pal.onSurface))
         swBg.isChecked = getSP().getBoolean("bg_hide", false)
         val rowBg = M3Ui.listRow(this, pal, R.drawable.ic_block, "后台隐藏",
-                "切到后台自动隐藏主界面（不驻留最近任务）", swBg, null)
+                "用户切到后台时隐藏主界面（不驻留最近任务）；应用内跳转与授权流程不受影响", swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("bg_hide", checked).commit()
         }
 
-        // ── 启动自动监听 ──
+        // ── 后台监听总开关（alpha2.41.10）──
         val swAuto = com.google.android.material.materialswitch.MaterialSwitch(this)
         swAuto.trackTintList = ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
@@ -238,11 +238,19 @@ class SettingsActivity : Activity() {
         swAuto.thumbTintList = ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                 intArrayOf(pal.onPrimary, pal.onSurface))
-        swAuto.isChecked = getSP().getBoolean("auto_service", true)
-        val rowAuto = M3Ui.listRow(this, pal, R.drawable.ic_play, "启动自动监听",
-                "启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", swAuto, null)
+        swAuto.isChecked = getSP().getBoolean("enable", true) && getSP().getBoolean("auto_service", true)
+        val rowAuto = M3Ui.listRow(this, pal, R.drawable.ic_play, "后台监听",
+                "监听总开关：开启后立即开始监听，并在启动应用／开机时自动恢复与后台防杀；连接耳机自动直连 GAIA 读取电量与控制降噪", swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean("auto_service", checked).commit()
+            getSP().edit().putBoolean("auto_service", checked).putBoolean("enable", checked).commit()
+            if (checked) {
+                HeadsetDetectService.RUNNING = true
+                try { startService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
+            } else {
+                AliveReceiver.cancel(this)
+                HeadsetDetectService.RUNNING = false
+                try { stopService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
+            }
         }
 
         // 行为区分组卡片

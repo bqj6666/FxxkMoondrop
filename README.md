@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.6**（versionCode 280） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.41.10**（versionCode 284） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -153,6 +153,10 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **alpha2.41.10**：监听开关合并——主界面「开始/停止后台监听」按钮移除，统一由设置「后台监听」总开关控制（开启即启动监听并双写 `enable`/`auto_service`，启动应用自动恢复、开机自启、后台防杀随之生效；关闭即停止服务并取消保活）；主界面保留英雄卡运行状态展示。
+- **alpha2.41.9**：issue #3 三连修——①后台隐藏误退出（`MainActivity.onStop` 无条件 `finishAndRemoveTask` 改为仅 `onUserLeaveHint` 用户主动离开时隐藏，并用全局可见界面计数 + 延迟复核保护应用内跳转与授权流程）；②GAIA 地址缓存污染（FastPairHook 推送地址按 `DeviceMatcher` 设备名过滤；三处「未验证即落盘」改为只驻内存，仅服务确认后持久化；无 GAIA/9ECA 服务时清坏缓存 + 移出候选自愈）；③后台弹窗随之恢复，设置页「后台隐藏」文案同步澄清。
+- **alpha2.41.8**：图标避开电量改为布局完成后轮询定位——等电量 subhead 布局完成再计算 top 偏移，避免偏移取 0 仍被遮挡，并加定位日志。
+- **alpha2.41.7**：设备卡图标 top 动态避开电量 subhead，防止图标遮挡电量百分比。
 - **alpha2.41.6**：首次关闭弹窗后 GAIA 就绪不再二次弹窗——弹窗关闭时 PopupGate.markUserClosed() 登记设备（本连接断开前不再自动重弹），HalfSheet 关闭广播带设备名并刷新弹窗防重时间戳；断开自动清除登记，不影响下次连接与其他型号回归。
 - **alpha2.41.5**：Space Travel 2 映射写库 + 弹窗防重。设备库：Space Travel 2 加入 PROFILES（ANC 映射 `[1,2,4,3]`，与 GOLDEN AGES 2 一致），DcProfile 增益 `gainMap` 修正为 `[2,1,0]`（实测 0x00=高/0x01=中/0x02=低 反向）。弹窗防重：postShow 统一防重（弹窗还开着或距上次显示<12s 不弹新窗），弹窗关闭时 cancelPending() 取消排队——连上只弹一次，等 GAIA 就绪后同一弹窗刷新为可控制，或关闭后改在 App 操作。
 - **alpha2.41.4**：RFCOMM 帧切分重构 + 能力探测响应驱动降级——新增 GaiaRfcommFramer 流式状态机，SPP 流按官方 TransportProtocol 精确切帧（FF 帧按 Len 切、裸 PDU 按帧边界切、半截帧跨 burst 保留），修复设备响应双发时粘包错切/乱码；CapabilityProbe 新增 onFeatureResponseSeen/onBasicAlive，不回能力位图的设备靠真实回包驱动能力标记，BASIC cmd0（GET_GAIA_VERSION）一并处理；startProbes 8 秒节流防 RFCOMM 重连风暴探测循环叠加，TX 裸 PDU 路径零改动。

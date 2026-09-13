@@ -1,5 +1,7 @@
 package com.fxxkmoondrop.secret
 
+import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -27,6 +29,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLog.init(this) // alpha2.16: 运行日志（无 Root 可收集）
+        installVisibilityTracking(application) // alpha2.41.9: 后台隐藏判定需要全局可见界面计数
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         if (savedInstanceState != null) curTab = savedInstanceState.getInt(KEY_TAB, 1)
 
@@ -82,14 +85,69 @@ class MainActivity : FragmentActivity() {
         outState.putInt(KEY_TAB, curTab)
     }
 
+    /**
+     * alpha2.41.9: 后台隐藏语义修正。
+     *
+     * 旧实现在 onStop() 里无条件 finishAndRemoveTask()：只要离开主界面（进入「权限检测」
+     * 二级页、跳系统授权页）就会把整个任务销毁，用户回来时应用「自己退出了」。
+     * 现在只有 onUserLeaveHint（Home / 最近任务等用户主动离开）才隐藏，并且离开前确认
+     * 本应用没有其他界面仍在前台，应用内跳转与授权流程完全不受影响。
+     */
+    private var userLeftHint = false
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        userLeftHint = true
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        userLeftHint = false
+    }
+
     override fun onStop() {
         super.onStop()
-        if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("bg_hide", false)) {
-            finishAndRemoveTask()
+        if (isChangingConfigurations) {
+            userLeftHint = false
+            return
         }
+        if (!userLeftHint) return // 应用内跳转 / 打开系统页面：不隐藏
+        userLeftHint = false
+        if (visibleActivityCount > 1) return // 还有其他本应用界面可见：不隐藏
+        if (!getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("bg_hide", false)) return
+        window.decorView.postDelayed({
+            if (visibleActivityCount == 0 && !isFinishing && !isChangingConfigurations) {
+                finishAndRemoveTask()
+            }
+        }, BG_HIDE_RECHECK_MS)
     }
 
     companion object {
         private const val KEY_TAB = "fxxk_tab"
+        private const val BG_HIDE_RECHECK_MS = 500L
+
+        /** alpha2.41.9: 本应用当前可见（started 且未 stopped）的 Activity 数量 */
+        @Volatile private var visibleActivityCount = 0
+        @Volatile private var visibilityTrackingInstalled = false
+
+        private fun installVisibilityTracking(app: Application) {
+            if (visibilityTrackingInstalled) return
+            visibilityTrackingInstalled = true
+            app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityStarted(activity: Activity) {
+                    visibleActivityCount++
+                }
+
+                override fun onActivityStopped(activity: Activity) {
+                    if (visibleActivityCount > 0) visibleActivityCount--
+                }
+
+                override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+                override fun onActivityResumed(activity: Activity) {}
+                override fun onActivityPaused(activity: Activity) {}
+                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+                override fun onActivityDestroyed(activity: Activity) {}
+            })
+        }
     }
 }

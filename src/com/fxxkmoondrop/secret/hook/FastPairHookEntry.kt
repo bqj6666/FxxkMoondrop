@@ -1155,8 +1155,16 @@ class FastPairHookEntry {
                         val dev2 = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
                         if (dev2 != null) {
                             val devAddr = HookHelper.callMethod(dev2, "getAddress") as String?
+                            // alpha2.41.9: 只有水月雨系设备才推送地址——此前只校验 MAC 格式，
+                            // 任何蓝牙设备（键鼠/车机/其他耳机）连接都会把地址推给应用并写进
+                            // gaia_le_addr 持久缓存，导致 GAIA 直连永远连到错误设备。
                             if (devAddr != null && devAddr.matches(Regex("([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"))) {
-                                sendLeAddr(devAddr.uppercase())
+                                if (DeviceMatcher.isMoondrop(name)) {
+                                    sendLeAddr(devAddr.uppercase())
+                                } else {
+                                    Log.d(TAG, "[FastPairHook] acl addr push skip (not Moondrop): "
+                                            + name + " " + devAddr)
+                                }
                             }
                         }
                     } catch (t: Throwable) {

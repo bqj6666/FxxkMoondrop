@@ -219,18 +219,29 @@ class SettingsFragment : Fragment() {
         val swBg = makeTintedSwitch()
         swBg.isChecked = getSP().getBoolean("bg_hide", false)
         val rowBg = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_block, Lang.t("后台隐藏", "Hide in background"),
-                Lang.t("切到后台自动隐藏主界面（不驻留最近任务）", "Auto-hide main UI when backgrounded (no recents task)"), swBg, null)
+                Lang.t("用户切到后台时隐藏主界面（不驻留最近任务）；应用内跳转与授权流程不受影响",
+                        "Hide main UI only when you send the app to background (no recents task); in-app navigation & authorization are unaffected"), swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("bg_hide", checked).commit()
         }
 
-        // ── 启动自动监听 ──
+        // ── 后台监听总开关（alpha2.41.10: 合并原主界面「开始/停止后台监听」按钮）──
         val swAuto = makeTintedSwitch()
-        swAuto.isChecked = getSP().getBoolean("auto_service", true)
-        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_play, Lang.t("启动自动监听", "Auto monitor on launch"),
-                Lang.t("启动应用时自动监听；连接耳机自动直连 GAIA 读取电量与控制降噪", "Auto monitor on launch; auto-connect GAIA to read battery & ANC on connect"), swAuto, null)
+        // 总开关状态 = enable && auto_service，两键始终同步写入
+        swAuto.isChecked = getSP().getBoolean("enable", true) && getSP().getBoolean("auto_service", true)
+        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_play, Lang.t("后台监听", "Background monitor"),
+                Lang.t("监听总开关：开启后立即开始监听，并在启动应用／开机时自动恢复与后台防杀；连接耳机自动直连 GAIA 读取电量与控制降噪",
+                        "Master switch: starts monitoring immediately, auto-resumes on launch/boot and keeps alive while on; auto-connect GAIA to read battery & ANC on connect"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean("auto_service", checked).commit()
+            getSP().edit().putBoolean("auto_service", checked).putBoolean("enable", checked).commit()
+            if (checked) {
+                HeadsetDetectService.RUNNING = true
+                try { requireContext().startService(Intent(requireContext(), HeadsetDetectService::class.java)) } catch (_: Exception) { }
+            } else {
+                AliveReceiver.cancel(requireContext())
+                HeadsetDetectService.RUNNING = false
+                try { requireContext().stopService(Intent(requireContext(), HeadsetDetectService::class.java)) } catch (_: Exception) { }
+            }
         }
 
         // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
