@@ -33,9 +33,13 @@ app/build/outputs/apk/release/app-release.apk
 - Gradle property `-PfxxkKeypass=`
 - 密钥库文件 `app2.keystore` 需放在项目根目录
 
-### EDF 作用域注入
+### EDF 作用域注入（可选，CI 不调用）
 
-构建后可执行 `postEdf` 任务注入 LSPosed 作用域文件并重签：
+> **注意**：`scope.list` / `java_init.list` / `module.prop` 位于 `src/main/resources/META-INF/xposed/`，
+> **由 AGP 在打包时自动合并进 APK**，正常发布**无需**再跑 `postEdf`。
+> 且 `postEdf` 会用 apksigner 重签，把签名方案由 `v2-only` 变为 `v2+v3`——
+> 与 2.50 及之前所有正式版的签名特征不一致。因此 **CI 不调用该任务**；
+> 仅当将来新增 `ascope.list`（可选作用域）等确实需要后处理的内容时，才手动执行。
 
 ```bash
 ./gradlew postEdf -PfxxkKeypass=<签名密码>
