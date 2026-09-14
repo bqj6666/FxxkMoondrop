@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：2.50（versionCode 285） ｜ 更新日期：2026-09-14
+> 版本：alpha2.51（versionCode 286） ｜ 更新日期：2026-09-14
 
 ## 系统总览
 
@@ -68,7 +68,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | 模块 | 文件 | 行数 | 职责 |
 |---|---|---|---|
 | **GaiaBleClient** | `GaiaBleClient.kt` | 1246 | BLE GATT / RFCOMM 直连耳机单例；连接管理、GAIA V3 + GAIA V4 + 9ECA 三协议自动识别、电量读取、ANC 控制 |
-| **HeadsetDetectService** | `HeadsetDetectService.kt` | 367 | 前台服务；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC |
+| **HeadsetDetectService** | `HeadsetDetectService.kt` | 367 | 常驻后台服务（普通 Service，非前台服务）；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC。保活链：`BootReceiver` 开机自启 → `AliveReceiver` AlarmManager 30s 循环 `startService` → `MoondropBooter` 以 `su -c am start` 静默拉起 |
 | **HeadsetGate** | `HeadsetGate.kt` | 242 | 蓝牙连接守卫；A2DP/HEADSET profile 代理获取已连接设备 MAC |
 | **AncBridge** | `AncBridge.kt` | 126 | ANC 模式状态桥接；向 GMS 进程广播当前模式 + ANC 可用性 |
 | **PopupGate** | `PopupGate.kt` | 202 | 弹窗触发控制；管理弹窗超时、去重、延迟触发 |

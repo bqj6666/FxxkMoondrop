@@ -1007,19 +1007,55 @@ class GaiaBleClient private constructor() {
 
     private fun readAncMap(): IntArray {
         val sp = context?.getSharedPreferences("cfg", 0)
+        // 型号档案映射（忽略用户自定义）—— 它才是「用户没改过的格子」的正确回退基准。
+        // 原实现回退的是名义默认映射 DEFAULT_MAP，于是只要用户在设置页改过任意一格，
+        // 其余三格就被静默改写成名义顺序；而设备码 3/4 在不同型号上分别对应
+        // 「抗风」与「透传」，名义顺序刚好对调 —— 在 GA2 / 太空漫游2 上表现为两按钮互换。
+        val profileMap = AncProfileLib.resolve(connectedDeviceName, null)
+        healStaleCustomAncMap(sp, profileMap)
         val custom: IntArray? = if ((sp?.getInt("anc_map_custom", 0) ?: 0) == 1) {
             val m = IntArray(4)
             for (i in 0..3) {
-                val v = sp?.getInt("anc_map_" + i, AncProfileLib.DEFAULT_MAP[i]) ?: AncProfileLib.DEFAULT_MAP[i]
-                m[i] = if (v in 0..5) v else AncProfileLib.DEFAULT_MAP[i]
+                val v = sp?.getInt("anc_map_" + i, profileMap[i]) ?: profileMap[i]
+                m[i] = if (v in 0..5) v else profileMap[i]
             }
             m
         } else null
-        val map = AncProfileLib.resolve(connectedDeviceName, custom)
+        val map = custom ?: profileMap
         val src = if (custom != null) "custom" else if (AncProfileLib.matchedProfileName(connectedDeviceName) != "默认") "profile" else "default"
         AppLog.d(GaiaConstants.TAG, "ancSetMap src=" + src + " map=" + map.contentToString() +
                 " profile=" + AncProfileLib.matchedProfileName(connectedDeviceName))
         return if (map.any { it !in 0..5 }) AncProfileLib.DEFAULT_MAP else map
+    }
+
+    /**
+     * 一次性修复：旧版本「部分自定义」留下的脏映射。
+     *
+     * 历史缺陷——设置页只写被编辑的那一格，未编辑的格子落库时回退到名义默认
+     * 映射（DEFAULT_MAP）而不是型号档案，于是 GA2 上凭空出现「透传↔抗风互换」
+     * （实测残留 anc_map_2=3 / anc_map_3=4，另外两格被隐式写成名义顺序）。
+     *
+     * 特征签名：重建出的自定义映射恰好 == DEFAULT_MAP，而当前型号档案 != DEFAULT_MAP。
+     * 这种组合只可能是该缺陷的产物——在 GA2 上真心想要名义顺序本身就是错的，
+     * 故清除后交回型号档案。仅在设备名已知（档案可信）时执行，且只跑一次
+     * （标记 anc_map_migrated_v3）。
+     */
+    private fun healStaleCustomAncMap(sp: android.content.SharedPreferences?, profileMap: IntArray) {
+        if (sp == null) return
+        if (connectedDeviceName.isNullOrEmpty()) return
+        if (sp.getInt("anc_map_migrated_v3", 0) == 1) return
+        val ed = sp.edit().putInt("anc_map_migrated_v3", 1)
+        if (sp.getInt("anc_map_custom", 0) != 1) { ed.commit(); return }
+        val rebuilt = IntArray(4) { sp.getInt("anc_map_" + it, AncProfileLib.DEFAULT_MAP[it]) }
+        val artifact = AncProfileLib.isStalePartialCustom(rebuilt, profileMap)
+        if (artifact) {
+            for (i in 0..3) ed.remove("anc_map_" + i)
+            ed.remove("anc_map_custom")
+            AppLog.w(GaiaConstants.TAG, "ancMap: 清除旧版部分自定义残留 " + rebuilt.contentToString() +
+                    " -> 型号档案 " + profileMap.contentToString() +
+                    " (profile=" + AncProfileLib.matchedProfileName(connectedDeviceName) + ")")
+        }
+        ed.commit()
     }
 
     private fun readAncGetMap(): IntArray? {

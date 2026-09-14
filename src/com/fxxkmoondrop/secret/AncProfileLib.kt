@@ -62,6 +62,20 @@ object AncProfileLib {
      * @param deviceName 当前连接设备名（广播名/系统名，可为 null）
      * @param custom 用户自定义映射（null = 未自定义）；自定义优先级最高
      */
+    /**
+     * 判断一份自定义映射是否为旧版本「部分写入」留下的历史残留。
+     *
+     * 旧设置页只写被编辑的那一格，未编辑的格子落库时回退到**名义默认映射**而不是型号档案；
+     * 于是用户只要碰过任意一格，其余格就被隐式写成 [DEFAULT_MAP] 的顺序
+     * （GA2 \/ 太空漫游2 的档案与名义顺序恰好 3\/4 对调，表现为「透传↔抗风互换」）。
+     *
+     * 判定特征：重建出的映射恰好 == [DEFAULT_MAP]，而当前型号档案 != [DEFAULT_MAP]。
+     * 注意不可反向放宽 —— 档案与名义顺序一致的型号上，用户真心想要名义顺序是对的，
+     * 那种情况必须保留用户设置、绝不能清。
+     */
+    fun isStalePartialCustom(rebuilt: IntArray, profileMap: IntArray): Boolean =
+        rebuilt.contentEquals(DEFAULT_MAP) && !profileMap.contentEquals(DEFAULT_MAP)
+
     fun resolve(deviceName: String?, custom: IntArray?): IntArray {
         if (custom != null) return custom
         val n = deviceName?.uppercase()?.trim()

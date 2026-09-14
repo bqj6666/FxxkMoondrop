@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：2.50（versionCode 285） ｜ 更新日期：2026-09-14
+> 版本：alpha2.51（versionCode 286） ｜ 更新日期：2026-09-14
 
 ## 构建环境
 
@@ -84,8 +84,8 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | 正式版 `{里程碑}.{迭代}`；迭代版 `alpha{里程碑}.{迭代}` | `2.50` |
-| versionCode | 单调递增整数 | `285` |
+| versionName | 正式版 `{里程碑}.{迭代}`；迭代版 `alpha{里程碑}.{迭代}` | `alpha2.51` |
+| versionCode | 单调递增整数 | `286` |
 
 发版时同步更新四处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`
@@ -157,7 +157,7 @@ com.android.settings          # 设置页耳机入口（还未实现）
 
 | 类 | 说明 |
 |---|---|
-| `HeadsetDetectService` | 前台服务；蓝牙连接监听 + GAIA 直连 + ANC 轮询 |
+| `HeadsetDetectService` | 常驻后台服务（普通 Service，**非前台服务**，全仓无 `startForeground` 调用）；蓝牙连接监听 + GAIA 直连 + ANC 轮询。Manifest 中的 `foregroundServiceType="connectedDevice"` 仅为类型声明，当前未走前台 |
 
 ### ContentProvider
 

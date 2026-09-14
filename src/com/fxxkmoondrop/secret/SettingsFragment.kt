@@ -259,19 +259,27 @@ class SettingsFragment : Fragment() {
 
                 // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("ANC 按钮映射", "ANC Button Mapping")))
+        val ancProfileDevice = GaiaBleClient.getInstance().getConnectedDeviceName()
+        val ancMapProfile = AncProfileLib.matchedProfileName(ancProfileDevice)
         val ancMapHint = TextView(requireContext())
-        ancMapHint.text = Lang.t("自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。", "Device code (0-5) sent by the ANC button. Editing makes it a custom mapping with priority.")
+        ancMapHint.text = Lang.t("自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。\n当前型号档案：" + ancMapProfile + "（未手动修改的档位一律按档案发送）",
+                "Device code (0-5) sent by the ANC button. Editing makes it a custom mapping with priority.\n" + "Active profile: " + ancMapProfile + " (untouched levels follow the profile)")
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
         val ancMapNames = AncProfileLib.modeNames(requireContext())
         val ancMapDefaults = GaiaBleClient.getInstance().getEffectiveAncMap()
+        // 编辑任意一格时，把全部 4 格按「当前生效映射」一起落库。
+        // 旧实现只写被编辑的那一格——未写过的格子会在读取时回退到名义默认映射
+        // （GaiaBleClient.readAncMap 的老逻辑），于是在 GA2 上只要碰一个档位，
+        // 透传/抗风就被悄悄换位（实测 anc_map_2=3 / anc_map_3=4 两格残留）。
+        val ancMapCur = ancMapDefaults.copyOf()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
             val et = EditText(requireContext())
             et.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            et.setText(getSP().getInt("anc_map_" + i, ancMapDefaults[i]).toString())
+            et.setText(ancMapCur[i].toString())
             et.textSize = 15f
             et.gravity = Gravity.CENTER
             et.setPadding(dp(8), dp(4), dp(8), dp(4))
@@ -285,8 +293,10 @@ class SettingsFragment : Fragment() {
                 override fun afterTextChanged(s: android.text.Editable?) {
                     val v = s?.toString()?.trim()?.toIntOrNull()
                     if (v != null && v in 0..5) {
-                        getSP().edit().putInt("anc_map_" + i, v)
-                                .putInt("anc_map_custom", 1).commit()
+                        ancMapCur[i] = v
+                        val ed = getSP().edit()
+                        for (j in 0..3) ed.putInt("anc_map_" + j, ancMapCur[j])
+                        ed.putInt("anc_map_custom", 1).commit()
                     }
                 }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
