@@ -61,13 +61,15 @@ jobs:
             echo "未配置 KEYSTORE_B64，跳过（构建将降级为 Debug）"
           fi
 
-      - name: Gradle 构建（有密钥=Release+EDF 注入；无密钥=Debug 降级）
+      - name: Gradle 构建（有密钥=Release + EDF 注入并重签；无密钥=Debug 降级）
         env:
           FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
         run: |
           chmod +x gradlew
           if [ -n "$FXXK_KEYPASS" ]; then
             ./gradlew assembleRelease -PfxxkKeypass="$FXXK_KEYPASS"
+            # EDF 作用域注入 + 重签（ascope.list 不存在时自动跳过；源文件位于 resources/META-INF/xposed）
+            ./gradlew postEdf -PfxxkKeypass="$FXXK_KEYPASS"
           else
             ./gradlew assembleDebug
           fi

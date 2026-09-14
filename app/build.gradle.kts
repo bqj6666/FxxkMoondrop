@@ -58,6 +58,11 @@ android {
         abortOnError = false
     }
 
+    // 纯 JVM 单元测试（GaiaCommands 帧构造/映射）；无 Android 依赖，缺失的框架桩返回默认值
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     packaging {
         resources {
             merges += "META-INF/xposed/*"
@@ -135,7 +140,7 @@ val postEdf by tasks.registering(Exec::class) {
     group = "build"
     description = "注入 META-INF/xposed/* + 重签（LSPosed 推荐作用域 EDF）"
     val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
-    val edfDir = file("src/main/META-INF/xposed")
+    val edfDir = file("src/main/resources/META-INF/xposed")
     val ksPass = providers.environmentVariable("FXXK_KEYPASS")
         .orElse(providers.gradleProperty("fxxkKeypass")).getOrElse("")
     doFirst {

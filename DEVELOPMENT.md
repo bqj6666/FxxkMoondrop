@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：alpha2.41.6 ｜ 更新日期：2026-09-03
+> 版本：2.50（versionCode 285） ｜ 更新日期：2026-09-14
 
 ## 构建环境
 
@@ -41,7 +41,7 @@ app/build/outputs/apk/release/app-release.apk
 ./gradlew postEdf -PfxxkKeypass=<签名密码>
 ```
 
-该任务调用 `tools/post_edf.py`，将 `src/main/META-INF/xposed/scope.list` 和 `ascope.list` 注入 APK 并用 apksigner 重签。
+该任务调用 `tools/post_edf.py`，将 `src/main/resources/META-INF/xposed/scope.list` 注入 APK 并用 apksigner 重签（`ascope.list` 为可选，文件不存在则自动跳过）。
 
 ## 目录结构
 
@@ -63,7 +63,8 @@ FxxkMoondrop-repo/
 │           └── FastPairHookEntry.kt  # GMS 进程 Hook 代码
 ├── gradle/wrapper/               # Gradle 8.9 wrapper
 ├── tools/
-│   └── post_edf.py               # EDF 作用域注入脚本
+│   ├── post_edf.py               # EDF 作用域注入 + 重签脚本
+│   └── release_notes.py          # 由 tag 反解版本、生成 Release 说明
 ├── build.gradle.kts              # 根项目配置
 ├── settings.gradle.kts           # 模块声明
 ├── README.md
@@ -79,13 +80,14 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | `alpha{里程碑}.{迭代}` | `alpha2.38.7` |
-| versionCode | 单调递增整数 | `267` |
+| versionName | 正式版 `{里程碑}.{迭代}`；迭代版 `alpha{里程碑}.{迭代}` | `2.50` |
+| versionCode | 单调递增整数 | `285` |
 
-发版时同步更新三处：
+发版时同步更新四处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`
 2. `CHANGELOG.md` — 顶部追加新条目
 3. `README.md` — 顶部版本号 + 版本历史列表
+4. `app/src/main/resources/META-INF/xposed/module.prop` — `version`（LSPosed 管理器展示用，须与 `versionName` 一致）
 
 提交信息格式：`alpha{版本}: {简要描述}`
 
@@ -251,12 +253,17 @@ App 内置日志收集（设置页 → 收集日志），打包五类日志为 Z
 ./gradlew test
 ```
 
-目前仅有 GaiaCommands 帧构造的 JVM 单元测试。测试不依赖 Android 框架。
+测试源：`app/src/test/java/com/fxxkmoondrop/secret/GaiaCommandsTest.kt`（20 个用例）。
+
+覆盖范围：GAIA V3 帧构造（vendor / feature / type 位拼接，对照 ADAPTATION.md 铁证字节）、9ECA 帧头与 14 字节 payload 上限、能力位图解析与截断判定、ANC 路径优先级、设备码 ↔ UI 模式双向映射（含 GA2 的 0-based GET / 1-based SET、未知路径返回 -1）。
+
+被测类 `GaiaCommands` 与 `AncProfileLib` 为纯字节逻辑、无 Android 依赖，因此单元测试无需 Robolectric，`app/build.gradle.kts` 中已设 `testOptions.unitTests.isReturnDefaultValues = true` 作为框架桩兜底。
 
 ## 发布检查清单
 
 发版前确认：
 - [ ] `build.gradle.kts` versionCode + versionName 已更新
+- [ ] `app/src/main/resources/META-INF/xposed/module.prop` 的 `version` 已同步（LSPosed 管理器显示用）
 - [ ] `CHANGELOG.md` 顶部已追加新条目
 - [ ] `README.md` 版本号 + 版本历史已同步
 - [ ] `assembleRelease` 构建通过
