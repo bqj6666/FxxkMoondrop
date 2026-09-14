@@ -140,8 +140,8 @@ def build_body(tag, sha, repo, changelog_text, tags, prev_override):
     if sha:
         lines.append("- 提交：`%s`" % sha)
     lines.append("- 触发：tag `%s`" % tag)
-    lines.append("- 构建方式：Release + EDF 注入（LSPosed 推荐作用域）")
-    lines.append("- 签名：CN=FxxkMoondrop（v2/v3）")
+    lines.append("- 构建方式：Release（作用域文件 `META-INF/xposed/*` 由 AGP 打包时合并）")
+    lines.append("- 签名：CN=FxxkMoondrop（APK Signature Scheme v2）")
     lines += ["", "## 更新日志", ""]
 
     if prev_tag and prev_ver:
