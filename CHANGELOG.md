@@ -6,11 +6,11 @@
 
 ---
 ## alpha2.52 (287)
-### 界面全面对齐 org.lsposed.manager
+### 界面按 Material 3 规范统一重构
 - **大标题随滚动收缩**：三页统一为 M3 LargeTopAppBar 形态（展开 152dp / 收起 64dp，标题 28sp→22sp）。内容自标题下方穿过、标题钉在上层。`ScrollView` 必须 `clipToPadding=false`，否则顶部内边距区成为裁剪区，标题收起后中间会空出一条缝（本次实测踩到并修复）。
-- **切页动效**：进入 fadeIn + scaleIn(0.985) 320ms（对齐官方 Crossfade 手感），退出快速淡出；新增 `res/anim/m3_page_in.xml`、`m3_page_out.xml`。
+- **切页动效**：进入 fadeIn + scaleIn(0.985) 320ms（M3 淡入手感），退出快速淡出；新增 `res/anim/m3_page_in.xml`、`m3_page_out.xml`。
 - **英雄卡改强调色**：底色 `container` → `primary`，文字与图标走 `onPrimary`，API 徽章反色；新增 `heroFg` 字段，不再借用功能卡配色。
-- **三选一改下拉**：主题、语言由成排按钮改为「行 + 右侧当前值 + 下拉菜单」。菜单出现在**手指落点**（贴边自动内收），入场 scale 0.8→1 + fade 140ms，选中项 primary 填充 + ✓；尺寸对齐官方（文字 14sp / 图标 18dp / 行高 48dp）。
+- **三选一改下拉**：主题、语言由成排按钮改为「行 + 右侧当前值 + 下拉菜单」。菜单出现在**手指落点**（贴边自动内收），入场 scale 0.8→1 + fade 140ms，选中项 primary 填充 + ✓；尺寸按 M3 菜单规范（文字 14sp / 图标 18dp / 行高 48dp）。
 - 补齐语言卡与「检查权限」卡之间缺失的 12dp 卡间距。
 
 ### 修复：蓝牙设备详情面板退化为单行条目
