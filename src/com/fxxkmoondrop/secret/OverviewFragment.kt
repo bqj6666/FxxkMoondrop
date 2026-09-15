@@ -1414,6 +1414,11 @@ class OverviewFragment : Fragment() {
      * 读不到时退回链路类型，再退到「未连接」，任何情况下不空着。
      */
     private fun refreshCodecBadge() {
+        // 无链路时不查（dumpsys 也在百毫秒级），并顺手清掉可能存在的过期值
+        if (linkTypeLabel() == null) {
+            codecLabel = null
+            return
+        }
         val now = SystemClock.elapsedRealtime()
         if (codecQuerying || now - lastCodecQueryMs < 5000L) return
         codecQuerying = true
@@ -1429,15 +1434,29 @@ class OverviewFragment : Fragment() {
         }.start()
     }
 
-    /** 徽章文案：编解码器 > 链路类型 > 未连接 */
+    /**
+     * 徽章文案：编解码器 > 链路类型 > 未连接。
+     *
+     * 断开时必须把缓存的编解码器一起丢掉 —— 否则耳机断连后徽章仍停留在
+     * 「LDAC」这种已失效的值上（实测踩到）。
+     */
     private fun badgeText(): String {
+        val link = linkTypeLabel()
+        if (link == null) {
+            codecLabel = null
+            return Lang.t("未连接", "Not connected")
+        }
         codecLabel?.let { if (it.isNotEmpty()) return it }
-        return linkTypeLabel()
+        return link
     }
 
-    /** 链路类型兜底：系统侧标记语义（ACL BR/EDR / LE / LE Audio） */
-    private fun linkTypeLabel(): String {
-        val none = Lang.t("未连接", "Not connected")
+    /**
+     * 链路类型：系统侧标记语义（ACL BR/EDR / LE / LE Audio）。
+     *
+     * 无任何链路时返回 **null**（而不是「未连接」字符串）—— 调用方要据此判断
+     * 「是不是该把缓存的编解码器丢掉」，用字符串比较会很脆。
+     */
+    private fun linkTypeLabel(): String? {
         return try {
             val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             val types = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).map { it.type }.toSet()
@@ -1448,9 +1467,9 @@ class OverviewFragment : Fragment() {
                 android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP in types ||
                         android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO in types -> "ACL"
                 GaiaBleClient.getInstance().isConnected() -> "LE"
-                else -> none
+                else -> null
             }
-        } catch (_: Throwable) { none }
+        } catch (_: Throwable) { null }
     }
 
     private fun refreshAnc() {
@@ -1491,6 +1510,11 @@ class OverviewFragment : Fragment() {
 
     private fun updateAncStatus() {
         updateRunStatus()
+        // alpha2.53: 徽章随连接状态同步刷新。
+        // 断开时 stateReceiver 只走 updateAncStatus（不走 updateStatus），
+        // 不在这里刷就会出现「已断连但仍显示 LDAC」。
+        refreshCodecBadge()
+        statusBadge?.text = badgeText()
         // alpha1.4: 降噪控制区块仅随真实耳机连接显示（模拟按钮不影响）
         val realConnected = HeadsetGate.getConnectedMac(requireContext()) != null
         var st3 = moonProcState
