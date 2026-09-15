@@ -69,63 +69,42 @@ class SettingsFragment : Fragment() {
         root.setBackgroundColor(pal.surface)
         root.setPadding(0, statusBarH, 0, 0)
 
-        // ── M3 Top App Bar：矢量返回按钮（alpha1.36 修复变形/错位）──
-        root.addView(M3Ui.topBarTitle(requireActivity(), pal, Lang.t("设置", "Settings")), LinearLayout.LayoutParams(-1, -2))
-        root.addView(spacer(dp(8)))
+        // alpha2.53: M3 LargeTopAppBar —— 大标题居上不动，内容从下方穿过，下翻时标题收缩（对齐官方）
+        val page = M3Ui.largeHeaderPage(requireActivity(), pal, Lang.t("设置", "Settings"))
 
         // ── 内容（可滚动）──
-        val sv = ScrollView(requireContext())
+        val sv = page.sv
         val box = LinearLayout(requireContext())
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), 0, dp(16), dp(24))
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
-        // ── 外观（官方 HomeAppearanceSheet 对位：主题模式 / 动态取色 / AMOLED / 种子色）──
+        // ── 外观（对齐 org.lsposed.manager：每项独立卡片 + 12dp 卡间距）──
         val appear = LinearLayout(requireContext())
         appear.orientation = LinearLayout.VERTICAL
-        appear.setPadding(dp(14), dp(12), dp(14), dp(12))
-        val appearBg = GradientDrawable()
-        appearBg.setColor(pal.card)
-        appearBg.setCornerRadius(dp(24).toFloat())
-        appear.background = appearBg
         // 主题模式：跟随系统 / 浅色 / 深色（3 段 pill）
-        val modeRow = LinearLayout(requireContext())
-        modeRow.orientation = LinearLayout.HORIZONTAL
-        modeRow.gravity = Gravity.CENTER
-        val modeNames = arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark"))
-        val curMode = ThemeUtil.themeMode(requireContext())
-        for (mi in 0 until 3) {
-            val mb = TextView(requireContext())
-            mb.text = modeNames[mi]
-            mb.textSize = 12f
-            mb.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            mb.gravity = Gravity.CENTER
-            mb.setPadding(dp(8), dp(8), dp(8), dp(8))
-            val mg = GradientDrawable()
-            mg.setCornerRadius(dp(20).toFloat())
-            mg.setColor(if (mi == curMode) pal.primary
-            else if (pal.dark) 0x14FFFFFF else 0x0A000000)
-            mb.background = mg
-            mb.setTextColor(if (mi == curMode) pal.onPrimary else pal.onVariant)
-            mb.setOnClickListener {
-                getSP().edit().putInt("theme_mode", mi).commit()
-                requireActivity().recreate()
-            }
-            modeRow.addView(mb, LinearLayout.LayoutParams(0, -2, 1f))
-            if (mi < 2) modeRow.addView(spacer(dp(6)))
+        // alpha2.52: 统一走 M3 分段控件（高 40dp / 圆角 20dp / labelLarge 14sp）
+        // alpha2.53: 对齐 org.lsposed.manager —— 主题模式改为「行 + 当前值 + 下拉菜单」
+        val modeRow = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("主题", "Theme"), Lang.t("选择应用的主题模式", "Choose the app theme mode"),
+                arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
+                ThemeUtil.themeMode(requireContext())) { mi ->
+            getSP().edit().putInt("theme_mode", mi).commit()
+            requireActivity().recreate()
         }
-        appear.addView(modeRow, LinearLayout.LayoutParams(-1, -2))
-        appear.addView(spacer(dp(6)))
-        appear.addView(makeAppearDivider(), appearDividerLp())
+        appear.addView(M3Ui.groupCard(requireActivity(), pal, modeRow), LinearLayout.LayoutParams(-1, -2))
 
-        // 动态取色 + AMOLED 开关（官方主题设置）
+        // 动态取色 / AMOLED 开关（makeSwitchRow 自身即卡片，无需再包）
         val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
                 Lang.t("跟随壁纸调色；关闭后使用下方种子颜色", "Follow wallpaper; uses seed color below when off"), makeThemeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
+        appear.addView(spacer(dp(12)))
         appear.addView(swDyn, LinearLayout.LayoutParams(-1, -2))
-        appear.addView(makeAppearDivider(), appearDividerLp())
+        appear.addView(spacer(dp(12)))
+        // alpha2.52: 副标题只说明开关作用，不反映当前状态（状态由开关自身表达）
         val swAmoled = makeSwitchRow(Lang.t("AMOLED 纯黑", "AMOLED pure black"),
-                Lang.t("深色模式下使用纯黑背景", "Use pure black background in dark mode"), makeThemeSwitch("amoled", false, "AMOLED"))
+                Lang.t("深色模式下背景使用纯黑", "Pure black background in dark mode"),
+                makeThemeSwitch("amoled", false, "AMOLED"))
         appear.addView(swAmoled, LinearLayout.LayoutParams(-1, -2))
 
         // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
@@ -158,8 +137,8 @@ class SettingsFragment : Fragment() {
             seedRow!!.addView(dot, dlp)
         }
         if (!ThemeUtil.dynColor(requireContext())) {
-            appear.addView(makeAppearDivider(), appearDividerLp())
-            appear.addView(seedRow, LinearLayout.LayoutParams(-1, -2))
+            appear.addView(spacer(dp(12)))
+            appear.addView(wrapCard(seedRow!!), LinearLayout.LayoutParams(-1, -2))
             // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
             seedRow!!.alpha = 0f
             seedRow!!.translationY = dp(8).toFloat()
@@ -173,29 +152,45 @@ class SettingsFragment : Fragment() {
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("通用", "General")))
 
-        // ── alpha2.38.10 语言（0=跟随系统 1=中文 2=English，三选一 pill）──
-        box.addView(makeLangRow())
+        // alpha2.53: 对齐 org.lsposed.manager —— 语言改为「行 + 当前值 + 下拉菜单」（0=跟随系统 1=中文 2=English）
+        val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language", null,
+                arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
+            getSP().edit().putInt("lang", mi).commit()
+            requireActivity().recreate()
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, langRow), LinearLayout.LayoutParams(-1, -2))
+        // alpha2.53: 修复语言卡与「检查权限」卡间距过近（此前漏了 12dp 卡间距）
+        box.addView(spacer(dp(12)))
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
-        val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_search, Lang.t("检查权限", "Check permissions"),
+        val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_shield, Lang.t("检查权限", "Check permissions"),
                 Lang.t("蓝牙、通知、悬浮窗、Root/模块环境", "Bluetooth, notifications, floating window, Root/module env"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             requireActivity().startActivity(Intent(requireContext(), PermissionActivity::class.java))
         }
-        val rowLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_log, Lang.t("日志抓取（设备适配）", "Log capture (device adaptation)"),
+        val rowLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_description, Lang.t("日志抓取（设备适配）", "Log capture (device adaptation)"),
                 Lang.t("收集设备信息与运行日志，导出 ZIP（含隐私声明）", "Collect device info and logs, export ZIP (incl. privacy notice)"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) { showLogDialog() }
         val iconState = TextView(requireContext())
         iconState.textSize = 13f
         iconState.setTextColor(pal.primary)
         iconState.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        iconCustomExistsAsync { exists ->
+        // alpha2.53: 检查是异步的（读私有目录），等待期间显示圆形加载指示，避免行上先空一截再突然出字
+        val iconSlot = FrameLayout(requireContext())
+        val iconSpin = M3Ui.circularLoader(requireContext(), 18, pal.primary)
+        iconState.visibility = View.GONE
+        iconSlot.addView(iconState, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        iconSlot.addView(iconSpin, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        val showIconState: (Boolean) -> Unit = { exists ->
+            iconSpin.visibility = View.GONE
             iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
+            iconState.visibility = View.VISIBLE
         }
+        iconCustomExistsAsync(showIconState)
         val rowIcon = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, Lang.t("弹窗图标", "Popup icon"),
-                Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", "Earbud icon shown in the Google popup (choose from gallery, or restore default)"), iconState) {
+                Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", "Earbud icon shown in the Google popup (choose from gallery, or restore default)"), iconSlot) {
             iconCustomExistsAsync { exists ->
-                iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
+                showIconState(exists)
                 showIconDialog(exists)
             }
         }
@@ -208,7 +203,7 @@ class SettingsFragment : Fragment() {
         // ── Root 强力保活 ──
         val swRoot = makeTintedSwitch()
         swRoot.isChecked = getSP().getBoolean("root_protect", false)
-        val rowRoot = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_power, Lang.t("Root 强力保活", "Root force keep-alive"),
+        val rowRoot = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bolt, Lang.t("Root 强力保活", "Root force keep-alive"),
                 Lang.t("开机自启 + 后台防杀（需 Root）", "Auto-start + background anti-kill (requires Root)"), swRoot, null)
         swRoot.setOnCheckedChangeListener { _, checked ->
             if (checked) showRootWarnDialog(swRoot)
@@ -218,7 +213,7 @@ class SettingsFragment : Fragment() {
         // ── 后台隐藏 ──
         val swBg = makeTintedSwitch()
         swBg.isChecked = getSP().getBoolean("bg_hide", false)
-        val rowBg = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_block, Lang.t("后台隐藏", "Hide in background"),
+        val rowBg = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_visibility_off, Lang.t("后台隐藏", "Hide in background"),
                 Lang.t("用户切到后台时隐藏主界面（不驻留最近任务）；应用内跳转与授权流程不受影响",
                         "Hide main UI only when you send the app to background (no recents task); in-app navigation & authorization are unaffected"), swBg, null)
         swBg.setOnCheckedChangeListener { _, checked ->
@@ -229,7 +224,7 @@ class SettingsFragment : Fragment() {
         val swAuto = makeTintedSwitch()
         // 总开关状态 = enable && auto_service，两键始终同步写入
         swAuto.isChecked = getSP().getBoolean("enable", true) && getSP().getBoolean("auto_service", true)
-        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_play, Lang.t("后台监听", "Background monitor"),
+        val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_sensors, Lang.t("后台监听", "Background monitor"),
                 Lang.t("监听总开关：开启后立即开始监听，并在启动应用／开机时自动恢复与后台防杀；连接耳机自动直连 GAIA 读取电量与控制降噪",
                         "Master switch: starts monitoring immediately, auto-resumes on launch/boot and keeps alive while on; auto-connect GAIA to read battery & ANC on connect"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
@@ -247,7 +242,7 @@ class SettingsFragment : Fragment() {
         // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
         val swWind = makeTintedSwitch()
         swWind.isChecked = getSP().getBoolean("show_wind", true)
-        val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_ac_unit, Lang.t("显示抗风噪按钮", "Show wind-noise button"),
+        val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_air, Lang.t("显示抗风噪按钮", "Show wind-noise button"),
                 Lang.t("在弹窗和主界面显示抗风噪模式；关闭后仅显示 关闭/降噪/透传", "Show wind-noise mode in popup & main UI; off shows only Off/ANC/Transparency"), swWind, null)
         swWind.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("show_wind", checked).commit()
@@ -257,61 +252,66 @@ class SettingsFragment : Fragment() {
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowWind))
         box.addView(spacer(dp(14)))
 
-                // ── ANC 按钮映射（alpha2.26.2：用户自定义，不硬编码）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("ANC 按钮映射", "ANC Button Mapping")))
+                // ── 自定义映射（alpha2.52：降噪 / 增益 / 追踪标签 三块合并为一组，
+        //    小标题分级，避免三个同级 section 把设置页切得太碎）──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("自定义映射", "Custom Mapping")))
+        box.addView(makeSubLabel(Lang.t("降噪按钮", "Noise-control buttons")))
         val ancProfileDevice = GaiaBleClient.getInstance().getConnectedDeviceName()
         val ancMapProfile = AncProfileLib.matchedProfileName(ancProfileDevice)
+        val ancMapState = mapStateLine("")
+
         val ancMapHint = TextView(requireContext())
-        ancMapHint.text = Lang.t("自定义降噪按钮发送的设备码（0-5）。手动修改后即自定义映射并优先生效。\n当前型号档案：" + ancMapProfile + "（未手动修改的档位一律按档案发送）",
-                "Device code (0-5) sent by the ANC button. Editing makes it a custom mapping with priority.\n" + "Active profile: " + ancMapProfile + " (untouched levels follow the profile)")
+        // alpha2.53: 文案对齐下拉交互（原来写的是「手动修改」的输入框说法）
+        ancMapHint.text = Lang.t("选择每个降噪档位发给耳机的设备码（0-5）。改动任意一档即成为自定义映射，优先于型号档案。",
+                "Device code (0-5) each noise-control level sends. Changing any level makes it a custom mapping that overrides the profile.")
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(ancMapHint, LinearLayout.LayoutParams(-1, -2))
+        ancMapState.text = customLabel(getSP().getInt("anc_map_custom", 0) == 1)
+        box.addView(ancMapState, LinearLayout.LayoutParams(-1, -2))
+        // 「当前型号档案」与「当前：…」同规格（12sp medium / primary），视觉上成对
+        box.addView(mapStateLine(Lang.t("当前型号档案：", "Active profile: ") + ancMapProfile +
+                Lang.t("（未改动的档位一律按档案发送）", " (untouched levels follow the profile)")),
+                LinearLayout.LayoutParams(-1, -2))
         val ancMapNames = AncProfileLib.modeNames(requireContext())
         val ancMapDefaults = GaiaBleClient.getInstance().getEffectiveAncMap()
         // 编辑任意一格时，把全部 4 格按「当前生效映射」一起落库。
         // 旧实现只写被编辑的那一格——未写过的格子会在读取时回退到名义默认映射
         // （GaiaBleClient.readAncMap 的老逻辑），于是在 GA2 上只要碰一个档位，
         // 透传/抗风就被悄悄换位（实测 anc_map_2=3 / anc_map_3=4 两格残留）。
+        // alpha2.53: 改成下拉选择（对齐官方）。原先每档一个裸输入框有三个问题：
+        //  · 可选范围只写在提示里，输入框本身看不出能填几
+        //  · 边打字边落库，把半截输入（想把 3 改成 12 的中间态 1）写进配置
+        //  · 越界输入被静默丢弃，界面显示与存储不一致
+        // 下拉把可选值收敛成固定集合，越界与中间态都不可能出现。
         val ancMapCur = ancMapDefaults.copyOf()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
-            val et = EditText(requireContext())
-            et.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            et.setText(ancMapCur[i].toString())
-            et.textSize = 15f
-            et.gravity = Gravity.CENTER
-            et.setPadding(dp(8), dp(4), dp(8), dp(4))
-            val etBg = GradientDrawable()
-            etBg.shape = GradientDrawable.RECTANGLE
-            etBg.setStroke(dp(1), pal.outline)
-            etBg.setColor(pal.surface)
-            etBg.setCornerRadius(dp(8).toFloat())
-            et.background = etBg
-            et.addTextChangedListener(object : android.text.TextWatcher {
-                override fun afterTextChanged(s: android.text.Editable?) {
-                    val v = s?.toString()?.trim()?.toIntOrNull()
-                    if (v != null && v in 0..5) {
-                        ancMapCur[i] = v
-                        val ed = getSP().edit()
-                        for (j in 0..3) ed.putInt("anc_map_" + j, ancMapCur[j])
-                        ed.putInt("anc_map_custom", 1).commit()
-                    }
-                }
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            })
-            ancMapRows.add(M3Ui.listRow(requireActivity(), pal, 0, ancMapNames[i],
-                    Lang.t("发送的设备码（当前生效 ", "Device code (current active ") + ancMapDefaults[i] + ")", et, null))
+            val opts = Array(6) { it.toString() }
+            lateinit var row: LinearLayout
+            row = M3Ui.dropdownRow(requireActivity(), pal, ancMapNames[i],
+                    Lang.t("发送的设备码（0-5）", "Device code sent (0-5)"),
+                    opts, ancMapCur[i].coerceIn(0, 5)) { pick ->
+                ancMapCur[i] = pick
+                // 一次落库全部 4 档：只写被编辑的那一格会让未写过的格子
+                // 回退到名义默认映射，于是碰一下就把透传/抗风惄惄换位
+                val ed = getSP().edit()
+                for (j in 0..3) ed.putInt("anc_map_" + j, ancMapCur[j])
+                ed.putInt("anc_map_custom", 1).commit()
+                M3Ui.setDropdownValue(row, opts[pick])
+                ancMapState.text = customLabel(true)
+            }
+            ancMapRows.add(row)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *ancMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
         // ── 增益映射（alpha2.37：用户自定义增益设备码，同 ANC 映射逻辑）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("增益按钮映射", "Gain Button Mapping")))
+        box.addView(makeSubLabel(Lang.t("增益按钮", "Gain buttons")))
         val gainMapHint = TextView(requireContext())
-        gainMapHint.text = Lang.t("自定义增益按钮发送的设备码（0-9）。留空或设为 -1 可隐藏对应档位。", "Device code (0-9) sent by gain button. Blank or -1 to hide that level.")
+        gainMapHint.text = Lang.t("选择每个增益档位发给耳机的设备码（0-9）；选「隐藏该档位」则不显示该档。",
+                "Device code (0-9) each gain level sends; pick \"Hide this level\" to hide it.")
         gainMapHint.textSize = 12f
         gainMapHint.setTextColor(pal.onVariant)
         gainMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -319,41 +319,27 @@ class SettingsFragment : Fragment() {
         val gainLabels = DeviceControlBridge.gainLabels()
         val gainCount = DeviceControlBridge.gainCount()
         val gainDefaults = AncProfileLib.resolveDc(GaiaBleClient.getInstance().getConnectedDeviceName()).gainMap
+        // alpha2.53: 同 ANC 映射，改下拉。第 0 项是「隐藏该档位」（对应设备码 -1）。
         val gainMapRows = ArrayList<View>()
         for (i in 0 until gainCount) {
-            val et = EditText(requireContext())
-            et.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            val savedVal = getSP().getInt("gain_map_" + i, gainDefaults.getOrElse(i) { i })
-            et.setText(savedVal.toString())
-            et.textSize = 15f
-            et.gravity = Gravity.CENTER
-            et.setPadding(dp(8), dp(4), dp(8), dp(4))
-            val etBg = GradientDrawable()
-            etBg.shape = GradientDrawable.RECTANGLE
-            etBg.setStroke(dp(1), pal.outline)
-            etBg.setColor(pal.surface)
-            etBg.setCornerRadius(dp(8).toFloat())
-            et.background = etBg
-            val labelIdx = i
-            et.addTextChangedListener(object : android.text.TextWatcher {
-                override fun afterTextChanged(s: android.text.Editable?) {
-                    val v = s?.toString()?.trim()?.toIntOrNull()
-                    if (v != null && v in 0..9) {
-                        getSP().edit().putInt("gain_map_" + labelIdx, v).commit()
-                    }
-                }
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            })
-            gainMapRows.add(M3Ui.listRow(requireActivity(), pal, 0,
+            val opts = Array(11) { if (it == 0) Lang.t("隐藏该档位", "Hide this level") else (it - 1).toString() }
+            val saved = getSP().getInt("gain_map_" + i, gainDefaults.getOrElse(i) { i })
+            val cur = if (saved < 0) 0 else (saved + 1).coerceIn(0, 10)
+            lateinit var row: LinearLayout
+            row = M3Ui.dropdownRow(requireActivity(), pal,
                     gainLabels.getOrElse(i) { Lang.t("档位 ", "Level ") + i },
-                    Lang.t("发送的设备码（当前生效 ", "Device code (current active ") + gainDefaults.getOrElse(i) { i } + ")", et, null))
+                    Lang.t("发送的设备码（0-9），或隐藏", "Device code (0-9), or hide"),
+                    opts, cur) { pick ->
+                getSP().edit().putInt("gain_map_" + i, if (pick == 0) -1 else pick - 1).commit()
+                M3Ui.setDropdownValue(row, opts[pick])
+            }
+            gainMapRows.add(row)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *gainMapRows.toTypedArray()))
         box.addView(spacer(dp(10)))
 
         // ── 空间音频追踪模式（alpha2.37：用户自定义标签）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("空间音频追踪标签", "Spatial Audio Tracking Labels")))
+        box.addView(makeSubLabel(Lang.t("空间音频追踪标签", "Spatial audio tracking labels")))
         val trackHint = TextView(requireContext())
         trackHint.text = Lang.t("自定义空间音频各追踪模式显示名称。", "Customize display names for each spatial audio tracking mode.")
         trackHint.textSize = 12f
@@ -374,17 +360,29 @@ class SettingsFragment : Fragment() {
             etBg.setColor(pal.surface)
             etBg.setCornerRadius(dp(8).toFloat())
             et.background = etBg
+            // alpha2.53: 改成失焦/回车时才保存。原先每次按键都写库，
+            // 一个名字没敲完就落了半截；空值视为恢复默认。
             val labelIdx = i
-            et.addTextChangedListener(object : android.text.TextWatcher {
-                override fun afterTextChanged(s: android.text.Editable?) {
-                    val v = s?.toString()?.trim()
-                    if (!v.isNullOrEmpty()) {
+            val defLabel = trackLabels[i]
+            et.hint = defLabel
+            et.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            et.setOnFocusChangeListener { _, has ->
+                if (!has) {
+                    val v = et.text?.toString()?.trim()
+                    if (v.isNullOrEmpty()) {
+                        getSP().edit().remove("track_label_" + labelIdx).commit()
+                        et.setText(defLabel)
+                    } else {
                         getSP().edit().putString("track_label_" + labelIdx, v).commit()
                     }
                 }
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            })
+            }
+            et.setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                    et.clearFocus()
+                    true
+                } else false
+            }
             trackRows.add(M3Ui.listRow(requireActivity(), pal, 0,
                     Lang.t("模式 ", "Mode ") + i, Lang.t("默认名称：", "Default name: ") + trackLabels[i], et, null))
         }
@@ -392,8 +390,11 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(10)))
 
         // ── 重置自定义映射（alpha2.37）──
-        val resetBtn = makeM3Button(Lang.t("重置所有自定义映射", "Reset all custom mappings"), R.drawable.ic_settings,
-                pal.container, pal.onContainer) {
+        val rowReset = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_restart_alt,
+                Lang.t("重置所有自定义映射", "Reset all custom mappings"),
+                Lang.t("恢复降噪 / 增益 / 追踪标签为型号档案默认值",
+                        "Restore ANC / gain / tracking labels to profile defaults"),
+                M3Ui.chevron(requireActivity(), pal.onVariant)) {
             val editor = getSP().edit()
             // 清除 ANC 映射
             for (i in 0..3) editor.remove("anc_map_" + i)
@@ -407,7 +408,7 @@ class SettingsFragment : Fragment() {
             // 刷新当前页面
             requireActivity().recreate()
         }
-        box.addView(resetBtn, LinearLayout.LayoutParams(-1, -2))
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowReset))
         box.addView(spacer(dp(10)))
 
         // ── 模拟测试（alpha2.3 从主页迁入；真实耳机连接时禁用）──
@@ -415,10 +416,7 @@ class SettingsFragment : Fragment() {
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))
-        val simBg = GradientDrawable()
-        simBg.setColor(pal.card)
-        simBg.setCornerRadius(dp(24).toFloat())
-        simBox.background = simBg
+        simBox.background = M3Ui.cardBg(requireContext(), pal, 24)
         simConnBtn = makeM3Button(Lang.t("模拟连接 耳机", "Simulate connect earbuds"), R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟连接：GAIA 模拟态 + 左右耳模拟电量 + 默认降噪模式 + 弹窗（可重复点击）
             GaiaBleClient.setSimConnected(true)
@@ -437,11 +435,38 @@ class SettingsFragment : Fragment() {
         box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
 
         sv.addView(box, FrameLayout.LayoutParams(-1, -2))
-        root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
 
     // ── UI 辅助 ──
+    /** alpha2.53: 自定义映射的状态行（当前值 / 当前型号档案），统一规格：12sp medium + primary */
+    private fun mapStateLine(text: String): TextView {
+        val t = TextView(requireContext())
+        t.text = text
+        t.textSize = 12f
+        t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        t.setTextColor(pal.primary)
+        t.setPadding(dp(4), 0, dp(4), dp(6))
+        return t
+    }
+
+    /** alpha2.53: 自定义映射当前状态描述（对齐官方的「当前值就在行上」） */
+    private fun customLabel(custom: Boolean): String =
+            if (custom) Lang.t("当前：自定义映射生效", "Current: custom mapping active")
+            else Lang.t("当前：跟随型号档案", "Current: following device profile")
+
+    /** alpha2.52: 自定义映射分组内的小标题（比 sectionTitle 轻一级，用于同组内分块） */
+    private fun makeSubLabel(text: String): TextView {
+        val t = TextView(requireContext())
+        t.text = text
+        t.textSize = 13f
+        t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        t.setTextColor(pal.onSurface)
+        t.setPadding(dp(4), dp(8), dp(4), dp(2))
+        return t
+    }
+
     private fun getSP(): android.content.SharedPreferences =
             requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
 
@@ -455,23 +480,24 @@ class SettingsFragment : Fragment() {
                              l: View.OnClickListener): MaterialButton {
         val b = MaterialButton(requireContext())
         b.text = text
-        b.textSize = 16f
+        b.textSize = 14f
         b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         b.setTextColor(textColor)
         b.isAllCaps = false
         b.gravity = Gravity.CENTER
         b.insetTop = 0
         b.insetBottom = 0
-        b.minHeight = dp(52)
-        b.setMinimumHeight(dp(52))
-        b.setCornerRadius(dp(28))
+        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
+        b.minHeight = dp(40)
+        b.setMinimumHeight(dp(40))
+        b.setCornerRadius(dp(20))
         b.backgroundTintList = ColorStateList.valueOf(bgColor)
         if (iconRes != 0) {
             b.setIconResource(iconRes)
             b.setIconTint(ColorStateList.valueOf(textColor))
             b.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START)
             b.setIconPadding(dp(8))
-            b.setIconSize(dp(22))
+            b.setIconSize(dp(18))
         }
         b.setOnClickListener(l)
         return b
@@ -479,12 +505,7 @@ class SettingsFragment : Fragment() {
 
     private fun makeTintedSwitch(): MaterialSwitch {
         val sw = MaterialSwitch(requireContext())
-        sw.setTrackTintList(ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(pal.primary, if (pal.dark) 0x33FFFFFF else 0x22000000)))
-        sw.setThumbTintList(ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(pal.onPrimary, pal.onSurface)))
+        M3Ui.standardSwitch(sw, pal)
         return sw
     }
 
@@ -507,21 +528,10 @@ class SettingsFragment : Fragment() {
         updateSimState()
     }
 
+    /** M3 文本按钮：统一走 M3Ui.textButton（去掉旧版 0x14000000 药丸底，对齐 LSPosed 纯文本按钮） */
     private fun makeMaterialTextButton(text: String, color: Int, l: View.OnClickListener): TextView {
-        val b = TextView(requireContext())
-        b.text = text
-        b.textSize = 14f
-        b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        b.gravity = Gravity.CENTER
-        b.setPadding(dp(22), dp(11), dp(22), dp(11))
-        val g = GradientDrawable()
-        g.setColor(0x14000000)
-        g.setCornerRadius(dp(22).toFloat())
-        val rd = RippleDrawable(
-                ColorStateList.valueOf(0x1F000000), g, null)
-        b.background = rd
+        val b = M3Ui.textButton(requireContext(), pal, text, l)
         b.setTextColor(color)
-        b.setOnClickListener(l)
         return b
     }
 
@@ -529,70 +539,18 @@ class SettingsFragment : Fragment() {
     private fun makeNavRow(iconRes: Int, title: String, sub: String, onNav: Runnable): LinearLayout =
             M3Ui.navRow(requireActivity(), pal, iconRes, title, sub, onNav)
 
-    /** alpha2.38.10: 语言切换行（0=跟随系统 1=中文 2=English，三段 pill） */
-    private fun makeLangRow(): LinearLayout {
-        val box = LinearLayout(requireContext())
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(14), dp(12), dp(14), dp(12))
-        val bg = GradientDrawable()
-        bg.setColor(pal.card)
-        bg.setCornerRadius(dp(24).toFloat())
-        box.background = bg
-
-        val title = TextView(requireContext())
-        title.text = "语言 / Language"
-        title.textSize = 14f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        box.addView(title, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(10)))
-
-        val row = LinearLayout(requireContext())
-        row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = Gravity.CENTER
-        val items = arrayOf("跟随系统", "中文", "English")
-        val cur = Lang.mode(requireContext())
-        for (mi in 0 until 3) {
-            val mb = TextView(requireContext())
-            mb.text = items[mi]
-            mb.textSize = 12f
-            mb.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            mb.gravity = Gravity.CENTER
-            mb.setPadding(dp(8), dp(8), dp(8), dp(8))
-            val mg = GradientDrawable()
-            mg.setCornerRadius(dp(20).toFloat())
-            mg.setColor(if (mi == cur) pal.primary
-            else if (pal.dark) 0x14FFFFFF else 0x0A000000)
-            mb.background = mg
-            mb.setTextColor(if (mi == cur) pal.onPrimary else pal.onVariant)
-            mb.setOnClickListener {
-                getSP().edit().putInt("lang", mi).commit()
-                requireActivity().recreate()
-            }
-            row.addView(mb, LinearLayout.LayoutParams(0, -2, 1f))
-            if (mi < 2) row.addView(spacer(dp(6)))
-        }
-        box.addView(row, LinearLayout.LayoutParams(-1, -2))
-        return box
-    }
-
     /** 通用开关行（alpha1.36: M3Ui 卡片行） */
     private fun makeSwitchRow(title: String, sub: String, sw: MaterialSwitch): LinearLayout =
             M3Ui.switchRow(requireActivity(), pal, title, sub, sw)
 
-    /** alpha2.8: 外观卡行间分隔线（与 groupCard 同款淡线） */
-    private fun makeAppearDivider(): View {
-        val d = View(requireContext())
-        d.setBackgroundColor((pal.outline and 0x00FFFFFF) or 0x2E000000)
-        return d
-    }
-
-    /** alpha2.8: 分隔线布局参数（1dp 高，左右 16dp 边距，与 groupCard 对齐） */
-    private fun appearDividerLp(): LinearLayout.LayoutParams {
-        val lp = LinearLayout.LayoutParams(-1, dp(1))
-        lp.marginStart = dp(16)
-        lp.marginEnd = dp(16)
-        return lp
+    /** alpha2.52: 把裸行包成一张独立卡片（对齐 LSPosed：一行一卡 + 12dp 卡间距） */
+    private fun wrapCard(v: View): LinearLayout {
+        val card = LinearLayout(requireContext())
+        card.orientation = LinearLayout.VERTICAL
+        card.setPadding(dp(16), dp(12), dp(16), dp(12))
+        card.background = M3Ui.cardBg(requireContext(), pal, 20)
+        card.addView(v, LinearLayout.LayoutParams(-1, -2))
+        return card
     }
 
     /** 官方主题设置开关（MaterialSwitch），改动即存 SP + 重建 */
@@ -600,12 +558,7 @@ class SettingsFragment : Fragment() {
         val sw = MaterialSwitch(requireContext())
         sw.isChecked = getSP().getBoolean(key, def)
         sw.contentDescription = label
-        sw.setTrackTintList(ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(pal.primary, if (pal.dark) 0x33FFFFFF else 0x22000000)))
-        sw.setThumbTintList(ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(pal.onPrimary, pal.onSurface)))
+        M3Ui.standardSwitch(sw, pal)
         sw.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean(key, checked).commit()
             // alpha2.8: 开启动态取色 -> 先播种子颜色行消失动画，再重建（Material fade+slide）

@@ -59,11 +59,10 @@ object DeviceDetailsPanel {
         enabledByRoot[root] = state.connected
         val ancCard = card.findViewWithTag<LinearLayout>("fxxk_anc_card") ?: return
         val dcCard = card.findViewWithTag<LinearLayout>("fxxk_dc_card") ?: return
-        val pal = ThemeUtil.Palette(card.context)
         // 降噪卡片：高亮当前模式（与主界面 updateAncStatus 一致）
         ControlPanel.refreshAncCard(ancCard, state.ancMode)
         // 功能卡片：按 profile + connected 决定可见性与高亮
-        ControlPanel.refreshDcCard(dcCard, state, profile, pal.onVariant)
+        ControlPanel.refreshDcCard(dcCard, state, profile)
         // 未连接时降噪按钮禁用（与主界面 updateAncStatus 一致，完全依赖真实连接；ancMode 初始为 0 会让 OR 恒真导致断连仍可点）
         val enabled = state.connected
         val ancRow = ancCard.findViewWithTag<LinearLayout>("fxxk_anc_row") ?: return

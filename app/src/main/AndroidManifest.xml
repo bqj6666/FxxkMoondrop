@@ -26,9 +26,7 @@
         android:theme="@style/Theme.FxxkMoondrop"
         android:allowBackup="false">
 
-        <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".PermissionActivity" android:exported="false" />
-        <activity android:name=".AboutActivity" android:exported="false" />
 
 
         <activity android:name=".MainActivity" android:exported="true">

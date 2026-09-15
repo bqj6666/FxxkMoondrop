@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：alpha2.51（versionCode 286） ｜ 更新日期：2026-09-14
+> 版本：alpha2.52（versionCode 287） ｜ 更新日期：2026-09-14
 
 ## 构建环境
 
@@ -84,8 +84,8 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | 正式版 `{里程碑}.{迭代}`；迭代版 `alpha{里程碑}.{迭代}` | `alpha2.51` |
-| versionCode | 单调递增整数 | `286` |
+| versionName | 正式版 `{里程碑}.{迭代}`；迭代版 `alpha{里程碑}.{迭代}` | `alpha2.52` |
+| versionCode | 单调递增整数 | `287` |
 
 发版时同步更新四处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`

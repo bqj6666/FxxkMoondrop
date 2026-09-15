@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  alpha2.53: 自适应图标单色层（Android 13+ 主题图标）。
+
+  系统只取这里的形状再按主题着色，所以必须是纯色；
+  几何与前景层逐字一致，改一处即可。
+  Material 自适应图标规范：
+    画布 108x108dp；四周 18dp 为出血区（启动器遮罩会切掉），中心 72dp 为安全区，
+    图形控制在中心约 66dp 圆内，保证圆形遮罩下四角不被裁。
+
+  造型：两支对称入耳式耳塞（腔体圆 + 圆角音管，八字外撇）。
+  笔画刻意加粗（腔体 r=11、音管宽 10dp）：单色主题图标模式下图标会缩到约 24-48dp，
+  细笔画在那个尺寸会糊成一团，实心块面才立得住。
+  图形重心精确对齐画布中心 (54,54)。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左耳塞：腔体 -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M40,44m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <!-- 左耳塞：音管 -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M40,54 L34,72" />
+
+    <!-- 右耳塞：腔体（镜像） -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M68,44m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <!-- 右耳塞：音管（镜像） -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M68,54 L74,72" />
+</vector>

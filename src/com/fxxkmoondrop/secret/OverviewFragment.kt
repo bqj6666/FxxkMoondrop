@@ -46,7 +46,11 @@ class OverviewFragment : Fragment() {
     private var svcStatus: TextView? = null
     private var statusIcon: ImageView? = null // alpha2.0 M3 英雄卡：官方图标（Material Icons）
     private var statusIconChip: android.widget.FrameLayout? = null // 指示器容器（圆角随状态）
-    private var statusBadge: TextView? = null     // 英雄卡右侧徽章（API）
+    private var statusBadge: TextView? = null     // 英雄卡右侧徽章（当前蓝牙协议）
+    /** alpha2.53: 当前编解码器缓存 + 查询节流（dumpsys 要百毫秒级，不能每次刷新都跑） */
+    private var codecLabel: String? = null
+    private var codecQuerying = false
+    private var lastCodecQueryMs = 0L
     private var statusSub: TextView? = null       // 英雄卡副标题（版本动态）
     private var green = 0
     private var red = 0
@@ -55,6 +59,13 @@ class OverviewFragment : Fragment() {
     private var onSurfaceColor = 0
     private var onContainerColor = 0
     private var containerColor = 0
+    /** alpha2.53: 英雄卡前景色（卡片改强调色 primary 后，文字/图标走 onPrimary） */
+    private var heroFg = 0
+
+    /** alpha2.53: 手动刷新期间的线性进度条（BLE 重连要数秒，给了真实进度反馈） */
+    private var refreshBar: android.widget.ProgressBar? = null
+
+    private val hideRefreshBar = Runnable { refreshBar?.visibility = View.GONE }
     private var surfaceColor = 0
     private var onVariantColor = 0
     private var cardSurfaceColor = 0
@@ -64,6 +75,10 @@ class OverviewFragment : Fragment() {
     private var gaiaStateVal: TextView? = null
     private var headsetStateVal: TextView? = null
     private var battVal: TextView? = null
+    private var devInfoCard: LinearLayout? = null
+    private var devNameVal: TextView? = null
+    private var devMacVal: TextView? = null
+    private var devProfileVal: TextView? = null
     private var battRow: View? = null
     private var battRowShown = false // alpha2.8: 电量行当前视觉状态（驱动出现/消失动画）
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
@@ -107,7 +122,6 @@ class OverviewFragment : Fragment() {
 
         // ── Material You 主题（alpha2.2：统一 ThemeUtil.Palette → 动态/种子/AMOLED 全支持）──
         val pal0 = ThemeUtil.Palette(requireContext())
-        val dark = pal0.dark
         primaryColor = pal0.primary
         onPrimaryColor = pal0.onPrimary
         val container = pal0.container
@@ -123,6 +137,7 @@ class OverviewFragment : Fragment() {
         onSurfaceColor = onSurface
         onContainerColor = onContainer
         containerColor = container
+        heroFg = pal0.onPrimary
         surfaceColor = surface
         onVariantColor = onVariant
         ancIconCache = null // alpha2.28: invalidate icon cache on theme change
@@ -133,17 +148,19 @@ class OverviewFragment : Fragment() {
 
         val root = LinearLayout(requireContext())
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(24), statusBarH + dp(4), dp(24), dp(24))
+        // alpha2.52: 页面边距 24 -> 16dp（对齐 LSPosed / M3 屏幕边距 16dp）
+        root.setPadding(dp(16), dp(4), dp(16), dp(16))
         root.setBackgroundColor(surface)
 
         // ── 官方 StatusHeader（LSPosed Manager 同款：纯色胶囊 / 圆形指示器 / 呼吸 / 徽章 / 全圆角；内容居中）──
         val statusPanel = android.widget.FrameLayout(requireContext())
         val panelBg = GradientDrawable()
-        panelBg.setColor(container)
+        // alpha2.53: 英雄卡改用强调色（原来用 container，深色下偏灰发闷）
+        panelBg.setColor(pal0.primary)
         panelBg.setCornerRadii(floatArrayOf(dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat(),
                 dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat()))
         statusPanel.background = panelBg
-        statusPanel.setPadding(dp(20), dp(16), dp(20), dp(16))
+        statusPanel.setPadding(dp(20), dp(20), dp(20), dp(20))
 
         // 状态行：指示器（52dp 圆角方形 34% + onContainer 15% 底）+ 文本 + API 徽章
         val heroRow = LinearLayout(requireContext())
@@ -153,12 +170,12 @@ class OverviewFragment : Fragment() {
         statusIconChip = android.widget.FrameLayout(requireContext())
         val chipBg = GradientDrawable()
         chipBg.shape = GradientDrawable.OVAL
-        chipBg.setColor((onContainer and 0x00FFFFFF) or 0x26000000)
+        chipBg.setColor((pal0.onPrimary and 0x00FFFFFF) or 0x26000000)
         statusIconChip!!.background = chipBg
         statusIcon = ImageView(requireContext())
         statusIcon!!.setImageResource(R.drawable.ic_check)
-        statusIcon!!.imageTintList = ColorStateList.valueOf(onContainer)
-        val silp = android.widget.FrameLayout.LayoutParams(dp(26), dp(26))
+        statusIcon!!.imageTintList = ColorStateList.valueOf(pal0.onPrimary)
+        val silp = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
         silp.gravity = Gravity.CENTER
         statusIconChip!!.addView(statusIcon, silp)
         // 官方 Active 呼吸（1.0 -> 1.05, 1900ms REVERSE）
@@ -172,38 +189,26 @@ class OverviewFragment : Fragment() {
             statusIconChip!!.scaleY = v
         }
         pulse.start()
-        heroRow.addView(statusIconChip, LinearLayout.LayoutParams(dp(48), dp(48)))
+        heroRow.addView(statusIconChip, LinearLayout.LayoutParams(dp(44), dp(44)))
         val chipLp = statusIconChip!!.layoutParams as LinearLayout.LayoutParams
-        chipLp.marginEnd = dp(8)
+        chipLp.marginEnd = dp(14)
         statusIconChip!!.layoutParams = chipLp
-        // 文本列：品牌（62%）+ 状态词（SemiBold）同行，下方版本 detail
+        // 文本列：状态词（titleMedium）+ 版本（bodyMedium）——对齐 LSPosed 英雄卡
         val texts = LinearLayout(requireContext())
         texts.orientation = LinearLayout.VERTICAL
         texts.gravity = Gravity.START
-        val titleRow = LinearLayout(requireContext())
-        titleRow.orientation = LinearLayout.HORIZONTAL
-        titleRow.gravity = Gravity.CENTER_VERTICAL
-        val brand = TextView(requireContext())
-        brand.text = "FxxkMoondrop"
-        brand.textSize = 15f
-        brand.typeface = Typeface.create("sans-serif", Typeface.NORMAL) // 官方 Normal
-        brand.setTextColor((onContainer and 0x00FFFFFF) or 0x9E000000.toInt()) // 62%
-        titleRow.addView(brand)
-        val gap = View(requireContext())
-        titleRow.addView(gap, LinearLayout.LayoutParams(dp(2), 1))
         svcStatus = TextView(requireContext())
-        svcStatus!!.textSize = 16f
+        svcStatus!!.textSize = 17f
         svcStatus!!.isSingleLine = true
-        svcStatus!!.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        svcStatus!!.setTextColor(onContainer)
+        svcStatus!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        svcStatus!!.setTextColor(pal0.onPrimary)
         svcStatus!!.text = Lang.t("运行中", "Running")
-        titleRow.addView(svcStatus)
-        texts.addView(titleRow)
+        texts.addView(svcStatus)
         texts.addView(spacer(dp(4)))
         statusSub = TextView(requireContext())
-        statusSub!!.textSize = 11f
-        statusSub!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        statusSub!!.setTextColor((onContainer and 0x00FFFFFF) or 0xB3000000.toInt())
+        statusSub!!.textSize = 14f
+        statusSub!!.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        statusSub!!.setTextColor((pal0.onPrimary and 0x00FFFFFF) or 0xB3000000.toInt())
         statusSub!!.isSingleLine = true
         statusSub!!.gravity = Gravity.START
         try {
@@ -214,22 +219,21 @@ class OverviewFragment : Fragment() {
         } catch (_: Exception) {
             statusSub!!.text = ""
         }
-        // alpha2.7: 版本号在运行中下方，左对齐贴勾
         texts.addView(statusSub, LinearLayout.LayoutParams(-2, -2))
 
         heroRow.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
 
         // 右侧徽章 pill（API，动态获取）
         statusBadge = TextView(requireContext())
-        statusBadge!!.text = "API " + Build.VERSION.SDK_INT
-        statusBadge!!.textSize = 10f
+        statusBadge!!.text = badgeText()
+        statusBadge!!.textSize = 13f
         statusBadge!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        statusBadge!!.setTextColor(onPrimaryColor)
+        statusBadge!!.setTextColor(primaryColor)
         statusBadge!!.gravity = Gravity.CENTER
-        statusBadge!!.setPadding(dp(8), dp(4), dp(8), dp(4))
+        statusBadge!!.setPadding(dp(10), dp(5), dp(10), dp(5))
         val bdg = GradientDrawable()
         bdg.cornerRadius = dp(20).toFloat()
-        bdg.setColor(primaryColor)
+        bdg.setColor(onPrimaryColor)
         statusBadge!!.background = bdg
         val blp = LinearLayout.LayoutParams(-2, -2)
         blp.marginStart = dp(6)
@@ -241,7 +245,7 @@ class OverviewFragment : Fragment() {
         statusPanel.addView(heroRow, heroLp)
         root.addView(statusPanel, lp(false))
 
-        root.addView(spacer(dp(14)))
+        root.addView(spacer(dp(16)))
 
         // ── alpha2.41.10: 主界面「开始/停止后台监听」按钮已移除 ──
         // 监听启停统一由 设置 → 行为 → 后台监听 总开关控制，避免两处重复入口。
@@ -249,14 +253,21 @@ class OverviewFragment : Fragment() {
         // ── alpha2.4: 运行状态面板（GAIA 连接 / 耳机连接 / 左右耳电量）──
         buildStatusPanel(root)
 
-        root.addView(spacer(dp(10)))
+        root.addView(spacer(dp(16)))
+
+        // ── alpha2.52: 设备信息卡（设备名称 / 设备地址 / 型号档案）——
+        // 三个值均取自既有数据源（GAIA 连接名 / HeadsetGate / 型号档案库），未连接时占位
+        buildDeviceInfoCard(root)
+
+        root.addView(spacer(dp(16)))
 
         // ── 降噪控制（GAIA 直连）──
         ancTitle = TextView(requireContext())
         ancTitle!!.text = Lang.t("降噪控制", "Noise Control")
-        ancTitle!!.textSize = 13f
+        ancTitle!!.textSize = 14f
         ancTitle!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        ancTitle!!.setTextColor(outline)
+        // alpha2.52: 与设置页 M3Ui.sectionTitle 统一（onSurfaceVariant），原先用 outline 偏暗
+        ancTitle!!.setTextColor(onVariant)
         root.addView(ancTitle, lp(false))
         // alpha2.7: 始终显示，未连接时按钮禁用（视觉置灰）
         ancTitle!!.visibility = View.VISIBLE
@@ -271,12 +282,9 @@ class OverviewFragment : Fragment() {
         ancRow.orientation = LinearLayout.HORIZONTAL
         ancRow.gravity = Gravity.CENTER
         // alpha2.26.2: Material Experience —— M3 圆角卡片容器（card 色 + 28dp 圆角）
-        ancRow.setPadding(dp(10), dp(12), dp(10), dp(12))
-        val ancCardBg = GradientDrawable()
-        ancCardBg.shape = GradientDrawable.RECTANGLE
-        ancCardBg.setColor(cardColor)
-        ancCardBg.setCornerRadius(dp(28).toFloat())
-        ancRow.background = ancCardBg
+        ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
+        // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
+        ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
         for (m in 0..3) {
             val fm = m
             val col = LinearLayout(requireContext())
@@ -294,8 +302,8 @@ class OverviewFragment : Fragment() {
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(requireContext())
             icon.tag = "fxxk_main_icon"
-            icon.setImageDrawable(buildMainModeIcon(fm, dp(26), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(26), dp(26))
+            icon.setImageDrawable(buildMainModeIcon(fm, dp(32), onContainerColor))
+            val il = android.widget.FrameLayout.LayoutParams(dp(32), dp(32))
             il.gravity = Gravity.CENTER
             holder.addView(icon, il)
             holder.setOnClickListener {
@@ -305,12 +313,13 @@ class OverviewFragment : Fragment() {
             }
             ancBtns!![m] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
-            val sz = dp(60)
+            // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
+            val sz = dp(72)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(dp(2)))
             val lbl = TextView(requireContext())
             lbl.text = AncProfileLib.modeNamesFull(requireContext())[fm]
-            lbl.textSize = 11f
+            lbl.textSize = 12f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerColor)
@@ -332,11 +341,7 @@ class OverviewFragment : Fragment() {
         val dcCard = LinearLayout(requireContext())
         dcCard.orientation = LinearLayout.VERTICAL
         dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
-        val dcBg = GradientDrawable()
-        dcBg.shape = GradientDrawable.RECTANGLE
-        dcBg.setColor(cardColor)
-        dcBg.setCornerRadius(dp(28).toFloat())
-        dcCard.background = dcBg
+        dcCard.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
 
         // 空间音频行（总开关）
         val dcSpatialRow = LinearLayout(requireContext())
@@ -351,12 +356,7 @@ class OverviewFragment : Fragment() {
         dcSpatialRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
         val spatialSwitch = com.google.android.material.materialswitch.MaterialSwitch(requireContext())
         spatialSwitch.tag = "dc_spatial_switch"
-        spatialSwitch.trackTintList = android.content.res.ColorStateList(
-            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-            intArrayOf(primaryColor, if (dark) 0x33FFFFFF else 0x22000000))
-        spatialSwitch.thumbTintList = android.content.res.ColorStateList(
-            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-            intArrayOf(onPrimaryColor, onVariantColor))
+        M3Ui.standardSwitch(spatialSwitch, pal0)
         spatialSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!dcSwitchSyncing) {
                 DeviceControlBridge.setSpatialEnabled(isChecked)
@@ -527,15 +527,28 @@ class OverviewFragment : Fragment() {
         dcControlCard = dcCard
         root.addView(spacer(dp(8)))
 
-        root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"), R.drawable.ic_refresh, container, onContainer) { refreshAnc() })
+        // alpha2.52: 点击后短暂禁用，防止连点重复触发刷新
+        root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"),
+                R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() })
 
         root.addView(spacer(dp(12)))
 
         root.addView(spacer(dp(20)))
 
-        val sv = ScrollView(requireContext())
-        sv.setBackgroundColor(surface)
-        sv.addView(root)
+        // alpha2.53: M3 LargeTopAppBar —— 大标题钉在上层，内容从下方穿过并随滚动收缩
+        val page = M3Ui.largeHeaderPage(requireActivity(), pal0, "FxxkMoondrop")
+        page.sv.addView(root)
+
+        val outer = LinearLayout(requireContext())
+        outer.orientation = LinearLayout.VERTICAL
+        outer.setBackgroundColor(surface)
+        outer.setPadding(0, statusBarH, 0, 0)
+
+        refreshBar = M3Ui.linearLoader(requireContext(), container)
+        refreshBar!!.visibility = View.GONE
+        outer.addView(refreshBar, LinearLayout.LayoutParams(-1, -2))
+
+        outer.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // alpha1.4: 注册后台服务状态广播（电量/降噪更新）
         try {
@@ -566,7 +579,7 @@ class OverviewFragment : Fragment() {
         dumpDynColors(if (isDark()) "DARK" else "LIGHT")
         requestNeededPermissions()
         updateStatus()
-        return sv
+        return outer
     }
 
     private fun dumpDynColors(tag: String) {
@@ -710,21 +723,38 @@ class OverviewFragment : Fragment() {
         return v
     }
 
+    /** alpha2.52: 点击后短暂禁用并置灰，防止重复触发（默认 1.5 秒后恢复） */
+    private fun guardClicks(v: View, ms: Long = 1500L, action: () -> Unit) =
+            object : View.OnClickListener {
+                override fun onClick(w: View?) {
+                    if (!v.isEnabled) return
+                    v.isEnabled = false
+                    v.alpha = 0.45f
+                    action()
+                    v.postDelayed({
+                        v.isEnabled = true
+                        v.alpha = 1f
+                    }, ms)
+                }
+            }
+
+    /** alpha2.52: [debounceMs] > 0 时点击后短暂禁用并置灰，防止连点重复触发 */
     private fun makeButton(text: String, iconRes: Int, bgColor: Int, textColor: Int,
-                           l: View.OnClickListener): MaterialButton {
+                           debounceMs: Long = 0L, l: View.OnClickListener): MaterialButton {
         // alpha2.0: 官方 MaterialButton（Material3 按钮）+ 官方 Material Icons 图标
         val b = MaterialButton(requireContext())
         b.text = text
-        b.textSize = 16f
+        b.textSize = 14f
         b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         b.setTextColor(textColor)
         b.isAllCaps = false
         b.gravity = Gravity.CENTER
         b.insetTop = 0
         b.insetBottom = 0
-        b.minHeight = dp(52)
-        b.minimumHeight = dp(52)
-        b.cornerRadius = dp(28)
+        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
+        b.minHeight = dp(40)
+        b.minimumHeight = dp(40)
+        b.cornerRadius = dp(20)
         b.backgroundTintList = ColorStateList.valueOf(bgColor)
         b.elevation = if (bgColor == primaryColor) dp(1).toFloat() else 0f
         if (iconRes != 0) {
@@ -732,9 +762,9 @@ class OverviewFragment : Fragment() {
             b.iconTint = ColorStateList.valueOf(textColor)
             b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             b.iconPadding = dp(8)
-            b.iconSize = dp(22)
+            b.iconSize = dp(18)
         }
-        b.setOnClickListener(l)
+        b.setOnClickListener(if (debounceMs > 0L) guardClicks(b, debounceMs) { l.onClick(b) } else l)
         return b
     }
 
@@ -937,6 +967,9 @@ class OverviewFragment : Fragment() {
     }
 
     private fun updateStatus() {
+        // alpha2.53: 徽章显示当前耳机在用的编解码器，随连接状态刷新
+        statusBadge?.text = badgeText()
+        refreshCodecBadge()
         updateRunStatus()
         // alpha2.41.10: 主按钮已移除，运行状态统一由英雄卡展示
         // alpha2.4: onResume 同步刷新状态面板（修复模拟恢复后电量行残留显示）
@@ -951,24 +984,18 @@ class OverviewFragment : Fragment() {
         val ancOk = ancSt.contains("✅")
         val ancFrozen = ancSt.contains("❄️")
         val text: String
-        val color: Int
         if (svc && ancOk) {
             text = Lang.t("✅  运行中", "✅  Running")
-            color = green
         } else if (svc && ancFrozen) {
             text = Lang.t("❄️  运行中（降噪控制已冻结）", "❄️  Running (ANC frozen)")
-            color = onVariantColor
         } else if (svc) {
             text = Lang.t("⚠️  监听运行中 · 降噪控制未运行", "⚠️  Monitor running · ANC not running")
-            color = red
         } else if (ancOk) {
             text = Lang.t("⚠️  监听未运行 · 降噪控制运行中", "⚠️  Monitor not running · ANC running")
-            color = red
         } else {
             text = Lang.t("⛔  未运行", "⛔  Not running")
-            color = red
         }
-        setHeroStatus(text, color)
+        setHeroStatus(text)
     }
 
     /** alpha2.0 M3 英雄卡：状态 -> 官方图标（Material Icons）+ 纯文本，指示器色随状态 */
@@ -983,8 +1010,8 @@ class OverviewFragment : Fragment() {
         return 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
     }
 
-    private fun setHeroStatus(text: String, color: Int) {
-        var iconRes = R.drawable.ic_pause
+    private fun setHeroStatus(text: String) {
+        var iconRes = R.drawable.ic_hourglass_empty
         var label = text
         if (text.startsWith("✅")) {
             iconRes = R.drawable.ic_check
@@ -1008,16 +1035,16 @@ class OverviewFragment : Fragment() {
         else shortWord = Lang.t("检查中", "Checking")
         statusIcon?.let {
             it.setImageResource(iconRes)
-            it.imageTintList = ColorStateList.valueOf(onContainerColor)
+            it.imageTintList = ColorStateList.valueOf(heroFg)
         }
         statusIconChip?.let {
             val g = GradientDrawable()
             g.shape = GradientDrawable.OVAL
-            g.setColor((onContainerColor and 0x00FFFFFF) or 0x26000000)
+            g.setColor((heroFg and 0x00FFFFFF) or 0x26000000)
             it.background = g
         }
         svcStatus?.text = shortWord
-        svcStatus?.setTextColor(onContainerColor)
+        svcStatus?.setTextColor(heroFg)
     }
 
     override fun onResume() {
@@ -1323,6 +1350,7 @@ class OverviewFragment : Fragment() {
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             requireActivity().runOnUiThread {
+                hideRefreshBar.run()
                 updateAncStatus()
                 // alpha2.32: STATE_UPDATED 到来时连接已就绪，刷新 DC 按钮启用状态
                 refreshDcHighlight()
@@ -1350,66 +1378,79 @@ class OverviewFragment : Fragment() {
     }
 
     /** alpha1.20: 主界面模式按钮图标（与 Google 弹窗同款绘制：电源/波浪/耳朵），颜色动态 */
-    private fun buildMainModeIcon(mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable {
-        // alpha2.28: use cache (key = mode*2 + (color==white?1:0))
+    private fun buildMainModeIcon(mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable? {
+        // alpha2.52: 统一走 M3Ui 的 Material Symbols 矢量图标（主界面 / GMS 弹窗 / hook 面板同源）
         val cacheKey = mode * 2 + (if (color == 0xFFFFFFFF.toInt()) 1 else 0)
         val cache = ancIconCache
         if (cache != null && cacheKey < cache.size) {
             cache[cacheKey]?.let { return it }
         }
-        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-        val c = android.graphics.Canvas(bmp)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.style = android.graphics.Paint.Style.STROKE
-        val density = resources.displayMetrics.density
-        p.strokeWidth = 2f * density
-        p.strokeCap = android.graphics.Paint.Cap.ROUND
-        p.strokeJoin = android.graphics.Paint.Join.ROUND
-        p.color = color
-        val cx = px / 2f
-        val cy = px / 2f
-        val ir = px * 0.36f
-        when (mode) {
-            0 -> { // 电源符号
-                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect, 50f, 260f, false, p)
-                c.drawLine(cx, cy - ir * 1.25f, cx, cy - ir * 0.35f, p)
-            }
-            1 -> { // 降噪：三条水平波浪
-                for (i in -1..1) {
-                    val yy = cy + i * px * 0.16f
-                    val wv = android.graphics.Path()
-                    wv.moveTo(cx - px * 0.30f, yy)
-                    wv.cubicTo(cx - px * 0.10f, yy - px * 0.14f,
-                            cx + px * 0.10f, yy + px * 0.14f, cx + px * 0.30f, yy)
-                    c.drawPath(wv, p)
-                }
-            }
-            2 -> { // 透传：耳朵（双 C 弧 + 耳道圆点）
-                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect, 60f, 240f, false, p)
-                val ir2 = ir * 0.5f
-                val rect2 = android.graphics.RectF(cx - ir2, cy - ir2, cx + ir2, cy + ir2)
-                c.drawArc(rect2, 90f, 180f, false, p)
-                val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-                dot.style = android.graphics.Paint.Style.FILL
-                dot.color = color
-                c.drawCircle(cx + ir * 0.10f, cy + ir * 0.14f, px * 0.05f, dot)
-            }
-            3 -> { // 抗风：旋风/三弧线
-                val rect3 = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect3, 70f, 220f, false, p)
-                val rect4 = android.graphics.RectF(cx - ir*0.7f, cy - ir*0.7f, cx + ir*0.7f, cy + ir*0.7f)
-                c.drawArc(rect4, 90f, 200f, false, p)
-                val rect5 = android.graphics.RectF(cx - ir*0.4f, cy - ir*0.4f, cx + ir*0.4f, cy + ir*0.4f)
-                c.drawArc(rect5, 110f, 180f, false, p)
-            }
-        }
-        val drawable = android.graphics.drawable.BitmapDrawable(resources, bmp)
-        // alpha2.28: store in cache
+        val drawable = M3Ui.ancModeDrawable(requireContext(), mode, px, color)
         if (ancIconCache == null) ancIconCache = arrayOfNulls(8)
         if (cacheKey < 8) ancIconCache!![cacheKey] = drawable
         return drawable
+    }
+
+    /** alpha2.53: 刷新进度条显隐（超时兜底，避免状态回包丢失时长亮） */
+    private fun showRefreshBar() {
+        val b = refreshBar ?: return
+        b.removeCallbacks(hideRefreshBar)
+        b.visibility = View.VISIBLE
+        b.postDelayed(hideRefreshBar, 6000L)
+    }
+
+    /**
+     * alpha2.53: 当前耳机实际在用的蓝牙协议（原先是固定显示 API 级别，与设备无关）。
+     *
+     * 用公开的 AudioManager 输出设备类型判定，不做私有 API 猜测：
+     *  LE Audio（TYPE_BLE_HEADSET / TYPE_BLE_SPEAKER，API 31+）
+     *  > A2DP 经典音频 > 仅 GAIA BLE 数据链路 > 未连接
+     */
+    /**
+     * alpha2.53: 当前耳机在用的蓝牙音频编解码器（原先是固定显示 API 级别，与设备无关）。
+     *
+     * 编解码信息只有系统侧蓝牙栈知道（BluetoothA2dp.getCodecStatus 是 @SystemApi，
+     * 需要 BLUETOOTH_PRIVILEGED，普通应用拿不到），因此走已有的 Root 通道读 dumpsys。
+     * 读不到时退回链路类型，再退到「未连接」，任何情况下不空着。
+     */
+    private fun refreshCodecBadge() {
+        val now = SystemClock.elapsedRealtime()
+        if (codecQuerying || now - lastCodecQueryMs < 5000L) return
+        codecQuerying = true
+        lastCodecQueryMs = now
+        Thread {
+            val out = runRoot("dumpsys bluetooth_manager | grep -m1 'mCodecConfig:'")
+            val name = Regex("codecName:([A-Za-z0-9 ]+)").find(out ?: "")?.groupValues?.get(1)?.trim()
+            activity?.runOnUiThread {
+                codecQuerying = false
+                if (!name.isNullOrEmpty()) codecLabel = name
+                statusBadge?.text = badgeText()
+            }
+        }.start()
+    }
+
+    /** 徽章文案：编解码器 > 链路类型 > 未连接 */
+    private fun badgeText(): String {
+        codecLabel?.let { if (it.isNotEmpty()) return it }
+        return linkTypeLabel()
+    }
+
+    /** 链路类型兜底：系统侧标记语义（ACL BR/EDR / LE / LE Audio） */
+    private fun linkTypeLabel(): String {
+        val none = Lang.t("未连接", "Not connected")
+        return try {
+            val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val types = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).map { it.type }.toSet()
+            when {
+                Build.VERSION.SDK_INT >= 31 &&
+                        (android.media.AudioDeviceInfo.TYPE_BLE_HEADSET in types ||
+                                android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER in types) -> "LE Audio"
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP in types ||
+                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO in types -> "ACL"
+                GaiaBleClient.getInstance().isConnected() -> "LE"
+                else -> none
+            }
+        } catch (_: Throwable) { none }
     }
 
     private fun refreshAnc() {
@@ -1560,15 +1601,12 @@ class OverviewFragment : Fragment() {
     private fun buildStatusPanel(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        val bg = GradientDrawable()
-        bg.setColor(cardSurfaceColor)
-        bg.cornerRadius = dp(20).toFloat()
-        card.background = bg
+        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 20)
         card.addView(makeStatusRow(R.drawable.ic_bluetooth, Lang.t("GAIA 状态", "GAIA Status"), 0),
                 LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
                 LinearLayout.LayoutParams(-1, -2))
-        battRow = makeStatusRow(R.drawable.ic_check, Lang.t("左右耳电量", "L/R Battery"), 2)
+        battRow = makeStatusRow(R.drawable.ic_battery_full, Lang.t("左右耳电量", "L/R Battery"), 2)
         // alpha2.52: 新建行默认 GONE 并把动画状态复位。
         // 原实现新建行是默认 VISIBLE，而 battRowShown 初始为 false，
         // 当 show==false 时 `show != battRowShown` 判定不成立 -> 漏掉隐藏 -> 未连接时残留显示。
@@ -1582,21 +1620,23 @@ class OverviewFragment : Fragment() {
         val row = LinearLayout(requireContext())
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
-        row.setPadding(dp(14), dp(10), dp(14), dp(10))
+        // M3 单行列表规范：行高 ≥56dp，水平/垂直内边距 16dp
+        row.setPadding(dp(16), dp(16), dp(16), dp(16))
+        row.minimumHeight = dp(56)
         val ic = ImageView(requireContext())
         ic.setImageResource(iconRes)
         ic.imageTintList = ColorStateList.valueOf(onContainerColor)
-        val ilp = LinearLayout.LayoutParams(dp(20), dp(20))
-        ilp.marginEnd = dp(12)
+        val ilp = LinearLayout.LayoutParams(dp(24), dp(24))
+        ilp.marginEnd = dp(16)
         row.addView(ic, ilp)
         val t = TextView(requireContext())
         t.text = title
-        t.textSize = 14f
+        t.textSize = 15f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(onSurfaceColor)
         row.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
         val valTv = TextView(requireContext())
-        valTv.textSize = 13f
+        valTv.textSize = 14f
         valTv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         valTv.setTextColor(onVariantColor)
         valTv.gravity = Gravity.END
@@ -1605,10 +1645,35 @@ class OverviewFragment : Fragment() {
         when (which) {
             0 -> gaiaStateVal = valTv
             1 -> headsetStateVal = valTv
-            else -> battVal = valTv
+            2 -> battVal = valTv
+            3 -> devNameVal = valTv
+            4 -> devMacVal = valTv
+            else -> devProfileVal = valTv
         }
         return row
     }
+
+    /**
+     * alpha2.52: 设备信息卡（设备名称 / 设备地址 / 型号档案）。
+     * 行结构与状态卡一致（M3 单行列表规范），数据全部来自既有来源，未连接时占位。
+     */
+    private fun buildDeviceInfoCard(root: LinearLayout) {
+        val card = LinearLayout(requireContext())
+        card.orientation = LinearLayout.VERTICAL
+        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 20)
+        card.addView(makeStatusRow(R.drawable.ic_devices,
+                Lang.t("设备名称", "Device name"), 3), LinearLayout.LayoutParams(-1, -2))
+        card.addView(makeStatusRow(R.drawable.ic_settings_ethernet,
+                Lang.t("设备地址", "Device address"), 4), LinearLayout.LayoutParams(-1, -2))
+        card.addView(makeStatusRow(R.drawable.ic_tune,
+                Lang.t("型号档案", "Model profile"), 5), LinearLayout.LayoutParams(-1, -2))
+        // alpha2.52: 未连接 GAIA 时整卡隐藏（名称/地址/档案均无意义）
+        card.visibility = View.GONE
+        devInfoCard = card
+        root.addView(card, lp(false))
+    }
+
+    private val DASH = "—"
 
     /** alpha2.4: 刷新运行状态面板（GAIA / 耳机 / 电量） */
     private fun updateStatusPanel() {
@@ -1622,6 +1687,12 @@ class OverviewFragment : Fragment() {
         val hs = if (mac != null) Lang.t("已连接", "Connected") else (if (sim) Lang.t("已连接（模拟）", "Connected (simulated)") else Lang.t("未连接", "Not connected"))
         headsetStateVal?.text = hs
         headsetStateVal?.setTextColor(if (mac != null || sim) green else onVariantColor)
+        // alpha2.52: 设备信息卡仅在 GAIA 已连接时显示
+        devInfoCard?.visibility = if (g) View.VISIBLE else View.GONE
+        val dn = GaiaBleClient.getInstance().getConnectedDeviceName()
+        devNameVal?.text = dn ?: DASH
+        devMacVal?.text = mac ?: DASH
+        devProfileVal?.text = AncProfileLib.matchedProfileName(dn)
         updateBatteryStatus(mac, sim)
     }
 

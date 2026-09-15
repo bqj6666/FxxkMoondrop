@@ -24,6 +24,7 @@ import android.widget.ImageView
 import com.fxxkmoondrop.secret.DexKitLocator
 import com.fxxkmoondrop.secret.DeviceMatcher
 import com.fxxkmoondrop.secret.AncProfileLib
+import com.fxxkmoondrop.secret.M3Ui
 import com.fxxkmoondrop.secret.HookHelper
 import com.fxxkmoondrop.secret.BatteryStore
 import com.fxxkmoondrop.secret.GaiaBleClient
@@ -1007,6 +1008,15 @@ class FastPairHookEntry {
                 iconColor = v.currentTextColor
             }
         } catch (_: Throwable) { }
+        // alpha2.53: 与主界面/设置面板同源 —— 用模块内置 Material Symbols 矢量图标，
+        // 取代原先手绘 Canvas 几何（弹窗按钮一直没跟着重绘的根因）。
+        // 模块进程读不了自己的 R.drawable，M3Ui.moduleDrawable 内部会走 createPackageContext。
+        try {
+            val vd = M3Ui.ancModeDrawable(act, mode, px, iconColor)
+            if (vd != null) return vd
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] vector mode icon fail: " + t)
+        }
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)

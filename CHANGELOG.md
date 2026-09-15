@@ -5,6 +5,40 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.52 (287)
+### 界面全面对齐 org.lsposed.manager
+- **大标题随滚动收缩**：三页统一为 M3 LargeTopAppBar 形态（展开 152dp / 收起 64dp，标题 28sp→22sp）。内容自标题下方穿过、标题钉在上层。`ScrollView` 必须 `clipToPadding=false`，否则顶部内边距区成为裁剪区，标题收起后中间会空出一条缝（本次实测踩到并修复）。
+- **切页动效**：进入 fadeIn + scaleIn(0.985) 320ms（对齐官方 Crossfade 手感），退出快速淡出；新增 `res/anim/m3_page_in.xml`、`m3_page_out.xml`。
+- **英雄卡改强调色**：底色 `container` → `primary`，文字与图标走 `onPrimary`，API 徽章反色；新增 `heroFg` 字段，不再借用功能卡配色。
+- **三选一改下拉**：主题、语言由成排按钮改为「行 + 右侧当前值 + 下拉菜单」。菜单出现在**手指落点**（贴边自动内收），入场 scale 0.8→1 + fade 140ms，选中项 primary 填充 + ✓；尺寸对齐官方（文字 14sp / 图标 18dp / 行高 48dp）。
+- 补齐语言卡与「检查权限」卡之间缺失的 12dp 卡间距。
+
+### 修复：蓝牙设备详情面板退化为单行条目
+- **根因**：hook 进 `com.android.settings` 后，面板构建拿的是**宿主 Context**。模块与宿主的资源包 ID 都是 `0x7f`，同一数值在宿主体内被解析成宿主自己的资源 —— 实测 `ic_anc_off` 撞上 `com.android.settings:dimen/animation_max_size`，抛 `Resources$NotFoundException`；异常被 `onBindViewHolder` 的 catch 吞掉后走 `chain.proceed()`，渲染成原生单行，表现为「整块面板消失、点击无反应」。
+- **修复**：新增 `M3Ui.moduleDrawable()` —— 模块进程内直接用传入 Context（与改动前逐字等价），hook 进程才 `createPackageContext` 并缓存。`DcIcons` 一并改走它（追踪 / 增益 / 指示灯同理会崩）；`standardSwitch` 的 ✓/✗ 拇指图标同类隐患一并堵住。
+
+### 修复：空间音频开关改用设置 App 原版控件
+- 直接构造 `MaterialSwitch` 会在 Settings 进程抛 `IllegalArgumentException: The style on this component requires your app theme to be Theme.AppCompat`，使整个面板注入失败。
+- 改为 inflate 设置自身的开关布局（按新到旧：`settingslib_expressive_preference_switch` → `preference_widget_switch_compat` → `preference_widget_switch`；API 36 实测命中第一个）。该布局内的 `MaterialSwitch` 自带 `Theme.Material3.DynamicColors.DayNight` 覆盖，就是设置页在用的同一个控件；全部失败才退回系统 `Switch` + M3 配色。
+
+### 图标
+- **ANC 四态与弹窗降噪按钮**改 Material Symbols 矢量（关闭 / 降噪 / 透传 / 抗风），取代原先手绘 Canvas 几何；真机确认主界面、hook 面板、GMS 弹窗三处一致。
+- **应用图标全新重构**为自适应图标：108dp 画布、中心 72dp 安全区、图形收敛在 66dp 内，含 background / foreground / monochrome 三层（支持 Android 13+ 主题图标）。笔画刻意加粗以适应 24–48dp 的单色渲染；原有位图保留作 API 26 以下回落。
+
+### 英雄卡徽章改显示当前编解码器
+- 由固定的 API 级别改为显示耳机当前在用的编解码器（LDAC / AAC / SBC / aptX …）。该信息只有蓝牙栈掌握（`BluetoothA2dp.getCodecStatus` 为 `@SystemApi`、需 `BLUETOOTH_PRIVILEGED`），故经已有 Root 通道读取并解析 dumpsys，**不维护任何编解码名称表**；读不到时退回链路类型（LE Audio / ACL / LE），再退回「未连接」。异步查询 + 5s 节流，不阻塞 UI。
+
+### 自定义映射交互规范化
+- 降噪 / 增益的裸数字输入框改**下拉选择**：可选值收敛为固定集合，越界与半截输入不再可能出现；降噪编辑仍四档全量落库。增益第 0 项为「隐藏该档位」（设备码 -1）。
+- 空间音频追踪标签由「每次按键都落库」改为失焦 / 回车才保存，空值视为恢复默认。
+- 「当前型号档案」与「当前：…」两行统一规格（12sp medium / primary）。
+- 修复菜单选中态不跟随：原先把创建时的选中值闭包进菜单，选完重开仍是旧高亮；改为行内维护可变选中态。
+
+### 其他
+- 主界面「刷新状态」新增线性进度条（BLE 重连需数秒），状态回包即收起，6s 超时兜底。
+- 本轮另含（commit 749f8a6）：未收录型号门禁指纹化（issue #5）、主界面电量行未连接仍显示、刷新按钮重试探测。
+- 版本号升至 **alpha2.52**（versionCode 287）
+
 ## alpha2.51 (286)
 ### 修复 ANC 按钮映射「透传 ↔ 抗风」互换（issue #1）
 - **根因**：设置页编辑任一档位时只写被编辑的那一格，其余格在读取时回退到**名义默认映射** `[1,2,3,4]`（`AncProfileLib.DEFAULT_MAP`），而不是该型号的**档案映射**。设备码 3 与 4 在不同型号上分别对应「抗风」与「透传」，名义顺序恰好与型号档案相反 —— 于是用户在 GA2 / 太空漫游2 上只要动过任意一格映射，两个按钮就静默互换。

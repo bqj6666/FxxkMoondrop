@@ -75,7 +75,9 @@ class MainActivity : FragmentActivity() {
             else -> OverviewFragment()
         }
         val ft: FragmentTransaction = supportFragmentManager.beginTransaction()
-        ft.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out)
+        // alpha2.53: 对齐 org.lsposed.manager 的切页动效 ——
+        // 进入 fadeIn + scaleIn(0.985)，320ms；退出快速淡出，由进入动画主导。
+        ft.setCustomAnimations(R.anim.m3_page_in, R.anim.m3_page_out)
         ft.replace(containerId, f)
         ft.commit()
     }

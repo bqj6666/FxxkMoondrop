@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  alpha2.53: 自适应图标（Android 8.0+ / API 26+）。
+
+  三层各司其职：背景只负责铺满、前景只负责造型（已在安全区内）、
+  单色层供 Android 13+ 主题图标重新着色。
+  旧系统回落到 mipmap-*dpi/ic_launcher.png，因此无需删除原有位图。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

@@ -24,6 +24,7 @@ import android.widget.TextView
  *  - 功能可见性按 AncProfileLib.resolveDc(设备名) 档案决定，未命中回退 GAIA 能力探测。
  */
 object ControlPanel {
+    private const val TAG = "FxxkMoondrop"
 
     /** 面板控制回调：由调用方决定如何真正作用于设备。 */
     interface Callbacks {
@@ -61,7 +62,7 @@ object ControlPanel {
 
         val title = TextView(ctx)
         title.text = Lang.t(ctx, "降噪控制", "Noise Control")
-        title.textSize = 13f
+        title.textSize = 14f
         title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         title.setTextColor(pal.outline)
         title.setPadding(dp(16), 0, dp(16), 0)
@@ -69,7 +70,7 @@ object ControlPanel {
         val row = LinearLayout(ctx)
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER
-        row.setPadding(dp(10), dp(12), dp(10), dp(12))
+        row.setPadding(dp(16), dp(16), dp(16), dp(16))
         val bg = GradientDrawable()
         bg.shape = GradientDrawable.RECTANGLE
         bg.setColor(cardC)
@@ -92,17 +93,17 @@ object ControlPanel {
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(ctx)
             icon.tag = "fxxk_main_icon"
-            icon.setImageDrawable(buildMainModeIcon(ctx, fm, dp(26), onContainerC))
-            val il = FrameLayout.LayoutParams(dp(26), dp(26))
+            icon.setImageDrawable(buildMainModeIcon(ctx, fm, dp(32), onContainerC))
+            val il = FrameLayout.LayoutParams(dp(32), dp(32))
             il.gravity = Gravity.CENTER
             holder.addView(icon, il)
             holder.setOnClickListener { onMode(fm) }
-            val sz = dp(60)
+            val sz = dp(72)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(ctx, dp(2)))
             val lbl = TextView(ctx)
             lbl.text = AncProfileLib.modeNamesFull(ctx)[fm]
-            lbl.textSize = 11f
+            lbl.textSize = 12f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerC)
@@ -156,9 +157,25 @@ object ControlPanel {
         sLabel.setTextColor(onContainerC)
         spatialRow.addView(sLabel, LinearLayout.LayoutParams(-2, -2))
         spatialRow.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-        val spatialSwitch = android.widget.Switch(ctx)
-        spatialSwitch.tag = "dc_spatial_switch"
-        // alpha2.39.2: 去掉自定义 track/thumb tint，改用系统原生开关样式（与设置详情页开关统一，禁用自动变灰）
+        // alpha2.53: 直接复用设置 App 原版开关控件。
+        //
+        // 踩过的两个坑：
+        //  1) 直接 new MaterialSwitch(ctx) 会崩 —— Settings 的活动主题不是 Theme.AppCompat，
+        //     构造时抛 IllegalArgumentException，整个面板注入失败。
+        //  2) 退回 android.widget.Switch 不再崩，但那是 AOSP 旧样式，与设置页其余开关不一致。
+        // Settings 自己的做法是 inflate layout/preference_widget_switch_compat，该布局里的
+        // MaterialSwitch 带 android:theme="@style/Theme.Material3.DynamicColors.DayNight" 覆盖，
+        // 所以能正常构造。此处照搬同一路径 —— 拿到的就是设置页原版开关。
+        val spatialSwitch: android.widget.CompoundButton = buildSettingsSwitch(ctx, "dc_spatial_switch")
+                ?: android.widget.Switch(ctx).apply {
+                    tag = "dc_spatial_switch"
+                    trackTintList = ColorStateList(
+                            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                            intArrayOf(pal.primary, pal.surfaceContainerHighest))
+                    thumbTintList = ColorStateList(
+                            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                            intArrayOf(pal.onPrimary, pal.outline))
+                }
         spatialSwitch.setOnCheckedChangeListener { _, isChecked -> callbacks.setSpatialEnabled(isChecked) }
         spatialRow.addView(spatialSwitch, LinearLayout.LayoutParams(-2, -2))
         card.addView(spatialRow, LinearLayout.LayoutParams(-1, -2))
@@ -340,7 +357,7 @@ object ControlPanel {
     }
 
     /** 刷新功能卡片高亮。state 由调用方提供；可见性按 resolveDc + 能力探测决定。 */
-    fun refreshDcCard(card: LinearLayout, state: State, profile: AncProfileLib.DcProfile, onVariantColor: Int) {
+    fun refreshDcCard(card: LinearLayout, state: State, profile: AncProfileLib.DcProfile) {
         val ctx = card.context
         val dp = { px: Int -> (px * ctx.resources.displayMetrics.density).toInt() }
         val spatialRow = card.findViewWithTag<LinearLayout>("dc_spatial_row")
@@ -357,7 +374,7 @@ object ControlPanel {
         val anyVisible = profile.hasSpatial || profile.hasGain || profile.hasLed
         card.visibility = if (anyVisible) View.VISIBLE else View.GONE
 
-        val spSwitch = card.findViewWithTag<android.widget.Switch>("dc_spatial_switch")
+        val spSwitch = card.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
         spSwitch?.let { sw ->
             // alpha2.39.2: 未连接时完全禁用（交互+视觉），并用系统原生禁用灰样式
             sw.isEnabled = state.connected
@@ -432,57 +449,54 @@ object ControlPanel {
         }
     }
 
-    /** 图标构建：与主界面 buildMainModeIcon 一致（系统 Canvas 绘制）。 */
-    private fun buildMainModeIcon(ctx: Context, mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable {
-        val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
-        val c = android.graphics.Canvas(bmp)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.style = android.graphics.Paint.Style.STROKE
-        val density = ctx.resources.displayMetrics.density
-        p.strokeWidth = 2f * density
-        p.strokeCap = android.graphics.Paint.Cap.ROUND
-        p.strokeJoin = android.graphics.Paint.Join.ROUND
-        p.color = color
-        val cx = px / 2f
-        val cy = px / 2f
-        val ir = px * 0.36f
-        when (mode) {
-            0 -> {
-                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect, 50f, 260f, false, p)
-                c.drawLine(cx, cy - ir * 1.25f, cx, cy - ir * 0.35f, p)
-            }
-            1 -> {
-                for (i in -1..1) {
-                    val yy = cy + i * px * 0.16f
-                    val wv = android.graphics.Path()
-                    wv.moveTo(cx - px * 0.30f, yy)
-                    wv.cubicTo(cx - px * 0.10f, yy - px * 0.14f,
-                            cx + px * 0.10f, yy + px * 0.14f, cx + px * 0.30f, yy)
-                    c.drawPath(wv, p)
+    /**
+     * alpha2.53: 取设置 App 原版开关控件。
+     *
+     * 优先 inflate 设置自己的 preference_widget_switch_compat（内含带 Material3 主题覆盖的
+     * MaterialSwitch），旧版 preference_widget_switch 作为兜底；失败返回 null 由调用方降级。
+     * 该布局原本 clickable=false（点击由 preference 行负责），这里恢复为可点。
+     */
+    private fun buildSettingsSwitch(ctx: Context, tag: String): android.widget.CompoundButton? {
+        // Android 16 的开关偏好走 expressive 布局，旧版本走 compat / 平台布局；按新到旧试。
+        for (name in arrayOf("settingslib_expressive_preference_switch",
+                "preference_widget_switch_compat", "preference_widget_switch")) {
+            val id = try {
+                ctx.resources.getIdentifier(name, "layout", "com.android.settings")
+            } catch (_: Throwable) { 0 }
+            android.util.Log.d(TAG, "settings switch candidate=$name id=" + Integer.toHexString(id))
+            if (id == 0) continue
+            try {
+                val v = android.view.LayoutInflater.from(ctx).inflate(id, null)
+                val sw = (v as? android.widget.CompoundButton) ?: (v as? android.view.ViewGroup)?.let { findCompound(it) }
+                android.util.Log.d(TAG, "settings switch inflated=$name root=" + v.javaClass.name +
+                        " sw=" + (sw?.javaClass?.name ?: "null"))
+                if (sw != null) {
+                    sw.tag = tag
+                    sw.isClickable = true
+                    sw.isFocusable = true
+                    return sw
                 }
-            }
-            2 -> {
-                val rect = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect, 60f, 240f, false, p)
-                val ir2 = ir * 0.5f
-                val rect2 = android.graphics.RectF(cx - ir2, cy - ir2, cx + ir2, cy + ir2)
-                c.drawArc(rect2, 90f, 180f, false, p)
-                val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-                dot.style = android.graphics.Paint.Style.FILL
-                dot.color = color
-                c.drawCircle(cx + ir * 0.10f, cy + ir * 0.14f, px * 0.05f, dot)
-            }
-            3 -> {
-                val rect3 = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
-                c.drawArc(rect3, 70f, 220f, false, p)
-                val rect4 = android.graphics.RectF(cx - ir * 0.7f, cy - ir * 0.7f, cx + ir * 0.7f, cy + ir * 0.7f)
-                c.drawArc(rect4, 90f, 200f, false, p)
-                val rect5 = android.graphics.RectF(cx - ir * 0.4f, cy - ir * 0.4f, cx + ir * 0.4f, cy + ir * 0.4f)
-                c.drawArc(rect5, 110f, 180f, false, p)
+            } catch (t: Throwable) {
+                android.util.Log.d(TAG, "settings switch inflate fail $name: " + t)
             }
         }
-        return android.graphics.drawable.BitmapDrawable(ctx.resources, bmp)
+        android.util.Log.d(TAG, "settings switch: all candidates failed, fallback to android.widget.Switch")
+        return null
+    }
+
+    private fun findCompound(v: android.view.ViewGroup): android.widget.CompoundButton? {
+        for (i in 0 until v.childCount) {
+            val c = v.getChildAt(i)
+            if (c is android.widget.CompoundButton) return c
+            if (c is android.view.ViewGroup) findCompound(c)?.let { return it }
+        }
+        return null
+    }
+
+    /** 图标构建：与主界面 buildMainModeIcon 一致（系统 Canvas 绘制）。 */
+    private fun buildMainModeIcon(ctx: Context, mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable? {
+        // alpha2.52: 统一走 M3Ui 的 Material Symbols 矢量图标（设置 hook 面板 / GMS 弹窗同源）
+        return M3Ui.ancModeDrawable(ctx, mode, px, color)
     }
 
     private fun onContainerOf(ctx: Context): Int = ThemeUtil.dyn(ctx, "system_accent1_50",
