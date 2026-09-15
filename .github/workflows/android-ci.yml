@@ -36,8 +36,28 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: 初始化 Android SDK（setup-android，自动接受许可 + 配置 PATH）
-        uses: android-actions/setup-android@v3
+      # alpha2.52: android-actions/setup-android@v3（2024-11 版）在 2026-09-15 的 runner 镜像上
+      # 直接失败，整条 CI 在「初始化 SDK」这一步就中止（构建/发布/同步全被 skipped）。
+      # 上游已有 v4.0.1（node24）。改为「优先 v4，失败则回退 runner 预装 SDK」的双保险，
+      # 任一路径都保证后续 sdkmanager 与 build-tools 可用。
+      - name: 初始化 Android SDK（优先 setup-android@v4）
+        uses: android-actions/setup-android@v4
+        continue-on-error: true
+
+      - name: 校准 Android SDK 环境（上一步失败时回退 runner 预装 SDK）
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            echo "::error::找不到 Android SDK 目录：$SDK"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo "SDK=$SDK"
+          ls "$SDK" | head -20
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version || true
 
       - name: 安装 Android SDK 组件（platform-34 / build-tools 34.0.0）
         run: |
