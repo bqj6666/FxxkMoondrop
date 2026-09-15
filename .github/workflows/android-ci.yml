@@ -16,19 +16,19 @@ jobs:
       actions: write
     steps:
       - name: Checkout（全量历史 + tag，供生成更新日志）
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           tags: true
 
       - name: JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Gradle 缓存
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -93,7 +93,7 @@ jobs:
           fi
 
       - name: 上传 APK 产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FxxkMoondrop-APK
           path: |
@@ -103,7 +103,7 @@ jobs:
 
       - name: 发布 GitHub Release（push main -> ci-N 预发布）
         if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ci-${{ github.run_number }}
           name: FxxkMoondrop CI build #${{ github.run_number }}
@@ -144,7 +144,7 @@ jobs:
 
       - name: 发布 GitHub Release（push 版本号 tag -> 正式版）
         if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: FxxkMoondrop ${{ github.ref_name }}
