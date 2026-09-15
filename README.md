@@ -2,7 +2,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.52**（versionCode 287） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.53**（versionCode 288） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -171,6 +171,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **alpha2.53**：修复断开连接后英雄卡徽章仍停留在旧编解码器（如 LDAC）。根因是编解码器缓存断开时未清空，且徽章刷新未挂到连接状态广播上。**alpha2.52 因该缺陷已撤回，请使用本版**。
 - **alpha2.52**：界面按 Material 3 规范统一重构 —— 大标题随滚动收缩（M3 LargeTopAppBar）、切页 fadeIn + scaleIn 动效、英雄卡改强调色、主题与语言改为「行 + 当前值 + 下拉菜单」（菜单出现在手指落点、选中项强调色 + ✓）。修复蓝牙设备详情注入面板退化为单行条目（hook 进程误用宿主 Context 解析模块资源，双方包 ID 同为 `0x7f`，撞上宿主资源抛异常被吞）；空间音频开关改用设置 App 原版控件（`new MaterialSwitch` 在 Settings 进程必崩）。ANC 四态与弹窗降噪按钮改 Material Symbols 矢量；应用图标重构为自适应图标（background / foreground / monochrome）。英雄卡徽章改显示当前编解码器（LDAC / AAC / SBC 等，经 Root 读取 dumpsys，不维护名称表，读不到退回链路类型）。自定义映射改下拉选择、追踪标签改失焦保存。全仓单测 26 例全绿。
 - **alpha2.51**：修复 ANC 按钮映射「透传 ↔ 抗风」互换（issue #1）——根因是设置页编辑任一档位时只写被编辑的那一格，其余格在读取时回退到**名义默认映射**而非该型号**档案映射**；设备码 3/4 在 GA2、太空漫游2 上分别对应「抗风」与「透传」，名义顺序恰好与档案相反，于是动过任意一格即两按钮静默互换。现将回退基准改为型号档案，并新增一次性 `healStaleCustomAncMap()` 自愈存量脏配置（档案与名义顺序一致的型号恒不命中，绝不误清用户设置）；设置页改为**四档全量落库**从源头杜绝，提示文案补当前型号档案名。新增 `AncProfileLibTest` 回归用例，全仓单测 26 例全绿。未触碰连接链、协议识别与 GET/SET 语义。
 - **2.50**：引入 DexKit 特征定位——GMS Fast Pair 混淆类名（`dtes`/`dthi`/`dtok`）随上游重编译可能改名，硬编码迟早失效；现新增 `DexKitLocator`，用 dex 内稳定特征串反查，仅当原硬编码类名加载失败时才启用（快路径与改造前逐字等价、零开销），定位失败仍回退硬编码名，**只增强不替代**；`dtok` 无特征串，由 `dtes` 字段 `c` 的类型反推。同时 `abiFilters` 收敛 ABI，APK 减约 0.8MB。实机以假类名强制触发兜底路径验证成功，无任何 hook / 协议 / 设备库行为改动。

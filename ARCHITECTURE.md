@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：alpha2.52（versionCode 287） ｜ 更新日期：2026-09-14
+> 版本：alpha2.53（versionCode 288） ｜ 更新日期：2026-09-14
 
 ## 系统总览
 

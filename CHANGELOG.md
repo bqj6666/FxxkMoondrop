@@ -5,6 +5,18 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.53 (288)
+### 修复：断开连接后英雄卡徽章仍停留在旧编解码器
+- **根因（两处叠加，缺一不可）**：
+  1. `codecLabel` 为缓存字段，断开时从不清空 —— 徽章继续显示上一次查到的编解码器，与「未连接」的真实状态矛盾。
+  2. 断连广播只走 `updateAncStatus`（不走 `updateStatus`），而徽章原先只在 `updateStatus` 内刷新 —— 状态变化根本没触发重算。
+- **修复**：
+  - `linkTypeLabel()` 无链路时返回 `null`（原返回「未连接」字符串）。让调用方直接判断「是否该丢弃缓存」，避免依赖字符串比较。
+  - `badgeText()` 检测到无链路即清空 `codecLabel`；`refreshCodecBadge()` 无链路直接返回，不白跑一次 dumpsys。
+  - 徽章刷新接入 `updateAncStatus`，随连接状态广播同步更新。
+- **该缺陷影响 `alpha2.52`（287），该版本已撤回**，请升级到本版。
+- 版本号升至 **alpha2.53**（versionCode 288）
+
 ## alpha2.52 (287)
 ### 界面按 Material 3 规范统一重构
 - **大标题随滚动收缩**：三页统一为 M3 LargeTopAppBar 形态（展开 152dp / 收起 64dp，标题 28sp→22sp）。内容自标题下方穿过、标题钉在上层。`ScrollView` 必须 `clipToPadding=false`，否则顶部内边距区成为裁剪区，标题收起后中间会空出一条缝（本次实测踩到并修复）。
