@@ -119,6 +119,7 @@ class HeadsetDetectService : Service() {
         AppLog.i(TAG, "HeadsetDetectService created (multi-path detect)")
         AncBridge.bind(this) // alpha1.20: 绑定广播 Context（模式状态同步通道）
         GaiaBleClient.getInstance().init(this) // alpha1.32: 注册 LE 地址 receiver + 无缓存时请求发现
+        DeviceMatcher.loadPersisted(this) // alpha2.52: 恢复指纹探测的学习/拒绝名单
 
         receiver = HeadsetReceiver()
         val f = IntentFilter()
@@ -279,23 +280,40 @@ class HeadsetDetectService : Service() {
             if (adapter == null || !adapter.isEnabled) return
 
             val all = ArrayList<BluetoothDevice>()
+            // alpha2.52: 只有真正在放音的 A2DP/HFP 设备参与协议指纹探测，
+            // 范围天然收敛为当前活跃音频设备，不会扩散到车机/手环/其他耳机。
+            val audioAddrs = HashSet<String>()
             val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             if (bm != null) {
                 try { all.addAll(bm.getConnectedDevices(BluetoothProfile.GATT)) } catch (_: Exception) { }
             }
             val ap = a2dpProxy
             if (a2dpReady && ap != null) {
-                try { all.addAll(ap.connectedDevices) } catch (_: Exception) { }
+                try {
+                    val l = ap.connectedDevices
+                    all.addAll(l)
+                    for (d in l) audioAddrs.add(d.address)
+                } catch (_: Exception) { }
             }
             val hp = headsetProxy
             if (headsetReady && hp != null) {
-                try { all.addAll(hp.connectedDevices) } catch (_: Exception) { }
+                try {
+                    val l = hp.connectedDevices
+                    all.addAll(l)
+                    for (d in l) audioAddrs.add(d.address)
+                } catch (_: Exception) { }
             }
 
             val now = HashSet<String>()
             for (d in all) {
-                val n = d.name
-                if (n != null && DeviceMatcher.isMoondrop(n)) {
+                val n = d.name ?: continue
+                if (DeviceMatcher.isMoondrop(n)) {
+                    now.add(d.address + "|" + n)
+                } else if (audioAddrs.contains(d.address) && DeviceMatcher.allowProbe(n)) {
+                    // alpha2.52: 型号名未收录（如「Robin's Earphones」）但确实是当前已连接
+                    // 的音频设备 -> 放行一次协议指纹探测，由服务发现最终裁定：
+                    // 命中 GAIA/9ECA 则 learn 记住并持久化，失败则 reject 永久剔除。
+                    AppLog.i(TAG, "probe unnamed model: " + n + " " + d.address)
                     now.add(d.address + "|" + n)
                 }
             }

@@ -1413,6 +1413,10 @@ class OverviewFragment : Fragment() {
     }
 
     private fun refreshAnc() {
+        // alpha2.52: 用户主动点「刷新状态」= 明确要求重试。
+        // 清空探测失败名单，让此前被判定为「无 GAIA/9ECA」的设备重新走一遍
+        // 协议指纹探测（HeadsetDetectService 下一轮轮询内放行，最长约 5 秒）。
+        DeviceMatcher.clearRejected(requireContext())
         refreshAnc(true, force = true)
     }
 
@@ -1491,12 +1495,19 @@ class OverviewFragment : Fragment() {
                     requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("enable", true))
                 Lang.t("✅ 运行中", "✅  Running") else Lang.t("❌ 未运行", "❌  Not running")
 
-    /** alpha2.4: 左右耳电量 → 运行状态面板（与弹窗同源 BatteryStore） */
-    private fun updateBatteryStatus() {
+    /** alpha2.4: 左右耳电量 → 运行状态面板（与弹窗同源 BatteryStore）
+     *  alpha2.52: 显隐判据绑定耳机「实时连接态」，与同一卡片内「耳机连接」行完全一致。
+     *  原先只看 gaia.deviceAddress —— 那是最后锁定的地址，耳机断开后可能被 GATT
+     *  重连逻辑保活，于是未连接时电量行仍残留显示。
+     *  @param connectedMac 面板路径传入已算好的连接态；省略则实时查询
+     *                      （HeadsetGate.getConnectedMac 主线程走非阻塞 quickScan） */
+    private fun updateBatteryStatus(
+            connectedMac: String? = HeadsetGate.getConnectedMac(requireContext()),
+            sim: Boolean = GaiaBleClient.isSimConnected()) {
         val bVal = battVal ?: return
         val gaia = GaiaBleClient.getInstance()
-        var mac = gaia.deviceAddress
-        if (mac == null && GaiaBleClient.isSimConnected()) mac = SIM_MAC
+        var mac: String? = if (connectedMac != null) (gaia.deviceAddress ?: connectedMac) else null
+        if (mac == null && sim) mac = SIM_MAC
         val text: String
         if (mac != null) {
             val l = BatteryStore.getLeft(mac)
@@ -1558,6 +1569,11 @@ class OverviewFragment : Fragment() {
         card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
                 LinearLayout.LayoutParams(-1, -2))
         battRow = makeStatusRow(R.drawable.ic_check, Lang.t("左右耳电量", "L/R Battery"), 2)
+        // alpha2.52: 新建行默认 GONE 并把动画状态复位。
+        // 原实现新建行是默认 VISIBLE，而 battRowShown 初始为 false，
+        // 当 show==false 时 `show != battRowShown` 判定不成立 -> 漏掉隐藏 -> 未连接时残留显示。
+        battRowShown = false
+        battRow?.visibility = View.GONE
         card.addView(battRow, LinearLayout.LayoutParams(-1, -2))
         root.addView(card, lp(false))
     }
@@ -1606,7 +1622,7 @@ class OverviewFragment : Fragment() {
         val hs = if (mac != null) Lang.t("已连接", "Connected") else (if (sim) Lang.t("已连接（模拟）", "Connected (simulated)") else Lang.t("未连接", "Not connected"))
         headsetStateVal?.text = hs
         headsetStateVal?.setTextColor(if (mac != null || sim) green else onVariantColor)
-        updateBatteryStatus()
+        updateBatteryStatus(mac, sim)
     }
 
     private val gaiaUiCallback = object : GaiaBleClient.Callback {

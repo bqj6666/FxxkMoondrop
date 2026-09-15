@@ -907,6 +907,8 @@ class GaiaBleClient private constructor() {
                     connected = true
                     connectedDeviceName = device.name ?: connectedDeviceName
                     Log.i(GaiaConstants.TAG, "RFCOMM connected: " + connectedDeviceName)
+                    // alpha2.52: RFCOMM/SPP 路径同样证明这是目标设备 -> 记住设备名
+                    DeviceMatcher.learn(context, device.name ?: connectedDeviceName)
                     AppLog.i(GaiaConstants.TAG, "protocol: RFCOMM/SPP connected (" + connectedDeviceName + ")")
                     probe.reset()
                     probe.startProbes()
@@ -926,7 +928,12 @@ class GaiaBleClient private constructor() {
                     }, 4000)
                 }
             } else {
-                handler.post { callback?.onError("device unsupported (GAIA/9ECA/RFCOMM)") }
+                handler.post {
+                    // alpha2.52: GAIA + 9ECA + RFCOMM 全失败 -> 该设备确实不受支持，
+                    // 记入拒绝名单，避免每次连接都重复探测（最终裁定点，唯一）
+                    DeviceMatcher.reject(context, device.name)
+                    callback?.onError("device unsupported (GAIA/9ECA/RFCOMM)")
+                }
             }
         }.start()
     }
@@ -1353,6 +1360,9 @@ class GaiaBleClient private constructor() {
                 }
                 connected = true
                 probe.reset()
+                // alpha2.52: 服务发现确认 GAIA/9ECA 存在 -> 记住设备名，名字门禁此后直接放行
+                DeviceMatcher.learn(context,
+                        runCatching { g.device?.name }.getOrNull() ?: cachedLeName)
                 val okAddr = deviceAddress
                 if (okAddr != null) {
                     everConnected = true

@@ -64,6 +64,9 @@ class FastPairHookEntry {
                 sModCtx = app.createPackageContext("com.fxxkmoondrop.secret",
                         Context.CONTEXT_IGNORE_SECURITY)
                 Log.d(TAG, "[FastPairHook] mod ctx ready: " + sModCtx)
+                // alpha2.52: GMS 进程侧也恢复指纹探测的学习/拒绝名单，
+                // 使「服务发现确认过的型号」在本进程同样放行（与 HeadsetDetectService 同源 prefs）
+                DeviceMatcher.loadPersisted(sModCtx)
             }
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] mod ctx init fail: " + t)
