@@ -133,5 +133,28 @@ class EnvProbe private constructor() {
         fun isCleanEnv(ctx: Context?): Boolean {
             return !isRooted() && !isFastPairHookActive(ctx)
         }
+
+        /**
+         * **无 Root 模式**：设备上没有 Root（因而 LSPosed 模块也必然不可用）。
+         *
+         * 此模式下自动回落为「仅靠 GAIA BLE 直连」控制耳机：
+         * 通知栏的控制按钮与 App 主界面照常可用（读电量、切降噪都走
+         * 标准 BluetoothGatt，本身不需要 Root），而所有依赖 Root 的增强功能
+         * （GMS 桥接 Hook、官方面板注入、su 拉起官方 App、Root 强力保活）
+         * 一律静默停用，不再尝试、也不再报错或弹窗。
+         *
+         * 只探测文件存在，不执行 su，无阻塞，可主线程调用。
+         */
+        @JvmStatic
+        fun isNoRootMode(): Boolean = !isRooted()
+
+        /** 无 Root 模式下不可用的功能说明（UI 展示用，按语言返回）。 */
+        @JvmStatic
+        fun noRootSummary(ctx: Context?): String {
+            if (ctx == null) return ""
+            return Lang.t(ctx,
+                "无 Root 模式：仅通过通知栏与主界面控制降噪（GAIA 直连，无需 Root）",
+                "No-root mode: control noise cancellation from the notification and main UI only (GAIA direct, no root needed)")
+        }
     }
 }

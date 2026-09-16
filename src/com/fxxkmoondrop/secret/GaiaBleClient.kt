@@ -221,6 +221,14 @@ class GaiaBleClient private constructor() {
                 Thread({
                     try {
                         val rooted = EnvProbe.isRooted()
+                        // 无 Root 模式：模块必然不可用，ping 只会白等满 4 秒超时。
+                        // 跳过探测直接走内置自扫（下面两个分支的结果本来就一样）。
+                        if (!rooted) {
+                            AppLog.i(GaiaConstants.TAG,
+                                "no-root mode -> app self-scan (skip hook probe)")
+                            handler.postDelayed({ startGenericScan() }, 800)
+                            return@Thread
+                        }
                         val hookOk = EnvProbe.isFastPairHookActive(context)
                         Log.d(GaiaConstants.TAG, "env: root=" + rooted + " module=" + hookOk)
                         if (hookOk) {

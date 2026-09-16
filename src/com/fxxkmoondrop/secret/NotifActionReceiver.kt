@@ -16,6 +16,14 @@ class NotifActionReceiver : BroadcastReceiver() {
         val mode = intent.getIntExtra(DeviceNotif.EXTRA_MODE, -1)
         if (mode !in 0..5) return
         Log.i("MoondropNotif", "notif action -> anc mode " + mode)
+        // 无 Root 模式下没有 Root 强力保活，App 进程可能已被回收。
+        // 这里先把服务拉起来（幂等：已在跑则只是一次 onStartCommand），
+        // 让 GAIA 重连；本次点击仍立即下发，不等连接完成。
+        try {
+            context.startService(Intent(context, HeadsetDetectService::class.java))
+        } catch (t: Throwable) {
+            Log.w("MoondropNotif", "ensure service from notif fail", t)
+        }
         try {
             AncBridge.setAncMode(mode)
         } catch (t: Throwable) {

@@ -123,6 +123,8 @@ class LogCollector {
 
         /** 用 Root 复制到公共根目录；失败返回 null。 */
         private fun tryCopyToPublicRoot(src: File, fileName: String): String? {
+            // 无 Root 模式没有 su 可用，直接走兜底（调用方本来就有非 Root 路径）。
+            if (EnvProbe.isNoRootMode()) return null
             try {
                 val dest = Environment.getExternalStorageDirectory().absolutePath + "/" + fileName
                 val cmd = "rm -f '$dest'; cp '${src.absolutePath}' '$dest'; chmod 644 '$dest'; ls -l '$dest'"

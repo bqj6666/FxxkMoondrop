@@ -237,27 +237,49 @@ class SettingsFragment : Fragment() {
         // ── 第 3 项：分类功能开关 ──
         //  每个开关对应一条真实生效的链路：关掉后相应 hook / 通知即停用（跨进程读同一个 SP）。
         //  默认全开，保持既有行为不变。
+        // 无 Root 模式：官方集成依赖 GMS Hook（LSPosed，需 Root），此模式下必然不可用。
+        // 置灰 + 说明，避免用户开了却没有任何效果、误以为功能坏了。
+        val noRootMode = EnvProbe.isNoRootMode()
+        if (noRootMode) {
+            box.addView(makeSubLabel(Lang.t(
+                "无 Root 模式：仅通知栏与主界面控制降噪；以下官方集成项不可用",
+                "No-root mode: control ANC from notification & main UI only; official integration unavailable")))
+        }
         box.addView(makeSubLabel(Lang.t("官方集成", "Official integration")))
         val swOfficial = makeTintedSwitch()
-        swOfficial.isChecked = getSP().getBoolean("feat_official_panel", true)
+        swOfficial.isChecked = if (noRootMode) false else getSP().getBoolean("feat_official_panel", true)
+        if (noRootMode) {
+            swOfficial.isEnabled = false
+            swOfficial.isClickable = false
+            swOfficial.alpha = 0.4f
+        }
         val rowOfficial = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_headphones,
                 Lang.t("官方降噪面板", "Official noise-control panel"),
                 Lang.t("把耳机状态接进 Google 的官方降噪面板（音量面板 / 提示音和振动）",
                         "Feed state into Google's official ANC panel (volume & sound panels)"),
                 swOfficial, null)
-        swOfficial.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean("feat_official_panel", checked).commit()
+        if (!noRootMode) {
+            swOfficial.setOnCheckedChangeListener { _, checked ->
+                getSP().edit().putBoolean("feat_official_panel", checked).commit()
+            }
         }
 
         val swDetail = makeTintedSwitch()
-        swDetail.isChecked = getSP().getBoolean("feat_detail_panel", true)
+        swDetail.isChecked = if (noRootMode) false else getSP().getBoolean("feat_detail_panel", true)
+        if (noRootMode) {
+            swDetail.isEnabled = false
+            swDetail.isClickable = false
+            swDetail.alpha = 0.4f
+        }
         val rowDetail = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_tune,
                 Lang.t("蓝牙详情页面板", "Bluetooth details panel"),
                 Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片",
                         "Inject the control card into the system device-details page"),
                 swDetail, null)
-        swDetail.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean("feat_detail_panel", checked).commit()
+        if (!noRootMode) {
+            swDetail.setOnCheckedChangeListener { _, checked ->
+                getSP().edit().putBoolean("feat_detail_panel", checked).commit()
+            }
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail))
         box.addView(spacer(dp(14)))
@@ -294,11 +316,27 @@ class SettingsFragment : Fragment() {
         // ── Root 强力保活 ──
         val swRoot = makeTintedSwitch()
         swRoot.isChecked = getSP().getBoolean("root_protect", false)
+        // 无 Root 模式：这一项根本无法生效（全靠 su），置灰并说明，避免用户开了却没有任何效果
+        val noRoot = EnvProbe.isNoRootMode()
+        if (noRoot) {
+            swRoot.isEnabled = false
+            swRoot.isClickable = false
+            swRoot.alpha = 0.4f
+            // 保留 SP 原值显示：用户可能是在有 Root 时开过，临时无 Root 不该偷偷改掉他的设置。
+            swRoot.isChecked = getSP().getBoolean("root_protect", false)
+        }
         val rowRoot = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bolt, Lang.t("Root 强力保活", "Root force keep-alive"),
-                Lang.t("开机自启 + 后台防杀（需 Root）", "Auto-start + background anti-kill (requires Root)"), swRoot, null)
-        swRoot.setOnCheckedChangeListener { _, checked ->
-            if (checked) showRootWarnDialog(swRoot)
-            else applyRootProtect(false)
+                if (noRoot)
+                    Lang.t("无 Root 模式不可用；通知栏与主界面仍可正常控制降噪",
+                            "Unavailable in no-root mode; notification & main UI still control noise cancellation")
+                else
+                    Lang.t("开机自启 + 后台防杀（需 Root）", "Auto-start + background anti-kill (requires Root)"),
+                swRoot, null)
+        if (!noRoot) {
+            swRoot.setOnCheckedChangeListener { _, checked ->
+                if (checked) showRootWarnDialog(swRoot)
+                else applyRootProtect(false)
+            }
         }
 
         // ── 后台隐藏 ──
@@ -751,6 +789,9 @@ class SettingsFragment : Fragment() {
     }
 
     private fun applyRootProtect(enable: Boolean) {
+        // 无 Root 模式：直接静默返回。这里不该弹「未检测到 Root」错误框 ——
+        // 检测到没 Root 本来就是自动回落的前提，不是用户操作失误。
+        if (enable && EnvProbe.isNoRootMode()) return
         if (enable) {
             if (!hasRoot()) {
                 showSimpleDialog(Lang.t("未检测到 Root", "Root not detected"),

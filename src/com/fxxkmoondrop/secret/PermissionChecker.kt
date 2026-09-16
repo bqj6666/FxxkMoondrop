@@ -67,9 +67,11 @@ class PermissionChecker {
 
             // 5. Root / 特权环境（alpha1.34：显示项，非缺失项）
             val rooted = EnvProbe.isRooted()
-            list.add(Item(Lang.t(ctx, "Root / 特权环境", "Root / privileged env"), true,
-                    if (rooted) Lang.t(ctx, "已检测到 Root（配合 FastPairHook 使用）", "Root detected (use with FastPairHook)")
-                    else Lang.t(ctx, "未检测到（纯净环境：内置自扫可用）", "Not detected (clean env: built-in scan works)"),
+            list.add(Item(Lang.t(ctx, "运行模式", "Run mode"), true,
+                    if (rooted) Lang.t(ctx, "Root 模式：GMS 桥接与官方面板注入可用",
+                            "Root mode: GMS bridge & official panel injection available")
+                    else Lang.t(ctx, "无 Root 模式：仅通知栏与主界面控制降噪（GAIA 直连，无需 Root）",
+                            "No-root mode: noise cancellation from notification & main UI only (GAIA direct)"),
                     ACTION_NONE, 0))
 
             // 6. FastPairHook 模块（LSPosed）（alpha1.34：缺失时提示手动排查）

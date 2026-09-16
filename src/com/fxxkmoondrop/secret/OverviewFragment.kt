@@ -1788,6 +1788,9 @@ class OverviewFragment : Fragment() {
     }
 
     private fun applyRootProtect(enable: Boolean) {
+        // 无 Root 模式：直接静默返回。这里不该弹「未检测到 Root」错误框 ——
+        // 检测到没 Root 本来就是自动回落的前提，不是用户操作失误。
+        if (enable && EnvProbe.isNoRootMode()) return
         if (enable) {
             if (!hasRoot()) {
                 showSimpleDialog(Lang.t("未检测到 Root", "Root not detected"), Lang.t("未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。", "Root permission not detected. Cannot enable force keep-alive. Please confirm the device is rooted and allows su for this app."))
