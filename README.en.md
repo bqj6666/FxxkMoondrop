@@ -1,6 +1,11 @@
 # FxxkMoondrop
 
-> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **alpha2.54** (versionCode 289) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&labelColor=555555)
+![Xposed](https://img.shields.io/badge/Xposed-API_102-E64A19?style=flat-square&labelColor=555555)
+
+![Target](https://img.shields.io/badge/Target-com.google.android.gms_%7C_com.android.settings-007EC6?style=flat-square&labelColor=555555)
+
+> Author: [bqj6666](https://github.com/bqj6666) ｜ Version: **3.0** (versionCode 300) ｜ License: **GPL-3.0** (see [LICENSE](LICENSE))
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -21,10 +26,12 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 - **Extended device control (DC)**: spatial audio / head tracking / gain / LED control; the panel is the device-detail injection described above, with device-code mappings supplied by `AncProfileLib.DcProfile` per model.
 - **Three-protocol auto-detection**: GAIA V3 (BLE) / GAIA V4 (RFCOMM/SPP, PUDDING) / Moondrop private 9ECA0000 auto-routing; falls back to RFCOMM/SPP when BLE fails on dual-mode devices.
 - **9ECA private protocol client**: source switching / EQ / MIC / SN (reuses the same GATT connection, coexists with GAIA).
-- **Material 3 UI**: home page (hero card + status panel + ANC buttons), settings page (Appearance / General / Behavior, follows system dark/light + Material You dynamic color), about page; all using Material 3 components.
-- **Permission check** (full secondary screen): Bluetooth / Notifications / Overlay / Battery whitelist / Root / FastPairHook / GAIA direct — 7 real-time checks, one-tap jump to fix when missing.
+- **Device notification**: battery and noise control are merged into **one** persistent notification (left/right earbuds only, no charging case); mode buttons carry large icons with the active mode highlighted, colored from the system dynamic palette, and are generated from the device's **actually supported** modes.
+- **No-root mode**: when no root is detected, the app automatically falls back to controlling noise cancellation **from the notification and the main UI only** (GAIA BLE direct has never needed root); every root-dependent feature is silently disabled — no errors, no dialogs.
+- **Material 3 UI**: home page (hero card + status panel + ANC buttons), settings page (Appearance / Features / Custom Mapping / Background / Diagnostics, follows system dark/light + Material You dynamic color), about page; all using Material 3 components.
+- **Permission check** (full secondary screen): Bluetooth / Notifications / Battery whitelist / Run mode / FastPairHook / GAIA direct — 6 real-time checks, one-tap jump to fix when missing.
 - **Log capture** (device adaptation): one-tap collect system info / app settings / Bluetooth / runtime environment / logcat — five categories packaged as a ZIP.
-- **Root force keep-alive**, auto-start on boot, background hide (optional toggles).
+- **Root force keep-alive** (root mode only; the toggle is greyed out with an explanation when unrooted), auto-start on boot, background hide (optional toggles).
 - **Display-layer language switching (Chinese/English)**: language preference (Follow system / Chinese / English); main-screen tabs, settings items, ANC panel, log popup, and permission-check page text follow the language; exposed via an exported ContentProvider for the GMS popup to read cross-process.
 
 ## Screenshots
@@ -40,6 +47,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 | Language | **Kotlin** |
 | Build chain | Gradle 8.9 (fixed wrapper) + AGP 8.5.2 + Kotlin 1.9.22 |
 | UI | Material 3, `Theme.Material3.DayNight.NoActionBar` + dynamic color, three-page Fragment architecture |
+| Minimum system | **Android 8.0** (API 26); targetSdk 36 |
 | Module | libxposed API 102 (LSPosed ≥ 2.1.1, scope `com.google.android.gms;com.android.settings`) |
 | Package | `com.fxxkmoondrop.secret` |
 
@@ -57,8 +65,8 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 
 1. Install the APK.
 2. In **LSPosed**, enable it and check the scope `com.google.android.gms` (optionally `com.android.settings`).
-3. Grant Bluetooth / Notification / Overlay permissions (the Settings → "Check permissions" page can jump to fix them in one tap).
-4. The popup defaults to the Google Fast Pair half-sheet; you can also switch to the app's built-in floating card in Settings.
+3. Grant Bluetooth / Notification permissions (the Settings → "Check permissions" page can jump to fix them in one tap).
+4. **Root is optional**: it works without root — when no root is detected the app enters no-root mode and still reads battery and switches ANC over GAIA BLE direct; only the official panel injection, popup icon customization and root keep-alive are disabled.
 
 > ## Need more real-device testing;
 >
@@ -169,6 +177,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **3.0**: Merged the battery and noise-control notifications into a single persistent notification (large-icon mode buttons, Material You dynamic color, generated from the device's supported modes); fixed the official noise-control panel not responding to taps; added Official-integration and Notification feature toggles in Settings and regrouped the page into Appearance / Features / Custom Mapping / Background / Diagnostics; added **no-root mode** (auto fallback to notification + main UI control, all root-dependent features silently disabled); **tightened permissions** by dropping the unused `SYSTEM_ALERT_WINDOW` (the app never creates an overlay) and `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE` (the service never calls `startForeground()`).
 - **alpha2.54**: Fixed a crash when toggling "Dynamic color / AMOLED pure black" repeatedly. The theme switch called `requireActivity().recreate()` from a delayed callback with no cancellation, so rapid toggling queued up multiple rebuilds; the callback also captured the Fragment instance that had since detached, making the next callback throw `Fragment not attached to an activity`. Rebuilds now go through a single entry point `scheduleRebuild()` that cancels pending work before posting, coalesces consecutive requests into one rebuild, and checks `isAdded / activity / isFinishing` before running; `onDestroyView` clears pending callbacks. Measured: 12 taps within 296 ms produce exactly one rebuild, no exceptions.
 - **alpha2.53**: Fixed the hero-card badge keeping a stale codec (e.g. LDAC) after the earbuds disconnect — the codec cache was never cleared, and the badge was not refreshed on the connection-state broadcast. **alpha2.52 has been withdrawn because of this defect; please use this build.**
 - **alpha2.52**: Full Material 3 UI overhaul — collapsing large title (M3 LargeTopAppBar), fadeIn + scaleIn page transition, accent-colored hero card, and theme/language switched to "row + current value + dropdown" (the menu opens at the touch point, selected item filled with the accent color + check mark). Fixed the injected Bluetooth device-details panel collapsing into a single native row (the hook process used the host Context to resolve module resources; both package IDs are `0x7f`, so the IDs hit host resources and threw a swallowed exception). The spatial-audio switch now reuses Settings' own widget (constructing `MaterialSwitch` directly always throws in the Settings process). ANC four-state and popup noise-control buttons moved to Material Symbols vectors; the app icon was rebuilt as an adaptive icon (background / foreground / monochrome). The hero badge now shows the active codec (LDAC / AAC / SBC, …) read over the existing root channel — no codec-name table is kept; it falls back to the link type. Custom mapping now uses dropdowns, and tracking labels save on focus loss. 26 unit tests green.

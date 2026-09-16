@@ -943,7 +943,7 @@ class OverviewFragment : Fragment() {
                 .start()
     }
 
-    /** 跳转授权：运行时权限 / 悬浮窗 / 电池优化 / 打开 App */
+    /** 跳转授权：运行时权限 / 电池优化 / 打开 App */
     private fun fixPermission(it: PermissionChecker.Item) {
         try {
             when (it.action) {
@@ -954,9 +954,6 @@ class OverviewFragment : Fragment() {
                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
                     }
                 }
-                PermissionChecker.ACTION_OVERLAY ->
-                    requireActivity().startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:" + requireContext().packageName)))
                 PermissionChecker.ACTION_BATTERY ->
                     requireActivity().startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                 else -> toast(it.detail)

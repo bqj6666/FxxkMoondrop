@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：alpha2.54（versionCode 289） ｜ 更新日期：2026-09-14
+> 版本：3.0（versionCode 300） ｜ 更新日期：2026-09-16
 
 ## 系统总览
 
@@ -58,8 +58,31 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | `ACTION_REQ_LE_SCAN` | App → GMS | 请求 GMS BLE 扫描发现 LE 地址 |
 | `ACTION_LE_ADDR_FOUND` | GMS → App | 扫描结果回传 |
 | `FASTPAIR_PING` / `PONG` | 双向 | 心跳检测模块是否存活 |
+| `NOTIF_ANC` | 通知按钮 → App | 通知栏档位按钮点击（应用内广播，非跨进程） |
 
 `PrefsProvider`（ContentProvider）提供跨进程 SharedPreferences 读写，App 和 GMS 进程共享配置。
+
+### 无 Root 模式
+
+控制耳机的能力（GAIA BLE 直连读电量、切降噪）走标准 `BluetoothGatt`，**不依赖 Root**。
+未检测到 Root 时进入无 Root 模式，只停用 Root 依赖项，不影响上述主链路：
+
+| Root 依赖项 | 无 Root 模式下的行为 |
+|---|---|
+| GMS Hook（LSPosed） | 不注入；设置页「官方集成」开关置灰 |
+| 弹窗图标自定义（由 GMS 进程内 `readIconBytes()` 读取） | 置灰并说明 |
+| `su` 拉起官方 App（`MoondropBooter`） | 直接跳过，不重试、不刷日志 |
+| Root 强力保活 | 开关置灰，且**保留用户原有设置值** |
+| 启动时的 Fast Pair Hook 探测 | 跳过（原本要 ping 等满 4 秒超时），直接走内置 BLE 自扫 |
+
+保活链在无 Root 下依然完整：`BootReceiver` 开机自启 + `AliveReceiver` AlarmManager 30s 循环；通知按钮被点击时也会顺带 `startService`（幂等），进程被回收后点一下通知即可恢复 GAIA 连接。
+
+### 权限
+
+清单只保留真正在用的权限：`BLUETOOTH_CONNECT`、`BLUETOOTH_SCAN`、`BLUETOOTH`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`。
+
+- 不声明 `SYSTEM_ALERT_WINDOW`：本模块不创建悬浮窗；弹窗是 GMS 进程内的既有窗口，受 GMS 自身权限约束，与本应用无关。
+- 不声明 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE`：`HeadsetDetectService` 从不调用 `startForeground()`，实为普通后台服务。
 
 ## 核心模块
 
@@ -80,6 +103,9 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | **PrefsProvider** | `PrefsProvider.kt` | 53 | 跨进程 ContentProvider；SharedPreferences("cfg") 读写 |
 | **OverviewFragment** | `OverviewFragment.kt` | 1789 | 主页 Fragment；英雄卡 + 状态面板 + ANC 三按钮 + 权限检测 |
 | **M3Ui** | `M3Ui.kt` | 412 | Material 3 UI 组件工厂 |
+| **DeviceNotif** | `DeviceNotif.kt` | 342 | 设备常驻通知（电量 + 降噪控制合并为一条）；自定义 RemoteViews 大图标档位按钮、M3 动态取色、内容指纹去重（避免重发把用户展开的通知打回折叠态）；折叠/展开两份视图以适应折叠态约 48dp 的高度上限 |
+| **NotifActionReceiver** | `NotifActionReceiver.kt` | 33 | 通知档位按钮落地：先幂等拉起服务，再调用 `AncBridge.setAncMode`；无 Root 模式下靠这一步恢复被回收的进程 |
+| **EnvProbe** | `EnvProbe.kt` | 161 | 运行环境探测：Root（仅探文件存在，不执行 su）、FastPairHook 心跳、**无 Root 模式判定**（`isNoRootMode()`） |
 | **DeviceControlBridge** | `DeviceControlBridge.kt` | 182 | 增益/指示灯/空间音频等扩展设备控制回调 |
 | **DeviceDetailsPanel** / **ControlPanel** / **CtrlBus** | `DeviceDetailsPanel.kt` `ControlPanel.kt` `CtrlBus.kt` | - | 注入系统蓝牙设备详情页的降噪 + 功能控制面板（纯 UI 组件，只回调不持 BLE/Gaia 单例） |
 
@@ -89,6 +115,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 |---|---|---|---|
 | **FastPairHookEntry** | `hook/FastPairHookEntry.kt` | 1677 | GMS 进程全部 Hook 逻辑；弹窗生命周期、图标/电量/ANC 按钮注入、BLE 扫描借道 |
 | **PopupProfile** | (内嵌于 FastPairHookEntry) | - | 屏幕布局参数表；按分辨率分档（6.1寸/6.3寸），坐标集中配置 |
+| **HearableControlHook** | `hook/HearableControlHook.kt` | 1021 | Hearable Controls（GFPS 消息组 0x08）官方链路桥接：DexKit 特征定位捕获官方 ANC 子模块、放开 Fast Pair 缓存门禁、在**意图入口**与**管理器发送出口**两处接住用户点击并转 GAIA、把 App 真实状态注入官方 DataStore |
 | **XposedEntry** | `XposedEntry.kt` | 403 | LSPosed 模块入口；路由到各进程 Hook |
 
 ### LSPosed 模块入口路由

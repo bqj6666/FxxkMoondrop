@@ -244,9 +244,11 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 2. Hook `dthi.O(ImageView, dtok)` 方法——注入自定义设备图标 Bitmap
 3. Hook `HalfSheetActivity` 生命周期——在弹窗显示后注入 ANC 控制按钮
 
-### 应用自带悬浮卡片（已经废弃）
+### 应用自带悬浮卡片（已经废弃，代码与权限均已移除）
 
-不依赖 Xposed，通过 `WindowManager` 添加 TYPE_APPLICATION_OVERLAY 窗口。设置页可切换两种模式。
+早期方案：不依赖 Xposed，通过 `WindowManager` 添加 `TYPE_APPLICATION_OVERLAY` 窗口。
+
+**现状**：该路径已完全废弃并删除，设置页也从未保留「切换两种模式」的入口。随之而来的 `SYSTEM_ALERT_WINDOW` 权限声明已在 3.0 **从清单移除**（本模块不创建任何悬浮窗，弹窗是 GMS 进程内的既有窗口，受 GMS 自身权限约束），权限检测页的对应检查项一并删除。
 
 ## LSPosed 模块架构
 

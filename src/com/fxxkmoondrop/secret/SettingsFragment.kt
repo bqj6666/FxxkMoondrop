@@ -106,6 +106,11 @@ class SettingsFragment : Fragment() {
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), 0, dp(16), dp(24))
 
+        // 无 Root 模式（本页多处要用：官方集成 / 弹窗图标 / Root 保活）。
+        // 依赖 GMS Hook（LSPosed，需 Root）的功能在此模式下必然不可用，一律置灰 + 说明，
+        // 避免用户开了却没有任何效果、误以为功能坏了。
+        val noRootMode = EnvProbe.isNoRootMode()
+
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
         // ── 外观（对齐 org.lsposed.manager：每项独立卡片 + 12dp 卡间距）──
@@ -198,7 +203,8 @@ class SettingsFragment : Fragment() {
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
         val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_shield, Lang.t("检查权限", "Check permissions"),
-                Lang.t("蓝牙、通知、悬浮窗、Root/模块环境", "Bluetooth, notifications, floating window, Root/module env"),
+                Lang.t("蓝牙、通知、电池白名单、运行模式与模块环境",
+                        "Bluetooth, notifications, battery whitelist, run mode & module env"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             requireActivity().startActivity(Intent(requireContext(), PermissionActivity::class.java))
         }
@@ -221,13 +227,28 @@ class SettingsFragment : Fragment() {
             iconState.visibility = View.VISIBLE
         }
         iconCustomExistsAsync(showIconState)
-        val rowIcon = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, Lang.t("弹窗图标", "Popup icon"),
-                Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）", "Earbud icon shown in the Google popup (choose from gallery, or restore default)"), iconSlot) {
+        // 无 Root 模式：自定义图标由 GMS 进程内的 Hook 读取（readIconBytes），
+        // 没有 Root / LSPosed 时 Hook 不工作，选了也不会有任何效果 —— 置灰并说明。
+        val iconRow = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, Lang.t("弹窗图标", "Popup icon"),
+                if (noRootMode)
+                    Lang.t("无 Root 模式不可用（图标由 GMS 弹窗侧的模块读取）",
+                            "Unavailable in no-root mode (read by the module inside the GMS popup)")
+                else
+                    Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）",
+                            "Earbud icon shown in the Google popup (choose from gallery, or restore default)"),
+                iconSlot) {
             iconCustomExistsAsync { exists ->
                 showIconState(exists)
                 showIconDialog(exists)
             }
         }
+        if (noRootMode) {
+            iconRow.isEnabled = false
+            iconRow.alpha = 0.4f
+            iconRow.setOnClickListener(null)
+            iconSlot.visibility = android.view.View.GONE
+        }
+        val rowIcon = iconRow
         box.addView(spacer(dp(10)))
 
         // 「行为」这个筐太杂（官方集成 / 通知 / 保活 / 后台 / 界面元素混在一起），
@@ -237,9 +258,6 @@ class SettingsFragment : Fragment() {
         // ── 第 3 项：分类功能开关 ──
         //  每个开关对应一条真实生效的链路：关掉后相应 hook / 通知即停用（跨进程读同一个 SP）。
         //  默认全开，保持既有行为不变。
-        // 无 Root 模式：官方集成依赖 GMS Hook（LSPosed，需 Root），此模式下必然不可用。
-        // 置灰 + 说明，避免用户开了却没有任何效果、误以为功能坏了。
-        val noRootMode = EnvProbe.isNoRootMode()
         if (noRootMode) {
             box.addView(makeSubLabel(Lang.t(
                 "无 Root 模式：仅通知栏与主界面控制降噪；以下官方集成项不可用",

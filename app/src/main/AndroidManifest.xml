@@ -13,10 +13,12 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- 不声明 FOREGROUND_SERVICE / FOREGROUND_SERVICE_CONNECTED_DEVICE：
+         HeadsetDetectService 从不调用 startForeground()，实为普通后台服务
+         （靠 START_STICKY + AlarmManager 保活），该权限无任何作用。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 不再声明 SYSTEM_ALERT_WINDOW：本模块从不创建悬浮窗，
+         弹窗走的是 GMS 进程内的既有窗口（受 GMS 自身权限约束），与本应用无关。 -->
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
@@ -46,8 +48,7 @@
 
         <service
             android:name=".HeadsetDetectService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:exported="false" />
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

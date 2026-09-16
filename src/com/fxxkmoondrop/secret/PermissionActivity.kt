@@ -6,7 +6,6 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -23,7 +22,7 @@ import android.widget.Toast
 
 /**
  * alpha2.1: 权限检测 —— 官方 M3 二级页（TopBar + tonal 状态头 + 官方分组卡列表）。
- * 检查蓝牙/通知/悬浮窗/电池白名单/Root/FastPairHook/GAIA 直连，缺失项可点击跳转修复。
+ * 检查蓝牙/通知/电池白名单/运行模式/FastPairHook/GAIA 直连，缺失项可点击跳转修复。
  */
 class PermissionActivity : Activity() {
 
@@ -244,9 +243,6 @@ class PermissionActivity : Activity() {
                         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2)
                     }
                 }
-                PermissionChecker.ACTION_OVERLAY -> startActivity(
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:$packageName")))
                 PermissionChecker.ACTION_BATTERY -> startActivity(
                         Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                 else -> toast(it.detail)

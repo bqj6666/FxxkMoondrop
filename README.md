@@ -1,5 +1,10 @@
 # FxxkMoondrop
 
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&labelColor=555555)
+![Xposed](https://img.shields.io/badge/Xposed-API_102-E64A19?style=flat-square&labelColor=555555)
+
+![Target](https://img.shields.io/badge/Target-com.google.android.gms_%7C_com.android.settings-007EC6?style=flat-square&labelColor=555555)
+
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
 > 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.0**（versionCode 300） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
@@ -23,10 +28,12 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **扩展设备控制（DC）**：空间音频 / 头部追踪 / 增益 / 指示灯控制，面板即上条所述详情页注入组件；设备码映射由 `AncProfileLib.DcProfile` 按型号提供
 - **三协议自动识别**：GAIA V3（BLE）/ GAIA V4（RFCOMM/SPP，布丁）/ Moondrop 私有 9ECA0000 自动路由；dual-mode 设备 BLE 失败回退 RFCOMM/SPP
 - **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接，与 GAIA 并存）
-- **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 通用 / 行为，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
-- **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，缺失一键跳转修复
+- **设备通知**：耳机电量与降噪控制合并为**一条**常驻通知（只显示左右耳，不含充电盒）；档位按钮带大图标、当前档位实心高亮，颜色随系统动态取色；按钮按设备**实际支持的能力**生成
+- **无 Root 模式**：未检测到 Root 时自动回落为**仅通过通知栏与 App 主界面控制降噪**（GAIA BLE 直连本就不需要 Root）；所有 Root 依赖项静默停用，不报错、不弹窗
+- **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 功能 / 自定义映射 / 后台 / 诊断，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
+- **权限检测**（整页二级界面）：蓝牙 / 通知 / 电池白名单 / 运行模式 / FastPairHook / GAIA 直连 6 项实时检查，缺失一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
-- **Root 强力保活**、开机自启、后台隐藏（可选开关）
+- **Root 强力保活**（仅 Root 模式；无 Root 时该开关自动置灰并说明）、开机自启、后台隐藏（可选开关）
 - **显示层中英文切换**：语言偏好（跟随系统 / 中文 / English），主界面三 Tab、设置项、降噪面板、日志弹窗、检查权限页文案随语言切换；通过 exported ContentProvider 供 GMS 弹窗跨进程读取
 
 ## 软件截图
@@ -42,6 +49,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | 语言 | **Kotlin** |
 | 构建链 | Gradle 8.9（wrapper 固定）+ AGP 8.5.2 + Kotlin 1.9.22 |
 | UI | Material 3,`Theme.Material3.DayNight.NoActionBar`+ 动态取色，三页 Fragment 架构 |
+| 最低系统 | **Android 8.0**（API 26）；targetSdk 36 |
 | 模块 | libxposed API 102（LSPosed ≥ 2.1.1，作用域 `com.google.android.gms;com.android.settings`） |
 | 包名 | `com.fxxkmoondrop.secret` |
 
@@ -59,8 +67,8 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 1. 安装 APK
 2. 在 **LSPosed** 中启用并勾选作用域 `com.google.android.gms`（可选 `com.android.settings`）
-3. 授予蓝牙 / 通知 / 悬浮窗权限（设置页「检查权限」可一键跳转修复）
-4. 弹窗默认 Google Fast Pair 半屏弹窗，也可在设置中切换为应用自带悬浮卡片
+3. 授予蓝牙 / 通知权限（设置页「检查权限」可一键跳转修复）
+4. **Root 可选**：没有 Root 也能用 —— 未检测到 Root 时自动进入无 Root 模式，照常读电量、切降噪（走 GAIA BLE 直连），仅官方面板注入、弹窗图标自定义、Root 保活等增强项停用。机制详见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「无 Root 模式」
 
 > ##  需要更多耳机实机测试;
 >
@@ -158,9 +166,9 @@ FxxkMoondrop-repo/
 | [ADAPTATION.md](ADAPTATION.md) | 设备适配说明：协议知识、踩坑经验、实测数据、BLE/9ECA 帧格式、ANC 设备码映射、连接策略 | 新增耳机适配、排查连接/协议问题时阅读 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构：双进程模型、跨进程通信、核心模块、关键数据流、弹窗布局、协议架构与设计原则 | 理解项目整体设计、做较大改动前阅读 |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | 开发指南：构建环境与命令、签名与 EDF 作用域注入、目录结构、版本号规范、LSPosed 元信息、依赖清单、调试技巧、发布检查清单 | 本地编译、二次开发、提 MR 前检查 |
-| [CHANGELOG.md](CHANGELOG.md) | 更新日志：按 `alpha.x.y` 逐条记录的功能、修复与逆向进度 | 查看版本演进历史 |
+| [CHANGELOG.md](CHANGELOG.md) | 更新日志：按版本号逐条记录（3.0 起为正式版号，此前为 `alpha.x.y`）的功能、修复与逆向进度 | 查看版本演进历史 |
 
-> 版本号格式采用 `alpha.x.y`：`x` 为里程碑、`y` 为迭代，`versionCode` 单调递增。详见 [DEVELOPMENT.md 版本号规范](DEVELOPMENT.md#版本号规范)。
+> 版本号格式：**3.0 起为正式版** `主版本.次版本`；此前为 `alpha.x.y`（`x` 里程碑、`y` 迭代）。`versionCode` 单调递增。详见 [DEVELOPMENT.md 版本号规范](DEVELOPMENT.md#版本号规范)。
 
 ## 致谢
 
@@ -171,7 +179,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
-- **3.0**：新增无 Root 模式 —— 未检测到 Root 时自动回落为仅通过通知栏与 App 主界面控制降噪（GAIA 直连本就不需要 Root），所有 Root 依赖项静默停用且不报错、不弹窗；设备常驻通知合并为一条（电量 + 降噪档位按钮，大图标 + M3 动态取色，按设备能力动态生成档位）；修复官方降噪面板点击无反应（点击走管理器发送出口，原 hook 的两条路径都到不了，且发包被「等上一次 SET 响应」永久挡住）；设置页新增官方集成 / 通知四类功能开关，并按功能域重组为外观 / 功能 / 自定义映射 / 后台 / 诊断。
+- **3.0**：新增无 Root 模式 —— 未检测到 Root 时自动回落为仅通过通知栏与 App 主界面控制降噪（GAIA 直连本就不需要 Root），所有 Root 依赖项静默停用且不报错、不弹窗；设备常驻通知合并为一条（电量 + 降噪档位按钮，大图标 + M3 动态取色，按设备能力动态生成档位）；修复官方降噪面板点击无反应（点击走管理器发送出口，原 hook 的两条路径都到不了，且发包被「等上一次 SET 响应」永久挡住）；设置页新增官方集成 / 通知四类功能开关，并按功能域重组为外观 / 功能 / 自定义映射 / 后台 / 诊断；**权限收紧**：移除从未使用的 `SYSTEM_ALERT_WINDOW`（本模块不创建悬浮窗）与 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE`（该服务从不调用 `startForeground()`，实为普通后台服务），清单只剩真正在用的权限。
 - **alpha2.54**：修复反复开关「动态取色 / AMOLED 纯黑」导致崩溃。根因是主题开关在延迟回调里直接 `requireActivity().recreate()`，既无取消机制（连点会排队多个重建），闭包又持有已 detach 的 Fragment 实例，后一个回调必抛 `Fragment not attached to an activity`。现改为统一入口 `scheduleRebuild()`：先取消再投递、连续请求合并为一次重建，并在执行前三重检查 `isAdded / activity / isFinishing`；`onDestroyView` 一并清理挂起回调。实测 12 次连续点击（296ms 内）只重建 1 次、无异常。
 - **alpha2.53**：修复断开连接后英雄卡徽章仍停留在旧编解码器（如 LDAC）。根因是编解码器缓存断开时未清空，且徽章刷新未挂到连接状态广播上。**alpha2.52 因该缺陷已撤回，请使用本版**。
 - **alpha2.52**：界面按 Material 3 规范统一重构 —— 大标题随滚动收缩（M3 LargeTopAppBar）、切页 fadeIn + scaleIn 动效、英雄卡改强调色、主题与语言改为「行 + 当前值 + 下拉菜单」（菜单出现在手指落点、选中项强调色 + ✓）。修复蓝牙设备详情注入面板退化为单行条目（hook 进程误用宿主 Context 解析模块资源，双方包 ID 同为 `0x7f`，撞上宿主资源抛异常被吞）；空间音频开关改用设置 App 原版控件（`new MaterialSwitch` 在 Settings 进程必崩）。ANC 四态与弹窗降噪按钮改 Material Symbols 矢量；应用图标重构为自适应图标（background / foreground / monochrome）。英雄卡徽章改显示当前编解码器（LDAC / AAC / SBC 等，经 Root 读取 dumpsys，不维护名称表，读不到退回链路类型）。自定义映射改下拉选择、追踪标签改失焦保存。全仓单测 26 例全绿。
