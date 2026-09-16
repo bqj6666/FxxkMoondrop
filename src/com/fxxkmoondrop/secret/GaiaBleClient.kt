@@ -92,6 +92,15 @@ class GaiaBleClient private constructor() {
      * 点到没反应的按钮。
      */
     @Volatile private var gaiaReady = false
+
+    /**
+     * 协议指纹是否已被**证伪**：GATT 服务发现成功，但既没有 GAIA 服务也没有 9ECA 服务。
+     *
+     * 只有它为 true 时才允许把设备写进 [DeviceMatcher] 的拒绝名单 —— 这是「设备确实不支持」
+     * 的唯一铁证。以传输层失败（连接超时、status=147、耳机刚出仓未就绪、信号差）作依据
+     * 去拉黑设备是错的：未收录型号只能靠指纹探测放行，撞上一次抖动就会被永久剔出。
+     */
+    @Volatile private var protocolRefuted = false
     // alpha2.38.9: RFCOMM/SPP transport (for Classic BT devices like Pudding)
     @Volatile private var useRfcomm = false
     private var rfcommTransport: GaiaRfcommTransport? = null
@@ -336,6 +345,7 @@ class GaiaBleClient private constructor() {
         AppLog.i(GaiaConstants.TAG, "connect() addr=" + address + " cachedLe=" + cachedLeAddress)
         simConnected = false
         gaiaReady = false   // 新会话：GAIA 需重新完成服务发现才可用
+        protocolRefuted = false   // 新会话：协议指纹待本轮服务发现重新裁定
         if (context == null) context = ctx.applicationContext
         registerLeAddrReceiver()
         if (cachedLeAddress == null && context != null) {
@@ -955,9 +965,19 @@ class GaiaBleClient private constructor() {
                 }
             } else {
                 handler.post {
-                    // alpha2.52: GAIA + 9ECA + RFCOMM 全失败 -> 该设备确实不受支持，
-                    // 记入拒绝名单，避免每次连接都重复探测（最终裁定点，唯一）
-                    DeviceMatcher.reject(context, device.name)
+                    // 3.0.1: 拉黑的唯一依据是「协议指纹被证伪」（服务发现成功但无 GAIA/9ECA）。
+                    // 传输层失败 —— 连接超时、status=147、耳机未就绪、信号差 —— 都不能判断
+                    // 设备是否支持协议，这里只记日志，等下一轮 detect 轮询继续重试。
+                    // 此前无条件 reject 会把一次连不上当成「设备不支持」，未收录型号
+                    // （名字不含关键字，只能靠指纹探测放行）撞上抖动即被永久拉黑。
+                    if (protocolRefuted) {
+                        DeviceMatcher.reject(context, device.name)
+                        AppLog.w(GaiaConstants.TAG,
+                                "no GAIA/9ECA in GATT -> rejected: " + device.name)
+                    } else {
+                        AppLog.i(GaiaConstants.TAG,
+                                "RFCOMM failed without refutation -> keep probing: " + device.name)
+                    }
                     callback?.onError("device unsupported (GAIA/9ECA/RFCOMM)")
                 }
             }
@@ -1335,6 +1355,7 @@ class GaiaBleClient private constructor() {
                 return
             }
             try {
+                protocolRefuted = false   // 本轮服务发现重新裁定，避免沿用上一次的结论
                 AppLog.i(GaiaConstants.TAG, "GATT services(" + (g.services?.size ?: 0) + "): " +
                         (g.services?.joinToString(" ") { it.uuid.toString() } ?: "?"))
                 val service = g.getService(GaiaConstants.UUID_SERVICE)
@@ -1380,6 +1401,8 @@ class GaiaBleClient private constructor() {
                     }
                 } catch (e: Exception) { Log.e(GaiaConstants.TAG, "src service lookup failed", e) }
                 if (!hasGaia && !hasSrc9) {
+                    // 服务发现成功、但 GATT 里两个协议服务都没有 -> 协议指纹证伪（唯一可拉黑依据）
+                    protocolRefuted = true
                     Log.d(GaiaConstants.TAG, "no GATT services found, trying RFCOMM/SPP fallback")
                     AppLog.i(GaiaConstants.TAG, "protocol: no GATT services, trying RFCOMM/SPP fallback")
                     // alpha2.41.9: 该地址未提供 GAIA/9ECA 服务 -> 判为不可用地址：
