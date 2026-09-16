@@ -123,6 +123,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 ```
 XposedEntry (META-INF/xposed/java_init.list)
 ├── onPackageReady("com.google.android.gms") → FastPairHookEntry.onGmsLoaded()
+│                                               + HearableControlHook 官方耳机控制面板（Hearable Controls）桥接
 ├── onPackageReady("com.android.settings")  → hookSettings() 注入耳机入口 + 蓝牙设备详情页降噪/功能控制面板
 ├── onPackageReady("com.android.bluetooth") → hookBluetooth() A2DP 状态监听
 └── onPackageReady("com.moondroplab...")     → hookMoondrop() 逆向参考
@@ -186,6 +187,25 @@ Settings 进程 hookDeviceDetailsPanel(ClassLoader)
 面板 View 挂载时注册 ContentObserver 监听 content://com.fxxkmoondrop.secret.prefs/dc_cmd
 → 模块端状态变化 notifyChange → 重新 fetchDcState() 并刷新面板；卸载时注销
 ```
+
+### 5. Google 官方耳机控制面板桥接（Hearable Controls）
+
+系统蓝牙页 / Google 设置里的「耳机控制」面板由 GMS 的 Hearable Controls 链路驱动（GFPS 消息组 `0x08`）。本机没有 GFPS Message Stream（`EventStreamManager: No available EventStreamMedium`），官方入口发包前要等「上一次 SET 的响应」，而这个响应永远等不到，于是点击既不经过子模块的 `in()` 也走不到发包出口 —— 现象是**点了没反应、随后高亮回弹**。因此在 GMS 进程内接住整条官方链路（`HearableControlHook`）：
+
+```
+HearableControlHook (GMS 进程)
+├── ① DexKit 特征定位官方 ANC 子模块（不硬编码混淆类名，保留硬编码兜底）
+├── ② 放开 Fast Pair 缓存门禁：无 GFPS 流时官方面板也走通本地状态
+├── ③ 意图入口 hook：子模块 in()（官方点击写 dataStore 的入口）
+├── ④ 管理器发送出口 hook：HearableControlManager 发包方法（byte[] + int）
+│      两处都把用户点击翻译成 GAIA 请求 → 广播 App 进程 → GaiaBleClient 真实下发
+│      并按「报文指纹 + 3 秒窗」/「与 lastInjected 相同」过滤自身注入的 NOTIFY
+├── ⑤ 注入官方 DataStore：把 App 侧真实档位写回官方缓存，官方界面高亮与实际一致
+└── ⑥ 激活重试：前 20 次 × 3s，之后 30s 长期重试
+       （Fast Pair 模块事件驱动加载，原 20 次窗口一过就永久失效）
+```
+
+自检日志：`自检 gate=… send=… entry=… mgr=… module=…`，全 `true` 为正常。无 Root 模式下「官方集成」开关置灰，该项注入不启用。
 
 ## 弹窗布局架构
 

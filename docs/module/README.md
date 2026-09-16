@@ -2,7 +2,7 @@
 
 Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议**直连耳机，读取左右耳电量、控制降噪。
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**alpha2.54**（versionCode 289） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.0**（versionCode 300） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 > **本仓库是 LSPosed 模块索引 / 发布页，不含源码。** 完整源码、构建方式、Issue 与最新版本请前往源码仓库：
 >
@@ -18,19 +18,23 @@ Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动
 - **FastPairHook（LSPosed，注入 Google Play 服务）**：借道 GMS 的 BLE 扫描动态发现耳机 LE 地址并推送
 - **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）；弹窗「设置」按钮跳转系统蓝牙设备详情页
 - **系统设置蓝牙详情注入（LSPosed）**：Hook 系统蓝牙设备详情页，注入降噪 + 功能控制面板（空间音频 / 追踪 / 增益 / 指示灯）
+- **Google 官方耳机控制面板桥接（LSPosed）**：Hook GMS 的 Hearable Controls 链路（GFPS 消息组 `0x08`）—— 以 DexKit 特征定位官方 ANC 子模块、放开 Fast Pair 缓存门禁，在意图入口与管理器发送出口两处接住面板点击（降噪 / 通透 / 音量条 / 提示音和振动），翻译成 GAIA 请求真实下发；并把应用侧真实档位注入官方 DataStore，官方界面高亮与实际一致
 - **三协议自动识别**：GAIA V3（BLE）/ GAIA V4（RFCOMM/SPP，布丁）/ Moondrop 私有 9ECA0000 自动路由
 - **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接）
+- **设备通知**：耳机电量与降噪控制合并为一条常驻通知（只显示左右耳，不含充电盒）；档位按钮带大图标、当前档位高亮、颜色随系统动态取色，按钮按设备实际支持的能力生成
+- **无 Root 模式**：未检测到 Root 时自动回落为仅通过通知栏与 App 主界面控制降噪（GAIA BLE 直连本就不需要 Root），所有 Root 依赖项静默停用，不报错、不弹窗
 - **M3 界面**：主页 / 设置 / 关于，Material 3 + 动态取色
-- **权限检测**（整页二级界面）：蓝牙 / 通知 / 悬浮窗 / 电池白名单 / Root / FastPairHook / GAIA 直连 7 项实时检查，一键跳转修复
+- **设置页功能开关**：官方集成（官方降噪面板 / 蓝牙详情页面板）、通知（电量通知 / 通知内降噪控制）可单独停用
+- **权限检测**（整页二级界面）：蓝牙 / 通知 / 电池白名单 / 运行模式 / FastPairHook / GAIA 直连 6 项实时检查，一键跳转修复
 - **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 五类日志打包为 ZIP
-- **Root 强力保活**、开机自启、后台隐藏（可选开关）
+- **Root 强力保活**（仅 Root 模式；无 Root 时自动置灰）、开机自启、后台隐藏（可选开关）
 - **显示层中英文切换**：语言偏好（跟随系统 / 中文 / English）
 
 ## 软件截图
 
-| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 |
-|---|---|---|---|
-| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) |
+| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 | 设备通知 |
+|---|---|---|---|---|
+| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![设备通知](screenshots/notif.png) |
 
 ## 支持设备
 
@@ -46,7 +50,8 @@ Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动
 
 1. 下载并安装 APK（见源码仓库 [Releases](https://github.com/bqj6666/FxxkMoondrop/releases)）
 2. 在 **LSPosed** 中启用，作用域：`com.google.android.gms`（可选 `com.android.settings`）
-3. 授予蓝牙 / 通知 / 悬浮窗权限（设置页「检查权限」可一键跳转修复）
+3. 授予蓝牙 / 通知权限（设置页「检查权限」可一键跳转修复）
+4. **Root 可选**：没有 Root 也能用 —— 未检测到 Root 时自动进入无 Root 模式，照常读电量、切降噪（走 GAIA BLE 直连），仅官方面板注入、弹窗图标自定义、Root 保活等增强项停用
 
 ## Fast Pair 弹窗适配
 

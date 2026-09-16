@@ -23,6 +23,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 - **Self-healing loop**: no cache → REQ scan → GMS push → connection success writes back to file / SP → instant reconnect next time; address changes trigger automatic rediscovery (**fully dynamic address discovery, zero hardcoding**).
 - **Popup mode**: Google Fast Pair half-sheet popup (injected into GMS's HalfSheetActivity); the popup "Settings" button jumps to the system Bluetooth device detail page.
 - **System Bluetooth device detail injection (LSPosed)**: hooks `com.android.settings`' Bluetooth device detail page (`BluetoothDeviceDetailsFragment`) to inject a noise-cancellation + function-control panel (spatial audio / tracking / gain / LED) that you can adjust directly on the settings screen; function toggles are auto-disabled when disconnected.
+- **Google official Hearable Controls bridge (LSPosed, injected into Google Play services)**: hooks the GMS Hearable Controls path (GFPS message group `0x08`) - locates the official ANC submodule by DexKit signature, lifts the Fast Pair cache gate, and catches panel taps (ANC / Transparency / volume slider / prompt-and-vibration tone) at **both the intent entry point and the manager's send exit**, translating them into GAIA requests the app really sends to the earbuds; the app's real state is injected back into the official DataStore so the official UI highlight always matches reality. This injection is disabled in no-root mode.
 - **Extended device control (DC)**: spatial audio / head tracking / gain / LED control; the panel is the device-detail injection described above, with device-code mappings supplied by `AncProfileLib.DcProfile` per model.
 - **Three-protocol auto-detection**: GAIA V3 (BLE) / GAIA V4 (RFCOMM/SPP, PUDDING) / Moondrop private 9ECA0000 auto-routing; falls back to RFCOMM/SPP when BLE fails on dual-mode devices.
 - **9ECA private protocol client**: source switching / EQ / MIC / SN (reuses the same GATT connection, coexists with GAIA).
@@ -36,9 +37,9 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 
 ## Screenshots
 
-| Overview | Settings | About | Fast Pair Popup |
-|---|---|---|---|
-| ![Home](screenshots/home.png) | ![Settings](screenshots/settings.png) | ![About](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) |
+| Overview | Settings | About | Fast Pair Popup | Device notification |
+|---|---|---|---|---|
+| ![Home](screenshots/home.png) | ![Settings](screenshots/settings.png) | ![About](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![Device notification](screenshots/notif.png) |
 
 ## Tech Stack
 

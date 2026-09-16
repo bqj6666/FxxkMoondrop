@@ -25,6 +25,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **自愈闭环**：无缓存 → REQ 扫描 → GMS 推送 → 连接成功写回文件 / SP → 下次秒连；地址变化自动重新发现（**地址全动态发现**）
 - **弹窗模式**：Google Fast Pair 半屏弹窗（注入 GMS 的 HalfSheetActivity）；弹窗「设置」按钮跳转系统蓝牙设备详情页
 - **系统设置蓝牙详情注入（LSPosed）**：Hook `com.android.settings` 的蓝牙设备详情页（`BluetoothDeviceDetailsFragment`），注入降噪 + 功能控制面板（空间音频 / 追踪 / 增益 / 指示灯），靠近设置界面即点即调；未连接时功能开关自动禁用
+- **Google 官方耳机控制面板桥接（LSPosed，注入 Google Play 服务）**：Hook GMS 的 Hearable Controls 链路（GFPS 消息组 `0x08`）—— 以 DexKit 特征定位官方 ANC 子模块、放开 Fast Pair 缓存门禁，在**意图入口**与**管理器发送出口**两处接住面板上的点击（降噪 / 通透 / 音量条 / 提示音和振动），翻译成 GAIA 请求交给应用真实下发给耳机；并把应用侧真实档位注入官方 DataStore，官方界面高亮与实际状态保持一致。无 Root 模式下该项注入停用
 - **扩展设备控制（DC）**：空间音频 / 头部追踪 / 增益 / 指示灯控制，面板即上条所述详情页注入组件；设备码映射由 `AncProfileLib.DcProfile` 按型号提供
 - **三协议自动识别**：GAIA V3（BLE）/ GAIA V4（RFCOMM/SPP，布丁）/ Moondrop 私有 9ECA0000 自动路由；dual-mode 设备 BLE 失败回退 RFCOMM/SPP
 - **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接，与 GAIA 并存）
@@ -38,9 +39,9 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 ## 软件截图
 
-| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 |
-|---|---|---|---|
-| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) |
+| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 | 设备通知 |
+|---|---|---|---|---|
+| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![设备通知](screenshots/notif.png) |
 
 ## 技术栈
 
