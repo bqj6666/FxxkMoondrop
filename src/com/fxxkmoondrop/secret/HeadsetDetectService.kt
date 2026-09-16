@@ -220,17 +220,22 @@ class HeadsetDetectService : Service() {
             handler.postDelayed({
                 GaiaBleClient.getInstance().fetchBatteryLevels()
                 AncBridge.fetchAncMode()
+                // 第 4/5 项：GAIA 就绪后才发通知（未就绪没有可信数据，不发假通知）
+                DeviceNotif.refreshBattery(this@HeadsetDetectService)
+                DeviceNotif.refreshAnc(this@HeadsetDetectService)
             }, 800)
         }
 
         override fun onDisconnected(address: String) {
             Log.i(TAG, "GAIA disconnected: $address")
             AppLog.w(TAG, "GAIA disconnected: " + address)
+            DeviceNotif.cancelAll(this@HeadsetDetectService) // 第 4/5 项：断开撤下通知
         }
 
         override fun onBatteryLevel(batteryId: Int, level: Int) {
             val addr = GaiaBleClient.getInstance().deviceAddress ?: return
             BatteryStore.setGaiaLevel(addr, batteryId, level)
+            DeviceNotif.refreshBattery(this@HeadsetDetectService) // 第 4 项：电量通知
             // alpha2.38: battery refresh handled via ACTION_BATTERY_UPDATE broadcast
             // alpha1.12: 左右耳电量就绪 → 弹连接窗（延迟弹窗）
             PopupGate.flushPendingIfReady()
@@ -244,6 +249,7 @@ class HeadsetDetectService : Service() {
 
         override fun onAncMode(mode: Int) {
             AncBridge.notifyAncMode(mode)
+            DeviceNotif.refreshAnc(this@HeadsetDetectService) // 第 5 项：ANC 通知高亮
             // alpha1.4: 通知主界面刷新降噪高亮
             try {
                 val bi = Intent("com.fxxkmoondrop.secret.STATE_UPDATED")

@@ -57,6 +57,20 @@ class FastPairHookEntry {
         sModule = module
         Log.d(TAG, "[FastPairHook] GMS loaded, classLoader=" + cl)
 
+        // Hearable Controls（GFPS 消息组 0x08）官方链路基座：
+        // 捕获官方 ANC 子模块实例 + 只对目标设备放开 Fast Pair 缓存门禁。
+        // 失败只降级、不影响既有弹窗/图标链路。
+        try {
+            // 第 3 项：官方集成开关（设置里可关；默认开）
+            if (readFeatureToggle(cl, "feat_official_panel")) {
+                HearableControlHook.install(module, cl)
+            } else {
+                Log.d(TAG, "[FastPairHook] HearableControlHook disabled by setting")
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] HearableControlHook.install failed: " + t)
+        }
+
         // alpha1.14fix4: 拿模块自身 context（读取内置默认图标 assets）
         try {
             val app = HookHelper.callStaticMethod(
@@ -1209,6 +1223,9 @@ class FastPairHookEntry {
                 override fun onReceive(context: Context, intent: Intent) {
                     try {
                         val mode = intent.getIntExtra(EXTRA_MODE, -1)
+                        // Hearable Controls：原始模式先给官方桥接层（需全量程 0-5，
+                        // 下面 0-3 是弹窗高亮的历史限制，两者不互相牵制）
+                        HearableControlHook.onAncMode(mode)
                         if (mode < 0 || mode > 3) return
                         sLastMode = mode
                         Log.d(TAG, "[FastPairHook] MODE_STATE received, mode=" + mode)
@@ -1230,6 +1247,10 @@ class FastPairHookEntry {
                 override fun onReceive(context: Context, intent: Intent) {
                     try {
                         val st = intent.getIntExtra(EXTRA_ANC_STATUS, 0)
+                        // Hearable Controls：能力就绪时补推一次状态进官方存储；
+                        // 同时把设备实际可用的 UI 档位转给桥接层，用于收窄官方面板的宣告。
+                        HearableControlHook.onAncAvailability(
+                                st, intent.getIntArrayExtra("ui_modes"))
                         Log.d(TAG, "[FastPairHook] ANC_STATUS received, status=" + st)
                         applyAncAvailability(st)
                     } catch (t: Throwable) {
@@ -1487,9 +1508,31 @@ class FastPairHookEntry {
         }
     }
 
+    /** 第 3 项：跨进程读设置页的 `feat_*` 开关；读不到返回 true（不因读取失败停用功能）。 */
+    private fun readFeatureToggle(cl: ClassLoader, key: String): Boolean {
+        return try {
+            val app = HookHelper.callStaticMethod(
+                    Class.forName("android.app.ActivityThread", true, cl), "currentApplication")
+            val ctx = (app as? Context)?.createPackageContext(
+                    "com.fxxkmoondrop.secret", Context.CONTEXT_IGNORE_SECURITY) ?: return true
+            val cur = ctx.contentResolver.query(
+                    android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/" + key),
+                    null, null, null, null) ?: return true
+            cur.use {
+                if (it.moveToFirst()) it.getInt(it.getColumnIndexOrThrow("_value")) == 1 else true
+            }
+        } catch (t: Throwable) {
+            true
+        }
+    }
+
     private fun sendLeAddr(addr: String) {
         try {
             if (addr == null || !addr.matches(Regex("([0-9A-F]{2}:){5}[0-9A-F]{2}"))) return
+            // Hearable Controls：目标地址交由官方链路桥接层（不硬编码 MAC）。
+            // 这里是本模块**唯一**汇聚了「已校验的水月雨设备地址」的位置，
+            // ACL 连接与 LE 扫描两条发现路径都会经过，且位于 60s 广播节流之前。
+            HearableControlHook.setTargetAddress(addr)
             val now = System.currentTimeMillis()
             if (addr == sLastPushedAddr && now - sLastPushMs < 60000) return
             sLastPushedAddr = addr

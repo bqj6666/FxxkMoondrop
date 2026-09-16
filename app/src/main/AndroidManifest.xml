@@ -57,5 +57,8 @@
         </receiver>
 
         <receiver android:name=".AliveReceiver" android:exported="false" />
+
+        <!-- 第 5 项：通知栏 ANC 档位按钮 -->
+        <receiver android:name=".NotifActionReceiver" android:exported="false" />
     </application>
 </manifest>

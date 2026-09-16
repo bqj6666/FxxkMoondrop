@@ -38,6 +38,10 @@ object ControlPanel {
     /** 运行状态快照：由调用方在 refresh 时提供（值来自桥 / 设备）。 */
     data class State(
         val connected: Boolean,
+        /** GAIA 是否就绪（服务发现完成）。UI 可交互判据 —— 比 [connected] 更强。 */
+        val gaiaReady: Boolean = false,
+        /** 该设备实际支持的 UI 档位（能力探测驱动）。空 = 未知，按型号档案显示。 */
+        val modes: IntArray = IntArray(0),
         val ancMode: Int,
         val spatialOn: Boolean,
         val spatialUiMode: Int,
@@ -330,12 +334,19 @@ object ControlPanel {
     }
 
     /** 刷新降噪卡片（标题 + 4 档模式）高亮。mode 为当前 UI 模式（0..3）。 */
-    fun refreshAncCard(card: LinearLayout, mode: Int) {
+    fun refreshAncCard(card: LinearLayout, mode: Int, modes: IntArray = IntArray(0)) {
         val row = card.findViewWithTag<LinearLayout>("fxxk_anc_row") ?: return
         val ctx = card.context
         val modeOn = mode in 0..3
+        // 第 1 项（设备库分配）：只显示**本设备真正支持**的档位。
+        // modes 为空 = 能力未知 -> 全部显示（按型号档案兜底），不误伤未知型号。
+        val knownModes = modes.isNotEmpty()
+        val showWind = ctx.getSharedPreferences("cfg", 0).getBoolean("show_wind", true)
         for (i in 0 until row.childCount) {
             val col = row.getChildAt(i) as? LinearLayout ?: continue
+            val supported = (!knownModes || modes.contains(i)) && (i != 3 || showWind)
+            col.visibility = if (supported) android.view.View.VISIBLE else android.view.View.GONE
+            if (!supported) continue
             val holder = col.getChildAt(0) as? FrameLayout ?: continue
             val bg = holder.findViewWithTag<View>("fxxk_main_bg")
             val icon = holder.findViewWithTag<ImageView>("fxxk_main_icon")
@@ -376,11 +387,11 @@ object ControlPanel {
 
         val spSwitch = card.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
         spSwitch?.let { sw ->
-            // alpha2.39.2: 未连接时完全禁用（交互+视觉），并用系统原生禁用灰样式
-            sw.isEnabled = state.connected
-            sw.isClickable = state.connected
-            sw.isFocusable = state.connected
-            sw.alpha = if (state.connected) 1f else 0.4f
+            // 第 2 项：未就绪（GAIA 未完成服务发现）时完全禁用，避免点了没反应
+            sw.isEnabled = state.gaiaReady
+            sw.isClickable = state.gaiaReady
+            sw.isFocusable = state.gaiaReady
+            sw.alpha = if (state.gaiaReady) 1f else 0.4f
             if (sw.isChecked != state.spatialOn) sw.isChecked = state.spatialOn
         }
 
@@ -422,7 +433,7 @@ object ControlPanel {
                     val iconColor = if (active) 0xFFFFFFFF.toInt() else onContainerOf(ctx)
                     val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
                     val spatialDisabled = feature == "spatial" && !spatialOn
-                    if (!state.connected || spatialDisabled) {
+                    if (!state.gaiaReady || spatialDisabled) {
                         holder.isEnabled = false
                         holder.alpha = 0.4f
                         if (bgV != null) {

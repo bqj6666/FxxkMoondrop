@@ -184,10 +184,9 @@ class SettingsFragment : Fragment() {
         }
 
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(14)))
+        box.addView(spacer(dp(12)))
 
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("通用", "General")))
-
+        // 语言：归入外观（区域设置与主题同类），不再单列一个「通用」段
         // alpha2.53: 对齐 org.lsposed.manager —— 语言改为「行 + 当前值 + 下拉菜单」（0=跟随系统 1=中文 2=English）
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language", null,
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
@@ -195,8 +194,7 @@ class SettingsFragment : Fragment() {
             scheduleRebuild(0L)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, langRow), LinearLayout.LayoutParams(-1, -2))
-        // alpha2.53: 修复语言卡与「检查权限」卡间距过近（此前漏了 12dp 卡间距）
-        box.addView(spacer(dp(12)))
+        box.addView(spacer(dp(14)))
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
         val rowPerm = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_shield, Lang.t("检查权限", "Check permissions"),
@@ -230,11 +228,68 @@ class SettingsFragment : Fragment() {
                 showIconDialog(exists)
             }
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon))
-
         box.addView(spacer(dp(10)))
 
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("行为", "Behavior")))
+        // 「行为」这个筐太杂（官方集成 / 通知 / 保活 / 后台 / 界面元素混在一起），
+        // 改名「功能」，只留真正影响耳机功能与界面呈现的开关。
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("功能", "Features")))
+
+        // ── 第 3 项：分类功能开关 ──
+        //  每个开关对应一条真实生效的链路：关掉后相应 hook / 通知即停用（跨进程读同一个 SP）。
+        //  默认全开，保持既有行为不变。
+        box.addView(makeSubLabel(Lang.t("官方集成", "Official integration")))
+        val swOfficial = makeTintedSwitch()
+        swOfficial.isChecked = getSP().getBoolean("feat_official_panel", true)
+        val rowOfficial = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_headphones,
+                Lang.t("官方降噪面板", "Official noise-control panel"),
+                Lang.t("把耳机状态接进 Google 的官方降噪面板（音量面板 / 提示音和振动）",
+                        "Feed state into Google's official ANC panel (volume & sound panels)"),
+                swOfficial, null)
+        swOfficial.setOnCheckedChangeListener { _, checked ->
+            getSP().edit().putBoolean("feat_official_panel", checked).commit()
+        }
+
+        val swDetail = makeTintedSwitch()
+        swDetail.isChecked = getSP().getBoolean("feat_detail_panel", true)
+        val rowDetail = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_tune,
+                Lang.t("蓝牙详情页面板", "Bluetooth details panel"),
+                Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片",
+                        "Inject the control card into the system device-details page"),
+                swDetail, null)
+        swDetail.setOnCheckedChangeListener { _, checked ->
+            getSP().edit().putBoolean("feat_detail_panel", checked).commit()
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail))
+        box.addView(spacer(dp(14)))
+
+        box.addView(makeSubLabel(Lang.t("通知", "Notifications")))
+        val swNotifBatt = makeTintedSwitch()
+        swNotifBatt.isChecked = getSP().getBoolean("feat_notif_battery", true)
+        val rowNotifBatt = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_battery_full,
+                Lang.t("电量通知", "Battery notification"),
+                Lang.t("耳机连接后常驻通知，显示左右耳电量（不含充电盒）",
+                        "Persistent notification with left/right battery (no case)"),
+                swNotifBatt, null)
+        swNotifBatt.setOnCheckedChangeListener { _, checked ->
+            getSP().edit().putBoolean("feat_notif_battery", checked).commit()
+            // 即时生效：refreshBattery 内部会按开关取消/重建（GAIA 未连时什么都不做）
+            DeviceNotif.refreshBattery(requireContext())
+        }
+
+        val swNotifAnc = makeTintedSwitch()
+        swNotifAnc.isChecked = getSP().getBoolean("feat_notif_anc", true)
+        val rowNotifAnc = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_anc_on,
+                Lang.t("通知内降噪控制", "ANC control in notification"),
+                Lang.t("通知栏提供降噪档位按钮，按键按本设备支持的档位生成",
+                        "Shade buttons to switch ANC modes, built from the device's supported modes"),
+                swNotifAnc, null)
+        swNotifAnc.setOnCheckedChangeListener { _, checked ->
+            getSP().edit().putBoolean("feat_notif_anc", checked).commit()
+            DeviceNotif.refreshAnc(requireContext())
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowNotifBatt, rowNotifAnc))
+        box.addView(spacer(dp(14)))
+
 
         // ── Root 强力保活 ──
         val swRoot = makeTintedSwitch()
@@ -284,8 +339,8 @@ class SettingsFragment : Fragment() {
             getSP().edit().putBoolean("show_wind", checked).commit()
         }
 
-        // 行为区分组卡片
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRoot, rowBg, rowAuto, rowWind))
+        // 界面元素：抗风噪按钮决定弹窗/主界面呈现哪些档位，属于「功能」
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowWind))
         box.addView(spacer(dp(14)))
 
                 // ── 自定义映射（alpha2.52：降噪 / 增益 / 追踪标签 三块合并为一组，
@@ -445,10 +500,19 @@ class SettingsFragment : Fragment() {
             scheduleRebuild(0L)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowReset))
-        box.addView(spacer(dp(10)))
+        box.addView(spacer(dp(14)))
 
-        // ── 模拟测试（alpha2.3 从主页迁入；真实耳机连接时禁用）──
-        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("模拟测试", "Simulation Test")))
+        // ── 后台：监听 / 隐藏 / 保活 —— 三项都在管「应用怎么活着」，与耳机功能无关 ──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("后台", "Background")))
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowAuto, rowBg, rowRoot))
+        box.addView(spacer(dp(14)))
+
+        // ── 诊断与测试：权限检查 / 日志抓取 / 弹窗图标 / 模拟测试，
+        //    全是「排查与验证」用途，原来分散在「通用」与独立段，现在收拢一处 ──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("诊断", "Diagnostics")))
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon))
+        box.addView(spacer(dp(10)))
+        box.addView(makeSubLabel(Lang.t("模拟测试", "Simulation Test")))
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))

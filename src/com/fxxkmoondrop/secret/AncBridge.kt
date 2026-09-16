@@ -60,12 +60,19 @@ class AncBridge {
             try {
                 val i = Intent(ACTION_FP_ANC_STATUS)
                 i.putExtra("status", status)
+                // 数据驱动：把设备**实际可用**的 UI 档位一并上报给 GMS 桥接层，
+                // 让官方面板只呈现这副耳机真正支持的模式（不硬编码型号）。
+                i.putExtra("ui_modes", supportedUiModesOrEmpty())
                 i.setPackage("com.google.android.gms")
                 c.sendBroadcast(i)
             } catch (t: Throwable) {
                 Log.w(TAG, "sendAncStatus fail: $t")
             }
         }
+
+        /** 设备可用的 UI 档位（能力未就绪时给空数组，桥接层会保持保守宣告）。 */
+        private fun supportedUiModesOrEmpty(): IntArray =
+            try { GaiaBleClient.getInstance().supportedUiModes() } catch (_: Throwable) { IntArray(0) }
 
         /** 获取当前缓存的 ANC 模式（-1 表示未知） */
         @JvmStatic
@@ -83,6 +90,11 @@ class AncBridge {
                 Log.d(TAG, "ANC mode updated: $mode (${MODE_NAMES[mode]})")
                 sendModeState() // alpha1.20: 通知 GMS 弹窗同步高亮
                 CtrlBus.postDcChanged() // alpha2.39: 推送跨进程状态给设备详情页
+                // 第 5 项：ANC 通知高亮跟随模式。
+                // 挂在这里而不是 GaiaBleClient.Callback.onAncMode —— 实测 GA2 的模式数据
+                // 走 AncBridge 内部回调（fetchAncMode / setAncMode 的 callback），
+                // 外层 callback 不一定被触发，挂外层会漏刷新。
+                sCtx?.let { DeviceNotif.refreshAnc(it) }
             }
         }
 

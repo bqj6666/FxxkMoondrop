@@ -41,7 +41,8 @@ object DeviceDetailsPanel {
         root.addView(dcCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val st = ControlPanel.State(
-            connected = false, ancMode = -1, spatialOn = false, spatialUiMode = -1,
+            connected = false, gaiaReady = false, modes = IntArray(0),
+            ancMode = -1, spatialOn = false, spatialUiMode = -1,
             gainLevel = 0, ledOn = false,
             hasSpatial = profile.hasSpatial, hasGain = profile.hasGain, hasLed = profile.hasLed
         )
@@ -55,22 +56,29 @@ object DeviceDetailsPanel {
     }
 
     fun refresh(root: View, state: ControlPanel.State, profile: AncProfileLib.DcProfile) {
-        val card = root
-        enabledByRoot[root] = state.connected
-        val ancCard = card.findViewWithTag<LinearLayout>("fxxk_anc_card") ?: return
-        val dcCard = card.findViewWithTag<LinearLayout>("fxxk_dc_card") ?: return
-        // 降噪卡片：高亮当前模式（与主界面 updateAncStatus 一致）
-        ControlPanel.refreshAncCard(ancCard, state.ancMode)
-        // 功能卡片：按 profile + connected 决定可见性与高亮
-        ControlPanel.refreshDcCard(dcCard, state, profile)
-        // 未连接时降噪按钮禁用（与主界面 updateAncStatus 一致，完全依赖真实连接；ancMode 初始为 0 会让 OR 恒真导致断连仍可点）
-        val enabled = state.connected
-        val ancRow = ancCard.findViewWithTag<LinearLayout>("fxxk_anc_row") ?: return
-        for (i in 0 until ancRow.childCount) {
-            val col = ancRow.getChildAt(i) as? LinearLayout ?: continue
-            val holder = col.getChildAt(0) as? android.widget.FrameLayout ?: continue
-            holder.isEnabled = enabled
-            holder.alpha = if (enabled) 1f else 0.4f
+        // 第 2 项：可交互判据 = **GAIA 就绪**，不是「蓝牙已连」。
+        // 蓝牙链路挂上后服务发现还要一段时间，窗口期内点击必然失败，
+        // 所以用更强的 isGaiaReady() 作门禁，避免用户点到没反应的按钮。
+        val enabled = state.gaiaReady
+        enabledByRoot[root] = enabled
+
+        // 各卡片独立处理：任一视图缺失都不该让另一张卡的禁用逻辑被跳过
+        val ancCard = root.findViewWithTag<LinearLayout>("fxxk_anc_card")
+        if (ancCard != null) {
+            ControlPanel.refreshAncCard(ancCard, state.ancMode, state.modes)
+            val ancRow = ancCard.findViewWithTag<LinearLayout>("fxxk_anc_row")
+            if (ancRow != null) {
+                for (i in 0 until ancRow.childCount) {
+                    val col = ancRow.getChildAt(i) as? LinearLayout ?: continue
+                    val holder = col.getChildAt(0) as? android.widget.FrameLayout ?: continue
+                    holder.isEnabled = enabled
+                    holder.alpha = if (enabled) 1f else 0.4f
+                }
+            }
+        }
+        val dcCard = root.findViewWithTag<LinearLayout>("fxxk_dc_card")
+        if (dcCard != null) {
+            ControlPanel.refreshDcCard(dcCard, state, profile)
         }
     }
 

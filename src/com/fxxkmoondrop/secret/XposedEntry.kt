@@ -222,6 +222,11 @@ class XposedEntry : XposedModule() {
      * ControlPanel（降噪卡片 + 功能控制卡片）。不动主界面/现有注入/Moondrop App/构建脚本。
      */
     private fun hookDeviceDetailsPanel(cl: ClassLoader) {
+        // 第 3 项：分类功能开关。用户可在设置里关掉本面板；默认开。
+        if (!featEnabled(cl, "feat_detail_panel")) {
+            Log.d(TAG, "hookDeviceDetailsPanel: disabled by setting")
+            return
+        }
         try {
             val prefCls = Class.forName("androidx.preference.Preference", true, cl)
             val bindM = prefCls.getDeclaredMethod("onBindViewHolder",
@@ -381,15 +386,43 @@ class XposedEntry : XposedModule() {
     }
 
     /** 读取模块进程当前 DC/ANC 状态（跨进程，走 PrefsProvider.dc_cmd）。 */
+    /**
+     * 第 3 项：读取设置页里的 `feat_*` 分类开关（跨进程读 App 的 SP）。
+     * 读不到时返回 true（保守：保持既有行为，不因读取失败而静默停用功能）。
+     */
+    private fun featEnabled(cl: ClassLoader, key: String): Boolean {
+        return try {
+            val app = HookHelper.callStaticMethod(
+                    Class.forName("android.app.ActivityThread", true, cl), "currentApplication")
+            val ctx = (app as? Context)?.createPackageContext(
+                    "com.fxxkmoondrop.secret", Context.CONTEXT_IGNORE_SECURITY) ?: return true
+            val cur = ctx.contentResolver.query(
+                    android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/" + key),
+                    null, null, null, null) ?: return true
+            cur.use {
+                if (it.moveToFirst()) it.getInt(it.getColumnIndexOrThrow("_value")) == 1 else true
+            }
+        } catch (t: Throwable) {
+            true
+        }
+    }
+
     private fun fetchDcState(ctx: Context, deviceName: String?): ControlPanel.State? {
         try {
             val b = android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/dc_cmd")
                 .buildUpon().appendQueryParameter("action", "fetch")
             val cur = ctx.contentResolver.query(b.build(), null, null, null, null) ?: return null
             var anc = 0; var spatial = 0; var headTracking = -1; var gain = 0; var led = 0; var connected = 0
+            var gaia = 0; var modes = IntArray(0)
             cur.use {
                 while (it.moveToNext()) {
                     val k = it.getString(0)
+                    if (k == "modes") {
+                        // 第 1 项：设备实际支持的档位（逗号分隔）；空串 = 能力未知
+                        modes = it.getString(1)?.split(',')
+                                ?.mapNotNull { x -> x.trim().toIntOrNull() }?.toIntArray() ?: IntArray(0)
+                        continue
+                    }
                     val v = it.getInt(1)
                     when (k) {
                         "anc" -> anc = v
@@ -398,12 +431,15 @@ class XposedEntry : XposedModule() {
                         "gain" -> gain = v
                         "led" -> led = v
                         "connected" -> connected = v
+                        "gaia" -> gaia = v
                     }
                 }
             }
             val profile = AncProfileLib.resolveDc(deviceName)
             return ControlPanel.State(
                 connected = connected == 1,
+                gaiaReady = gaia == 1,
+                modes = modes,
                 ancMode = anc,
                 spatialOn = spatial == 1,
                 spatialUiMode = headTracking,

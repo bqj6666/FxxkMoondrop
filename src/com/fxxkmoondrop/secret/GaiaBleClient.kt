@@ -83,6 +83,15 @@ class GaiaBleClient private constructor() {
     var deviceAddress: String? = null
     @Volatile private var connectedDeviceName: String? = null
     private var connected = false
+
+    /**
+     * GAIA 链路真正就绪（服务发现成功、可以收发 GAIA 报文了）。
+     *
+     * 与 [connected] 的区别：`connected` 只代表蓝牙链路挂上了，此时服务还没发现完，
+     * 发 GAIA 命令会失败。UI 的「可交互」判据必须用这个，否则用户会在窗口期内
+     * 点到没反应的按钮。
+     */
+    @Volatile private var gaiaReady = false
     // alpha2.38.9: RFCOMM/SPP transport (for Classic BT devices like Pudding)
     @Volatile private var useRfcomm = false
     private var rfcommTransport: GaiaRfcommTransport? = null
@@ -303,6 +312,14 @@ class GaiaBleClient private constructor() {
     @Synchronized
     fun isConnected(): Boolean = simConnected || (connected && (gatt != null || useRfcomm))
 
+    /**
+     * GAIA 是否已就绪（可收发 GAIA 命令）。
+     *
+     * UI 侧（蓝牙设备详情页注入面板）用它作「可交互」判据 —— 修复「蓝牙连上但 GAIA
+     * 还没发现完，按钮点了没反应」的窗口期问题。模拟连接视为就绪，便于预览。
+     */
+    fun isGaiaReady(): Boolean = simConnected || (gaiaReady && isConnected())
+
     fun setCallback(cb: Callback?) { this.callback = cb }
 
     @Synchronized
@@ -310,6 +327,7 @@ class GaiaBleClient private constructor() {
         if (address == null) return false
         AppLog.i(GaiaConstants.TAG, "connect() addr=" + address + " cachedLe=" + cachedLeAddress)
         simConnected = false
+        gaiaReady = false   // 新会话：GAIA 需重新完成服务发现才可用
         if (context == null) context = ctx.applicationContext
         registerLeAddrReceiver()
         if (cachedLeAddress == null && context != null) {
@@ -1012,6 +1030,23 @@ class GaiaBleClient private constructor() {
 
     fun ancCapabilityStatus(): Int = probe.status()
 
+    /**
+     * 当前设备在 GAIA 协议下**实际可用**的 App UI 档位
+     * （0=关闭 1=降噪 2=透传 3=抗风 4=自适应 5=直播）。
+     *
+     * 数据驱动：完全由能力探测出的 ANC 路径决定，不硬编码任何型号 ——
+     * 不同耳机支持到哪一档，这里就报哪一档。
+     *
+     * 与 [GaiaCommands.ancDevFromUi] 的支持范围必须保持一致：
+     * 那里发不出去的模式，这里就不该对外宣称支持。
+     */
+    fun supportedUiModes(): IntArray = when (probe.ancPath) {
+        GaiaCommands.ANC_PATH_ANC_V2 -> intArrayOf(0, 1, 2, 3, 4, 5)
+        GaiaCommands.ANC_PATH_AUDIO_CURATION -> intArrayOf(0, 1, 2, 3)
+        GaiaCommands.ANC_PATH_ANC_V1 -> intArrayOf(0, 1)
+        else -> IntArray(0)
+    }
+
     private fun readAncMap(): IntArray {
         val sp = context?.getSharedPreferences("cfg", 0)
         // 型号档案映射（忽略用户自定义）—— 它才是「用户没改过的格子」的正确回退基准。
@@ -1375,6 +1410,7 @@ class GaiaBleClient private constructor() {
                     attemptCount = 0
                     Log.d(GaiaConstants.TAG, "GAIA locked to " + okAddr)
                 }
+                gaiaReady = true
                 Log.d(GaiaConstants.TAG, "GAIA ready")
                 // alpha2.27: 能力探测委托给 CapabilityProbe
                 probe.startProbes()

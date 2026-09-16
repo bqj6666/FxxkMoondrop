@@ -37,9 +37,12 @@ class PrefsProvider : ContentProvider() {
         val key = uri.lastPathSegment ?: return null
         if (key == "dc_cmd") return handleDcCmd(uri)
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
-        val value: Int = when (key) {
-            "show_wind" -> if (sp.getBoolean("show_wind", true)) 1 else 0
-            "lang" -> sp.getInt("lang", 0)
+        val value: Int = when {
+            key == "lang" -> sp.getInt("lang", 0)
+            // 第 3 项：分类功能开关。`feat_*` 一律按布尔读，默认**开**（保持既有行为，
+            // 用户显式关掉才停用对应功能），供 hook 侧跨进程判定。
+            key == "show_wind" || key.startsWith("feat_") ->
+                if (sp.getBoolean(key, true)) 1 else 0
             else -> return null
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))
@@ -49,6 +52,7 @@ class PrefsProvider : ContentProvider() {
 
     private fun handleDcCmd(uri: Uri): Cursor? {
         val action = uri.getQueryParameter("action") ?: return null
+        val g = GaiaBleClient.getInstance()
         try {
             when (action) {
                 "set_anc" -> {
@@ -79,7 +83,12 @@ class PrefsProvider : ContentProvider() {
         c.addRow(arrayOf("headTracking", DeviceControlBridge.spatialUiMode()))
         c.addRow(arrayOf("gain", DeviceControlBridge.getGainLevel()))
         c.addRow(arrayOf("led", DeviceControlBridge.getLedState()))
-        c.addRow(arrayOf("connected", if (GaiaBleClient.getInstance().isConnected()) 1 else 0))
+        c.addRow(arrayOf("connected", if (g.isConnected()) 1 else 0))
+        // 第 2 项：GAIA 就绪（服务发现完成，命令真的发得出去）。面板可交互判据用它。
+        c.addRow(arrayOf("gaia", if (g.isGaiaReady()) 1 else 0))
+        // 第 1 项：本设备实际支持的 UI 档位（能力探测驱动，数据驱动多设备适配）。
+        // 以逗号分隔；空串 = 能力未知，UI 侧退化为「按型号档案」显示。
+        c.addRow(arrayOf("modes", g.supportedUiModes().joinToString(",")))
         return c
     }
 

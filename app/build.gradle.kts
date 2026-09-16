@@ -11,8 +11,8 @@ android {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 26
         targetSdk = 36
-        versionCode = 289
-        versionName = "alpha2.54"
+        versionCode = 300
+        versionName = "3.0"
 
         // DexKit 自带 4 个 ABI 的 libdexkit.so；x86/x86_64 只服务模拟器，
         // 剔除后单 APK 省约 0.8MB（模块只跑在真机上）。
