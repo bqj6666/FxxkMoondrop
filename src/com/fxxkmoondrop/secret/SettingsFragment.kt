@@ -52,6 +52,34 @@ class SettingsFragment : Fragment() {
             PopupGate.clear(SIM_MAC, SIM_NAME)
         }
     }
+    /**
+     * alpha2.54: 主题重建统一入口。
+     *
+     * 原实现是在 OnCheckedChangeListener 里直接
+     *   Handler().postDelayed({ requireActivity().recreate() }, 350/550)
+     * 有三个问题叠加，反复开关动态取色 / AMOLED 时必崩：
+     *   1. 没有任何取消机制 —— 连点会排出多个 recreate，多次全量重建叠加；
+     *   2. 回调里用 requireActivity()，而延迟期间 Fragment 可能已 detach，
+     *      抛 IllegalStateException: Fragment not attached to an activity；
+     *   3. 没有生命周期清理，视图销毁后回调照跑。
+     *
+     * 这里用「先 removeCallbacks 再 post」把连续请求合并成一次，
+     * 并在真正执行前用 isAdded / activity 双检，任一不满足就静默跳过。
+     */
+    private val rebuildHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val rebuildRunnable: Runnable = object : Runnable {
+        override fun run() {
+            rebuildHandler.removeCallbacks(this)
+            val act = activity
+            if (isAdded && act != null && !act.isFinishing) act.recreate()
+        }
+    }
+
+    private fun scheduleRebuild(delayMs: Long) {
+        rebuildHandler.removeCallbacks(rebuildRunnable)
+        rebuildHandler.postDelayed(rebuildRunnable, delayMs)
+    }
+
     private var seedRow: LinearLayout? = null // alpha2.8: 种子颜色行（动态取色关闭时显示；出现/消失动画）
 
     override fun onCreateView(inflater: LayoutInflater, containerView: ViewGroup?,
@@ -91,7 +119,7 @@ class SettingsFragment : Fragment() {
                 arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
                 ThemeUtil.themeMode(requireContext())) { mi ->
             getSP().edit().putInt("theme_mode", mi).commit()
-            requireActivity().recreate()
+            scheduleRebuild(0L)
         }
         appear.addView(M3Ui.groupCard(requireActivity(), pal, modeRow), LinearLayout.LayoutParams(-1, -2))
 
@@ -132,7 +160,7 @@ class SettingsFragment : Fragment() {
             dot.setOnClickListener {
                 // 选种子色 = 官方互斥：自动关闭动态取色，储存并即时重建
                 getSP().edit().putInt("seed", si).putBoolean("dynamic_color", false).commit()
-                requireActivity().recreate()
+                scheduleRebuild(0L)
             }
             seedRow!!.addView(dot, dlp)
         }
@@ -142,9 +170,17 @@ class SettingsFragment : Fragment() {
             // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
             seedRow!!.alpha = 0f
             seedRow!!.translationY = dp(8).toFloat()
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                seedRow!!.animate().alpha(1f).translationY(0f).setDuration(250).start()
-            }, 120)
+            // alpha2.54: 必须捕获局部引用 —— onDestroyView 会把 seedRow 置空，
+            // 延迟回调里再解引用（seedRow!!）会抛 KotlinNullPointerException。
+            // 视图已分离时跳过动画即可，不影响正确性。
+            val seedAnim = seedRow
+            if (seedAnim != null) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (seedAnim.parent != null) {
+                        seedAnim.animate().alpha(1f).translationY(0f).setDuration(250).start()
+                    }
+                }, 120)
+            }
         }
 
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))
@@ -156,7 +192,7 @@ class SettingsFragment : Fragment() {
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language", null,
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
             getSP().edit().putInt("lang", mi).commit()
-            requireActivity().recreate()
+            scheduleRebuild(0L)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, langRow), LinearLayout.LayoutParams(-1, -2))
         // alpha2.53: 修复语言卡与「检查权限」卡间距过近（此前漏了 12dp 卡间距）
@@ -406,7 +442,7 @@ class SettingsFragment : Fragment() {
             editor.commit()
             android.widget.Toast.makeText(requireContext(), Lang.t("已重置所有自定义映射", "All custom mappings reset"), android.widget.Toast.LENGTH_SHORT).show()
             // 刷新当前页面
-            requireActivity().recreate()
+            scheduleRebuild(0L)
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, rowReset))
         box.addView(spacer(dp(10)))
@@ -523,6 +559,13 @@ class SettingsFragment : Fragment() {
         b.setTextColor(if (en) pal.onContainer else pal.onVariant)
     }
 
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // alpha2.54: 视图销毁即取消挂起的重建，并断开对旧视图的引用
+        rebuildHandler.removeCallbacks(rebuildRunnable)
+        seedRow = null
+    }
+
     override fun onResume() {
         super.onResume()
         updateSimState()
@@ -561,16 +604,15 @@ class SettingsFragment : Fragment() {
         M3Ui.standardSwitch(sw, pal)
         sw.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean(key, checked).commit()
-            // alpha2.8: 开启动态取色 -> 先播种子颜色行消失动画，再重建（Material fade+slide）
-            if (key == "dynamic_color" && checked
-                    && seedRow != null && seedRow!!.parent != null) {
-                seedRow!!.animate().alpha(0f).translationY(dp(8).toFloat()).setDuration(200).start()
-                android.os.Handler(android.os.Looper.getMainLooper())
-                        .postDelayed({ requireActivity().recreate() }, 550)
+            // alpha2.54: 取局部引用，避免 !! 断言与 parent 检查之间的 TOCTOU
+            val sr = seedRow
+            if (key == "dynamic_color" && checked && sr != null && sr.parent != null) {
+                // 开启动态取色 -> 先播种子颜色行消失动画，再重建（Material fade+slide）
+                sr.animate().alpha(0f).translationY(dp(8).toFloat()).setDuration(200).start()
+                scheduleRebuild(550L)
             } else {
-                // alpha2.7: 等 MaterialSwitch 动画播完再重建（立即 recreate 会吞掉开关动画）
-                android.os.Handler(android.os.Looper.getMainLooper())
-                        .postDelayed({ requireActivity().recreate() }, 350)
+                // 等 MaterialSwitch 动画播完再重建（立即 recreate 会吞掉开关动画）
+                scheduleRebuild(350L)
             }
         }
         return sw
