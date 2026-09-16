@@ -53,6 +53,8 @@
   - `su` 拉起官方 App（`MoondropBooter`）——必然失败，直接跳过；
   - 官方面板 / 详情页注入（GMS Hook，需 LSPosed）——设置页对应开关置灰并说明；
   - Root 强力保活——开关置灰并说明，且**保留用户原有设置值**（临时无 Root 不该改掉它）；
+  - 弹窗图标自定义——该图标由 GMS 进程内的 Hook 读取（`readIconBytes`），
+    无 Root 时 Hook 不工作，设置页该项一并置灰并说明；
   - 日志抓取里的 `su` 复制——走非 Root 兜底路径；
   - 启动时的 Fast Pair Hook 探测——跳过那 4 秒必然超时的等待，直接走内置 BLE 自扫。
 - 保证回落链路可用：通知栏按钮被点击时会**顺带把服务拉起**（幂等），
@@ -60,6 +62,20 @@
   开机自启与 AlarmManager 保活本来就不依赖 Root。
 - 权限页与设置页会明确显示当前处于「无 Root 模式」及其可用范围，
   避免用户误以为功能坏了。
+
+### 改进：权限收紧（移除三处从未使用的声明）
+- **`SYSTEM_ALERT_WINDOW`**：本模块**从不创建悬浮窗** —— 代码里没有任何
+  `canDrawOverlays` / `TYPE_APPLICATION_OVERLAY` / 添加 overlay 窗口的调用；
+  弹窗走的是 GMS 进程内的既有窗口，受 GMS 自身权限约束，与本应用无关。
+  该权限此前声明了却一直是 `granted=false`，权限检测页还据此提示用户去授予，
+  属于误导，现一并删除（清单 + 检查项 + 两处跳转分支 + 相关文案）。
+- **`FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE`** 与 service 上的
+  `android:foregroundServiceType`：全仓没有任何 `startForeground()` / `stopForeground()`
+  调用，运行时 `dumpsys activity services` 也确认该服务未处于前台状态 ——
+  `HeadsetDetectService` 实为普通后台服务（靠 `START_STICKY` + AlarmManager 保活），
+  这几项声明对运行时零影响。
+- 收紧后清单只剩真正在用的权限：`BLUETOOTH_CONNECT`、`BLUETOOTH_SCAN`、`BLUETOOTH`、
+  `POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`。
 
 ### 改进：设置页分类重组
 - 原「行为」段把官方集成 / 通知 / 保活 / 后台 / 界面元素混在一起，现按功能域拆分：
