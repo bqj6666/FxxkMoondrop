@@ -2,8 +2,8 @@
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&labelColor=555555)
 ![Xposed](https://img.shields.io/badge/Xposed-API_102-E64A19?style=flat-square&labelColor=555555)
-
-![Target](https://img.shields.io/badge/Target-com.google.android.gms_%7C_com.android.settings-007EC6?style=flat-square&labelColor=555555)
+![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
