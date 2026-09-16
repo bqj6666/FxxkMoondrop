@@ -5,6 +5,28 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ---
+## alpha2.54 (289)
+### 修复：反复开关「动态取色 / AMOLED 纯黑」导致崩溃
+- **根因（三处叠加，缺一即不崩但隐患仍在）**：主题开关的 OnCheckedChangeListener 里直接
+  `Handler().postDelayed({ requireActivity().recreate() }, 350/550)` ——
+  1. **没有任何取消机制**：快速反复开关会排出多个 recreate 回调，逐个执行；
+  2. 回调闭包持有的是**创建它的那个 Fragment 实例**。第一次 recreate 完成后该实例已 detach，
+     后续排队的回调再调 `requireActivity()` 必抛 `IllegalStateException: Fragment not attached to an activity`；
+  3. **没有生命周期清理**，视图销毁后回调照跑。
+- **修复**：
+  - 新增统一入口 `scheduleRebuild(delayMs)`：**先 removeCallbacks 再 post**，把连续请求合并成一次重建，
+    从根上消除「多个 pending 回调」这一前提。
+  - `rebuildRunnable` 执行前用 `isAdded` / `activity` / `isFinishing` 三重检查，任一不满足静默跳过，
+    不再依赖 `requireActivity()`。
+  - `onDestroyView` 取消挂起重建并释放 `seedRow` 引用。
+  - 主题下拉、种子色、语言、重置映射**四处直接 recreate 一并收拢**到该入口（同样存在 detach 风险）。
+  - `makeThemeSwitch` 的 `seedRow` 改为局部引用，消除 `!!` 断言与 `parent` 检查之间的 TOCTOU。
+  - 种子行入场动画同样改为局部引用 + `parent` 检查 —— `onDestroyView` 置空 `seedRow` 后，
+    原 `seedRow!!` 延迟回调会抛 `KotlinNullPointerException`（本次一并堵住）。
+- **实测**：12 次连续点击（296ms 内，全部落在同一个 350ms 窗口）只触发 **1 次**重建，
+  进程存活、无异常（修复前会排队 12 次）。用户真机复测通过。全仓单测 26 例全绿。
+- 版本号升至 **alpha2.54**（versionCode 289）
+
 ## alpha2.53 (288)
 ### 修复：断开连接后英雄卡徽章仍停留在旧编解码器
 - **根因（两处叠加，缺一不可）**：
