@@ -559,10 +559,35 @@ object GaiaCommands {
     const val ANC_PATH_ANC_V2 = 32          // feature F_ANC_V2
     const val ANC_PATH_UNKNOWN = -1
 
-    /** 解析 GET_SUPPORTED_FEATURES 响应位图 -> 支持的 feature id 集合 */
+    /**
+     * 解析 GET_SUPPORTED_FEATURES 响应 -> 支持的 feature id 集合。
+     *
+     * 3.0.3（issue #4）：真机实测存在**两种封装**，都要认。
+     *
+     * 1. **特征对列表**（官方 GAIA SDK 的格式）—— 反编译官方 Moondrop App 内
+     *    `com.qualcomm.qti.gaiaclient.core.gaia.qtil.data.GetSupportedFeaturesData`：
+     *    `byte0 = hasMoreData(0/1)`，其后每 2 字节一组 `featureId | version`。
+     *    布丁（PUDDING）即此格式，23 字节：
+     *    `00 | 00 02 | 01 01 | 05 01 | 0D 01 | 0E 01 | 0F 01 | 10 01 | 13 01 | 14 01 | 16 01 | 20 01`
+     *    -> feature = 0x00(BASIC) 0x01 0x05 0x0D(BATTERY) 0x0E 0x0F(DAC) 0x10 0x13(LED) 0x14 0x16 0x20(ANC_V2)
+     *    （与 PuddingPods 文档、本仓库布丁档案三项全部吻合：有电量/增益/LED、无空间音频、ANC 走 V2）
+     * 2. **32 位位图**（旧实现唯一假设的格式，长度恒为 4 的倍数）。
+     *
+     * 判别只看长度奇偶：对列表恒为奇数长度，位图恒为偶数长度，不会歧义。
+     * 位图那条分支保持原样，GA2 等老固件的既有行为不受影响。
+     */
     @JvmStatic
     fun parseSupportedFeatures(payload: ByteArray?): Set<Int> {
         val p = payload ?: return emptySet()
+        if (isFeaturePairList(p)) {
+            val features = HashSet<Int>()
+            var i = 1
+            while (i + 1 < p.size) {
+                features.add(p[i].toInt() and 0xFF)
+                i += 2
+            }
+            return features
+        }
         val features = HashSet<Int>()
         var wordIdx = 0
         var i = 0
@@ -580,11 +605,25 @@ object GaiaCommands {
         return features
     }
 
-    /** alpha2.22: 能力位图是否被截断（payload 长度非 4 的倍数，末尾 feature word 会丢失）。
-     *  截断时该能力不完整，不应据此选择 ANC 路径（A1 健壮性）。 */
+    /**
+     * 该 payload 是否为官方「特征对列表」格式（byte0 = hasMoreData，其后 featureId/version 成对）。
+     *
+     * 判别依据（实测 + 官方 SDK 解析器结构）：长度奇数 —— 1 + 2n 恒为奇数；
+     * 且首字节是 0/1（hasMoreData 只有这两个取值）。位图格式长度恒为 4 的倍数，
+     * 二者不会同时成立，因此这个判别无歧义。
+     */
+    @JvmStatic
+    fun isFeaturePairList(payload: ByteArray?): Boolean {
+        val p = payload ?: return false
+        return p.size >= 3 && p.size % 2 == 1 && (p[0].toInt() and 0xFF) <= 1
+    }
+
+    /** 能力位图是否被截断（位图长度非 4 的倍数，末尾 feature word 会丢失）。
+     *  3.0.3: 对列表格式长度天然为奇数，不适用此判定，直接返回 false。 */
     @JvmStatic
     fun isFeaturePayloadTruncated(payload: ByteArray?): Boolean {
         val p = payload ?: return false
+        if (isFeaturePairList(p)) return false
         return p.size % 4 != 0
     }
 
@@ -602,7 +641,11 @@ object GaiaCommands {
      *  不再硬编码恒等映射；custom 为用户自定义映射（index=UI模式，value=设备码）。 */
     @JvmStatic
     fun ancUiFromDev(path: Int, dev: Int, custom: IntArray? = null, getMap: IntArray? = null): Int = when (path) {
-        ANC_PATH_ANC_V2 -> if (dev in 0..5) dev else -1    // ANC_V2 恒等映射（官方 AncV2Handler 0-5 直传）
+        // 3.0.3: ANC_V2 也可由型号档案给出 dev -> UI（布丁 1=自适应 / 4=基础降噪，非恒等）；
+        // 无档案时保持恒等（官方 AncV2Handler 0-5 直传），旧行为不变。
+        ANC_PATH_ANC_V2 -> if (getMap != null) {
+            if (dev in getMap.indices) getMap[dev] else -1
+        } else if (dev in 0..5) dev else -1
         ANC_PATH_ANC_V1 -> if (dev == 0) 0 else 1
         ANC_PATH_AUDIO_CURATION -> {
             // alpha2.26.9: 型号档案可提供独立的 GET 映射（如 GA2 固件读回 0=关/1=降/2=透传/3=抗风，0-based 直传）
@@ -616,10 +659,14 @@ object GaiaCommands {
         else -> -1 // ANC_PATH_UNKNOWN：无ANC
     }
 
-    /** UI 模式 -> 设备模式（负数 = 该路径不支持此 UI 模式）。custom 同上，null 用官方默认。 */
+    /** UI 模式 -> 设备模式（负数 = 该路径不支持此 UI 模式）。
+     *  @param custom AudioCuration 路径的 4 档映射（null 用官方默认）
+     *  @param v2Map  ANC_V2 路径的型号档案映射（UI -> dev，-1 = 不支持该档；null = 恒等映射） */
     @JvmStatic
-    fun ancDevFromUi(path: Int, ui: Int, custom: IntArray? = null): Int = when (path) {
-        ANC_PATH_ANC_V2 -> if (ui in 0..5) ui else -1     // 恒等映射；超范围返回 -1（禁止发送）
+    fun ancDevFromUi(path: Int, ui: Int, custom: IntArray? = null, v2Map: IntArray? = null): Int = when (path) {
+        ANC_PATH_ANC_V2 -> if (v2Map != null) {         // 3.0.3: 型号档案优先（布丁 降噪=4 / 自适应=1）
+            if (ui in v2Map.indices) v2Map[ui] else -1
+        } else if (ui in 0..5) ui else -1               // 无档案：恒等映射；超范围返回 -1（禁止发送）
         ANC_PATH_ANC_V1 -> if (ui == 0) 0 else 1
         ANC_PATH_AUDIO_CURATION -> {
             val map = custom ?: DEFAULT_ANC_MAP

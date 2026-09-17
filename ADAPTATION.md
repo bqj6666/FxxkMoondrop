@@ -52,7 +52,17 @@ FxxkMoondrop 运行时自动探测耳机支持哪条 ANC 路径，不硬编码�
 | AudioCuration | 8 | BASIC 特性位图含 bit3 | cmd=3 (GET_CURRENT_MODE) | cmd=4 (SET_MODE) |
 | ANC V2 | 32 | BASIC 特性位图含 bit5 | cmd=3 (GET_CURRENT_MODE) | cmd=4 (SET_CURRENT_MODE) |
 
-探测流程：连接成功 → 查询 `BASIC.GET_SUPPORTED_FEATURES` → 按位图判断 → 锁定 ancPath → 后续读写走该路径。断连和每次新 GATT 会话均重置探测状态并超时自愈重发。
+探测流程：连接成功 → 查询 `BASIC.GET_SUPPORTED_FEATURES` → 解析能力表判断 → 锁定 ancPath → 后续读写走该路径。断连和每次新 GATT 会话均重置探测状态并超时自愈重发。
+
+> ⚠️ 能力响应有**两种封装**，解析时必须都认（3.0.3 修正）：
+> 1. **特征对列表**（官方 GAIA SDK 格式，反编译 `GetSupportedFeaturesData`：
+>    `byte0 = hasMoreData(0/1)`，其后每 2 字节一组 `featureId | version`；长度恒为奇数）。布丁实测 23 字节：
+>    `00 | 00 02 | 01 01 | 05 01 | 0D 01 | 0E 01 | 0F 01 | 10 01 | 13 01 | 14 01 | 16 01 | 20 01`
+>    → feature = BASIC / 电量 0x0D / 增益 0x0F / 指示灯 0x13 / **ANC_V2 0x20**（无 AudioCuration、无空间音频）。
+> 2. **32 位位图**（长度恒为 4 的倍数，GA2 等老固件；bit 序号 = feature id）。
+>
+> 旧实现只认第 2 种，把布丁的 23 字节响应判成「位图截断」并弃用，导致 `ancPath` 永远是 UNKNOWN、
+> ANC 命令在发送前就被拦下（issue #4 复测现象「降噪点了没反应」）。判别只看长度奇偶即可，无歧义。
 
 ### GA2 实测 ANC 设备码映射
 

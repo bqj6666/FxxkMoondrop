@@ -117,6 +117,57 @@ object AncProfileLib {
         return "默认"
     }
 
+    // ============================================================
+    // ANC_V2 路径（GAIA feature 0x20）型号档案 —— 3.0.3
+    //
+    // 为什么单独一张表：ANC_V2 的**设备码语义与 AudioCuration 不同**，且各型号也不同。
+    // 官方/第三方实测（PuddingPods，https://github.com/lingbai-rong/PuddingPods）：
+    //   布丁 TX `00 1D 40 04 <mode>`，mode = 00 关闭 / 01 自适应降噪 / 02 通透 / 03 抗风噪 / 04 基础降噪
+    // 而旧实现对该路径做**恒等映射**，于是：
+    //   UI「降噪」(1) -> dev 1 = 自适应降噪（发错档）
+    //   UI「自适应」(4) -> dev 4 = 基础降噪（发错档，且与降噪互换）
+    // 本表把 UI 档位显式映射到正确设备码，同时让「自适应」这一档真正可用
+    // （官方面板 / 通知 / 弹窗的 adaptive 按钮都走 supportedUiModes + 本表）。
+    //
+    // setMap 下标 = UI 档位（0关 1降 2透 3抗 4自适应 5直播），值 = 设备码，-1 = 该档位设备不支持。
+    // getMap 下标 = 设备码，值 = UI 档位（固件读回方向）。
+    // 未命中的型号一律回退恒等映射（保持旧行为，不猜）。
+    // ============================================================
+
+    private class AncV2Profile(val nameKey: String, val setMap: IntArray, val getMap: IntArray)
+
+    private val ANC_V2_PROFILES: List<AncV2Profile> = listOf(
+        AncV2Profile(
+            nameKey = "PUDDING",
+            // UI[关,降,透,抗,自适应,直播] -> dev
+            setMap = intArrayOf(0, 4, 2, 3, 1, -1),
+            // dev -> UI（0关 1自适应 2透 3抗 4降）
+            getMap = intArrayOf(0, 4, 2, 3, 1)
+        )
+    )
+
+    private fun matchAncV2(deviceName: String?): AncV2Profile? {
+        val n = deviceName?.uppercase()?.trim()
+        if (!n.isNullOrEmpty()) {
+            for (p in ANC_V2_PROFILES) if (n.contains(p.nameKey)) return p
+        }
+        return null
+    }
+
+    /** ANC_V2 的 SET 映射（UI -> dev）；未命中型号返回 null，调用方回退恒等映射。 */
+    fun resolveAncV2Set(deviceName: String?): IntArray? = matchAncV2(deviceName)?.setMap
+
+    /** ANC_V2 的 GET 映射（dev -> UI）；未命中型号返回 null，调用方回退恒等映射。 */
+    fun resolveAncV2Get(deviceName: String?): IntArray? = matchAncV2(deviceName)?.getMap
+
+    /** ANC_V2 档案实际支持的 UI 档位（setMap 里非 -1 的槽位）；未命中型号返回 null = 不限制。 */
+    fun supportedAncV2UiModes(deviceName: String?): IntArray? {
+        val m = matchAncV2(deviceName)?.setMap ?: return null
+        val out = ArrayList<Int>(m.size)
+        for (ui in m.indices) if (m[ui] >= 0) out.add(ui)
+        return out.toIntArray()
+    }
+
     /**
      * alpha2.32: 扩展设备控制（DC）能力档案。
      * 按型号记录空间音频/增益/LED 支持情况。
@@ -139,7 +190,7 @@ object AncProfileLib {
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
 
         // 布丁 PUDDING (MD-TWS-056): 增益+指示灯, 无空间音频
-        // GAIA V4 over RFCOMM/SPP; ANC 走 ANC_V2 恒等映射（0=关/1=自适应/2=通透/3=抗风/4=基础降噪）
+        // GAIA V4 over RFCOMM/SPP; ANC 走 ANC_V2，档位映射见 [ANC_V2_PROFILES]（非恒等）
         // 协议来源: https://github.com/lingbai-rong/PuddingPods
         // 增益 0x00=低/0x01=中/0x02=高（恒等映射）; 指示灯 0x00=关/0x01=开
         DcProfile("PUDDING", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),

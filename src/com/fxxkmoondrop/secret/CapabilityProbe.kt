@@ -172,6 +172,9 @@ class CapabilityProbe(
                         Log.w(TAG, "probe finalized by timeout, basicAlive=" + basicAlive +
                                 " features=" + features.sorted().joinToString(",") +
                                 " -> ancPath=" + ancPath + " (no-ANC conclusion)")
+                        AppLog.w(TAG, "probe timeout: basicAlive=" + basicAlive +
+                                " features=" + features.sorted().joinToString(",") +
+                                " -> ancPath=" + ancPath)
                         try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
                     }
                 }, PROBE_TIMEOUT_MS)
@@ -181,19 +184,28 @@ class CapabilityProbe(
 
     /** 处理 GET_SUPPORTED_FEATURES 响应（能力位图） */
     fun handleFeatureResponse(payload: ByteArray) {
+        // 3.0.3（issue #4）：能力响应不再因「长度不像位图」被整份作废。
+        // 实测布丁（PUDDING / MD-TWS-056）每次连接都回同一帧 23 字节响应
+        //   `00 1D 01 01 | 00 | 00 02 | 01 01 | 05 01 | 0D 01 | 0E 01 | 0F 01 | 10 01 | 13 01 | 14 01 | 16 01 | 20 01`
+        // —— 它是官方 SDK 的**特征对列表**（byte0 = hasMoreData，其后 featureId|version 成对），不是位图。
+        // 旧逻辑只认「长度是 4 的倍数」的位图，见 23 % 4 != 0 即判截断、把 ancPath 钉回 UNKNOWN，
+        // 于是 setAncMode 在发送前就被 `dev < 0` 拦下——现象就是「降噪点了没反应」，
+        // 而能力探测其实每次都收到了完整能力表。现在由 GaiaCommands.parseSupportedFeatures
+        // 分辨两种封装并正确解析（0x20 = ANC_V2 在表内）。
         val truncated = GaiaCommands.isFeaturePayloadTruncated(payload)
         probeTruncated = truncated
         val feats = GaiaCommands.parseSupportedFeatures(payload)
         features = feats  // alpha2.31: 存完整 feature set 供 hasFeature 查询
+        ancPath = GaiaCommands.ancPathFrom(feats)
         if (truncated) {
-            ancPath = GaiaCommands.ANC_PATH_UNKNOWN
-            Log.w(TAG, "capability payload truncated (len=${payload.size}), keep ANC unknown")
-        } else {
-            ancPath = GaiaCommands.ancPathFrom(feats)
+            Log.w(TAG, "capability payload truncated (len=${payload.size}), tail ignored, path kept=$ancPath")
         }
         probeDone = true
         try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
         Log.d(TAG, "capabilities: ${feats.sorted().joinToString(",")} truncated=$truncated -> ancPath=$ancPath")
+        // 3.0.3: 结论文本写进 AppLog —— logcat 抓取窗口太短，用户导出的日志里从来看不到探测结论。
+        AppLog.d(TAG, "probe: len=" + payload.size + " truncated=" + truncated +
+                " ancPath=" + ancPath + " features=" + feats.sorted().joinToString(","))
     }
 
     /** 处理 ANC 探测响应（AudioCuration / ANC_V2 回包确认路径）。

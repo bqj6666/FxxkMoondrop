@@ -6,6 +6,44 @@
 
 ---
 
+## 3.0.3 (303)
+> 修复：布丁（PUDDING / MD-TWS-056）ANC 命令发不出去（issue #4 复测反馈）；补齐 ANC_V2 档位映射与自适应档。
+
+### 修复：能力响应按「特征对列表」解析，ANC 路径不再被误判为未知（issue #4）
+- **问题**：布丁每次连接都回同一帧 23 字节能力响应
+  `00 1D 01 01 | 00 | 00 02 | 01 01 | 05 01 | 0D 01 | 0E 01 | 0F 01 | 10 01 | 13 01 | 14 01 | 16 01 | 20 01`。
+  旧实现只认「长度是 4 的倍数」的 32 位位图，见 `23 % 4 != 0` 即判「位图截断」并把 `ancPath` 钉回
+  `UNKNOWN`；于是 `setAncMode` 在发送前就被 `dev < 0` 拦下（日志 `setAncMode: mode 1 not allowed on path -1`
+  连打 57 次）—— 现象是「降噪点了没反应」，而能力探测其实每次都收到了完整能力表。
+- **依据**：反编译官方 Moondrop App 内 Qualcomm GAIA SDK
+  `com.qualcomm.qti.gaiaclient.core.gaia.qtil.data.GetSupportedFeaturesData`：
+  `byte0 = hasMoreData(0/1)`，其后每 2 字节一组 `featureId | version` —— 是**特征对列表**，不是位图。
+  按此解析，布丁的 feature = `0x00 BASIC / 0x0D 电量 / 0x0F 增益 / 0x13 指示灯 / 0x20 ANC_V2`
+  （无 AudioCuration、无空间音频），与 PuddingPods 文档和本仓库布丁档案完全吻合。
+- **修复**：`GaiaCommands.parseSupportedFeatures` 现在同时支持两种封装 ——
+  长度奇数且首字节 ≤1 判为对列表，否则按老位图解析（GA2 等老固件行为不变）；
+  `isFeaturePayloadTruncated` 只对位图生效，对列表不再误报截断。
+
+### 修复：布丁 ANC_V2 档位映射（设备库）
+- **问题**：ANC_V2 路径此前是**恒等映射**，而布丁固件语义是
+  `00 关闭 / 01 自适应降噪 / 02 通透 / 03 抗风噪 / 04 基础降噪`，于是
+  「降噪」按钮发成 `01`（自适应降噪）、「自适应」按钮发成 `04`（基础降噪）——两档互换。
+- **修复**：`AncProfileLib` 新增 ANC_V2 型号档案表（`PUDDING`：
+  SET `UI[关,降,透,抗,自适应,直播] -> [0,4,2,3,1,-1]`，GET `dev -> UI = [0,4,2,3,1]`）。
+  `GaiaCommands.ancDevFromUi / ancUiFromDev` 在 ANC_V2 路径上支持型号映射，未收录型号仍回退恒等。
+
+### 界面：自适应档位在所有界面统一可用
+- `supportedUiModes()` 对 ANC_V2 先问型号档案：布丁宣告 `[关,降,透,抗,自适应]`（不含直播），
+  于是官方面板 / 通知 / 弹窗都只出现该设备真能执行的档位；
+  官方面板（含**音量条**入口那套 Hearable Controls）的 `ui_modes` 宣告随之收窄，
+  自适应按钮映射到 `dev 01`、降噪映射到 `dev 04`，高亮状态与设备读回一致。
+- 弹窗 mode bar 新增「自适应」按钮：仅当设备能力含该档才出现；能力后到时自动重建 mode bar，
+  不再出现「探测完成前开过的弹窗少一档」。
+- 诊断：能力探测结论文本写入 AppLog（`probe: len=... truncated=... ancPath=... features=...`），
+  用户导出的日志里可直接看到探测结果。
+
+---
+
 ## 3.0.2 (302)
 > 修复：布丁（PUDDING / MD-TWS-056）等 Classic Bluetooth 设备在 RFCOMM/SPP 上「连得上但控制无效」。
 

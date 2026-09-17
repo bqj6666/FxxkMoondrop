@@ -1069,7 +1069,10 @@ class GaiaBleClient private constructor() {
      * 那里发不出去的模式，这里就不该对外宣称支持。
      */
     fun supportedUiModes(): IntArray = when (probe.ancPath) {
-        GaiaCommands.ANC_PATH_ANC_V2 -> intArrayOf(0, 1, 2, 3, 4, 5)
+        // 3.0.3: ANC_V2 先问型号档案 —— 布丁支持 [关,降,透,抗,自适应]（不含直播），
+        // 这样官方面板 / 通知 / 弹窗都不会长出点了没反应的空档位。未收录型号仍按全 6 档宣告。
+        GaiaCommands.ANC_PATH_ANC_V2 -> AncProfileLib.supportedAncV2UiModes(connectedDeviceName)
+                ?: intArrayOf(0, 1, 2, 3, 4, 5)
         GaiaCommands.ANC_PATH_AUDIO_CURATION -> intArrayOf(0, 1, 2, 3)
         GaiaCommands.ANC_PATH_ANC_V1 -> intArrayOf(0, 1)
         else -> IntArray(0)
@@ -1129,6 +1132,12 @@ class GaiaBleClient private constructor() {
     }
 
     private fun readAncGetMap(): IntArray? {
+        // 3.0.3: ANC_V2 型号档案的 dev -> UI（布丁 1=自适应 / 4=基础降噪）；未收录型号回退恒等（null）。
+        if (probe.ancPath == GaiaCommands.ANC_PATH_ANC_V2) {
+            val v2 = AncProfileLib.resolveAncV2Get(connectedDeviceName)
+            AppLog.d(GaiaConstants.TAG, "ancGetMap(V2) " + (v2?.contentToString() ?: "identity"))
+            return v2
+        }
         val sp = context?.getSharedPreferences("cfg", 0)
         val customSet = (sp?.getInt("anc_map_custom", 0) ?: 0) == 1
         Log.d(GaiaConstants.TAG, "readAncGetMap devName=" + connectedDeviceName +
@@ -1147,7 +1156,10 @@ class GaiaBleClient private constructor() {
         this.ancCallback = cb
         if (simConnected) { cb?.onAncModeResult(mode); return }
         val path = probe.ancPath
-        val dev = GaiaCommands.ancDevFromUi(path, mode, readAncMap())
+        // 3.0.3: ANC_V2 走型号档案（布丁 UI1 降噪 -> dev 4 基础降噪 / UI4 自适应 -> dev 1），
+        // 未收录型号返回 null -> GaiaCommands 回退恒等映射，行为与旧版一致。
+        val dev = GaiaCommands.ancDevFromUi(
+                path, mode, readAncMap(), AncProfileLib.resolveAncV2Set(connectedDeviceName))
         if (dev < 0) {
             val reason = if (path == GaiaCommands.ANC_PATH_UNKNOWN)
                 "ANC 能力尚未就绪或无 ANC 能力" else "该设备不支持此模式"

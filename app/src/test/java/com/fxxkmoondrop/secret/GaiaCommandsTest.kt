@@ -3,6 +3,7 @@ package com.fxxkmoondrop.secret
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -123,13 +124,65 @@ class GaiaCommandsTest {
         assertTrue(GaiaCommands.parseSupportedFeatures(ByteArray(0)).isEmpty())
     }
 
-    /** 长度非 4 倍数 = 位图被截断（alpha2.22 健壮性判定） */
+    /** 长度非 4 倍数 = 位图被截断（alpha2.22 健壮性判定；首位 >1 故不是对列表） */
     @Test
     fun isFeaturePayloadTruncated_onlyWhenNotMultipleOfFour() {
         assertFalse(GaiaCommands.isFeaturePayloadTruncated(null))
         assertFalse(GaiaCommands.isFeaturePayloadTruncated(ByteArray(4)))
         assertFalse(GaiaCommands.isFeaturePayloadTruncated(ByteArray(8)))
-        assertTrue(GaiaCommands.isFeaturePayloadTruncated(ByteArray(5)))
+        assertTrue(GaiaCommands.isFeaturePayloadTruncated(byteArrayOf(0x02, 0, 0, 0, 0)))
+        // 对列表（官方 SDK 格式）长度恒为奇数，不属于「截断」
+        assertFalse(GaiaCommands.isFeaturePayloadTruncated(byteArrayOf(0x00, 0x0D, 0x01)))
+    }
+
+    /** issue #4 铁证：布丁回的特征对列表按官方 SDK 语义解析 */
+    @Test
+    fun parseSupportedFeatures_readsOfficialPairsList() {
+        val pud = byteArrayOf(
+            0x00,
+            0x00, 0x02, 0x01, 0x01, 0x05, 0x01, 0x0D, 0x01, 0x0E, 0x01, 0x0F, 0x01,
+            0x10, 0x01, 0x13, 0x01, 0x14, 0x01, 0x16, 0x01, 0x20, 0x01
+        )
+        val s = GaiaCommands.parseSupportedFeatures(pud)
+        // 电量 0x0D / 增益 0x0F / 指示灯 0x13 / ANC V2 0x20 都在表内
+        assertTrue(s.contains(GaiaConstants.FEATURE_BATTERY))
+        assertTrue(s.contains(GaiaConstants.FEATURE_DAC_GAIN))
+        assertTrue(s.contains(GaiaConstants.FEATURE_LED))
+        assertTrue(s.contains(GaiaConstants.F_ANC_V2))
+        // 布丁没有 AudioCuration(8) / 空间音频(18)，也不该被误判成 ANC V1(2)
+        assertFalse(s.contains(GaiaCommands.F_AUDIO_CURATION))
+        assertFalse(s.contains(GaiaCommands.F_SPATIAL_AUDIO))
+        assertFalse(s.contains(GaiaCommands.F_ANC))
+        // 由此得到的 ANC 路径必须是 ANC V2 —— 这正是 3.0.2 之前丢失的一步
+        assertEquals(GaiaCommands.ANC_PATH_ANC_V2, GaiaCommands.ancPathFrom(s))
+    }
+
+    /** 布丁 ANC_V2 型号档案：降噪 -> 基础降噪(4)，自适应 -> 自适应降噪(1)，直播不支持 */
+    @Test
+    fun ancV2_profileMapsModesCorrectly() {
+        val v2 = AncProfileLib.resolveAncV2Set("MOONDROP Pudding")!!
+        assertEquals(0, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 0, null, v2))
+        assertEquals(4, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 1, null, v2))
+        assertEquals(2, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 2, null, v2))
+        assertEquals(3, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 3, null, v2))
+        assertEquals(1, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 4, null, v2))
+        assertEquals(-1, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 5, null, v2))
+        // 未收录型号 -> null -> 恒等映射（旧行为不变）
+        assertNull(AncProfileLib.resolveAncV2Set("MOONDROP Golden Ages 2"))
+        assertEquals(4, GaiaCommands.ancDevFromUi(GaiaCommands.ANC_PATH_ANC_V2, 4, null, null))
+    }
+
+    /** 固件读回方向：dev 1 = 自适应(UI 4)、dev 4 = 降噪(UI 1)，且宣告档位含自适应、不含直播 */
+    @Test
+    fun ancV2_profileReadbackAndAdvertisedModes() {
+        val get = AncProfileLib.resolveAncV2Get("MOONDROP Pudding")!!
+        assertEquals(0, GaiaCommands.ancUiFromDev(GaiaCommands.ANC_PATH_ANC_V2, 0, null, get))
+        assertEquals(4, GaiaCommands.ancUiFromDev(GaiaCommands.ANC_PATH_ANC_V2, 1, null, get))
+        assertEquals(1, GaiaCommands.ancUiFromDev(GaiaCommands.ANC_PATH_ANC_V2, 4, null, get))
+        assertArrayEquals(
+            intArrayOf(0, 1, 2, 3, 4),
+            AncProfileLib.supportedAncV2UiModes("MOONDROP Pudding")
+        )
     }
 
     // ==================== ANC 路径选择 ====================

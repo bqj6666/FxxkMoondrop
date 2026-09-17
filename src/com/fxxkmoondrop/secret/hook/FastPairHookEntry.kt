@@ -657,7 +657,16 @@ class FastPairHookEntry {
             sAncStatus = status
             val act = sHalfSheetActivity ?: return
             val decor = act.window.decorView
-            val bar = decor.findViewWithTag<android.view.View>("fxxk_mode_bar") ?: return
+            var bar = decor.findViewWithTag<android.view.View>("fxxk_mode_bar") ?: return
+            // 3.0.3: 能力档位集合变化 -> 重建 mode bar。弹窗先出现、能力后到达时（探测约 1.2s 起步），
+            // 自适应按钮要能补上，否则「探测完成前开过的弹窗永远少一档」。
+            val sig = sUiModes.joinToString(",")
+            if (sig != sBarUiModesSig) {
+                sBarUiModesSig = sig
+                (bar.parent as? android.view.ViewGroup)?.removeView(bar)
+                injectModeButtons(act)
+                bar = decor.findViewWithTag<android.view.View>("fxxk_mode_bar") ?: return
+            }
             // alpha2.26.7: 恢复函数头注释语义——status=2(无ANC/截断) 隐藏整条 mode bar（不显示不支持的控件，跨机型适配）
             if (status == 2) {
                 bar.visibility = android.view.View.GONE
@@ -666,7 +675,7 @@ class FastPairHookEntry {
             }
             bar.visibility = android.view.View.VISIBLE
             val enabled = status == 1
-            for (m in 0..3) {
+            for (m in 0..4) {
                 val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
                 holder.isEnabled = enabled
                 holder.alpha = if (enabled) 1f else 0.4f
@@ -722,6 +731,13 @@ class FastPairHookEntry {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
             if (showWind) bar.addView(buildModeItem(act, MODE_WIND, if (zh) AncProfileLib.ANC_MODE_NAMES[3] else "Wind"))
+            // 3.0.3: 自适应档位只在设备真的支持时出现（sUiModes 来自 App 能力探测的 ui_modes，
+            // 布丁等 ANC_V2 设备含 4；只有 4 档能力的设备不会多出空按钮）。
+            if (sUiModes.contains(MODE_ADAPT)) {
+                bar.addView(buildModeItem(act, MODE_ADAPT,
+                        if (zh) AncProfileLib.ANC_MODE_NAMES_FULL[4] else "Adaptive"))
+            }
+            sBarUiModesSig = sUiModes.joinToString(",")
             val prof = resolveScreenProfile(act)
             val d = act.resources.displayMetrics.density
             val lp = android.widget.FrameLayout.LayoutParams(
@@ -1058,6 +1074,17 @@ class FastPairHookEntry {
                     c.drawPath(wv, p)
                 }
             }
+            MODE_ADAPT -> { // 自适应：双弧 + 中心点（自动调节语义）
+                val rectA = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
+                c.drawArc(rectA, 40f, 280f, false, p)
+                val irA = ir * 0.55f
+                val rectB = android.graphics.RectF(cx - irA, cy - irA, cx + irA, cy + irA)
+                c.drawArc(rectB, 40f, 280f, false, p)
+                val dotA = Paint(Paint.ANTI_ALIAS_FLAG)
+                dotA.style = Paint.Style.FILL
+                dotA.color = iconColor
+                c.drawCircle(cx, cy, px * 0.06f, dotA)
+            }
             MODE_WIND -> { // 抗风：旋风/三弧线
                 val rect3 = android.graphics.RectF(cx - ir, cy - ir, cx + ir, cy + ir)
                 c.drawArc(rect3, 70f, 220f, false, p)
@@ -1247,6 +1274,7 @@ class FastPairHookEntry {
                 override fun onReceive(context: Context, intent: Intent) {
                     try {
                         val st = intent.getIntExtra(EXTRA_ANC_STATUS, 0)
+                        sUiModes = intent.getIntArrayExtra("ui_modes") ?: IntArray(0)
                         // Hearable Controls：能力就绪时补推一次状态进官方存储；
                         // 同时把设备实际可用的 UI 档位转给桥接层，用于收窄官方面板的宣告。
                         HearableControlHook.onAncAvailability(
@@ -1790,6 +1818,12 @@ class FastPairHookEntry {
         /** alpha2.22: 最近一次 ANC 能力状态 0=探测中 1=有ANC 2=无ANC/截断；默认0保守禁用 */
         @JvmField @Volatile
         var sAncStatus = 0
+        /** 3.0.3: 最近一次 App 上报的设备可用 UI 档位（决定 mode bar 里出现哪几档，含自适应）。 */
+        @JvmField @Volatile
+        var sUiModes: IntArray = IntArray(0)
+        /** 3.0.3: 当前 mode bar 是按哪份档位集合建的（用于能力后到时重建）。 */
+        @JvmField @Volatile
+        var sBarUiModesSig = ""
 
         /** 【对接广播】弹窗点击"确定"后发出（extra: device_name），应用监听后执行真实连接 */
         const val ACTION_CONNECTED = "com.fxxkmoondrop.secret.FASTPAIR_CONNECTED"
@@ -1860,6 +1894,8 @@ class FastPairHookEntry {
         const val MODE_ANC = 1
         const val MODE_TRANS = 2
         const val MODE_WIND = 3
+        /** 3.0.3: 自适应（UI 4）。仅当设备能力含该档位时才加入 mode bar。 */
+        const val MODE_ADAPT = 4
 
         @JvmField @Volatile
         var sLeScanning = false
