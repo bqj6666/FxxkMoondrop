@@ -1,14 +1,20 @@
-name: 🐛 Bug 反馈
-description: 连接耳机后功能异常、弹窗异常、崩溃等问题
+name: Bug 反馈
+description: 连接耳机后功能异常、弹窗异常或崩溃等问题
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        提交前请确认：模块已在 LSPosed 中启用，**作用域已勾选 `com.google.android.gms`**。
+        提交前请确认：模块已在 LSPosed 中启用，作用域已勾选 `com.google.android.gms`。
         English is fine, fill in what you can.
-        缺版本号 / 机型 / 日志的报告无法定位，可能会被直接关闭。
+        缺少版本号、机型或日志的报告无法定位，可能会被直接关闭。
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 一、环境信息
+
   - type: input
     id: module_version
     attributes:
@@ -17,6 +23,7 @@ body:
       placeholder: alpha2.52 (287)
     validations:
       required: true
+
   - type: input
     id: android_device
     attributes:
@@ -24,6 +31,7 @@ body:
       placeholder: Android 15（ColorOS 15）/ 一加 13
     validations:
       required: true
+
   - type: input
     id: framework
     attributes:
@@ -31,6 +39,7 @@ body:
       placeholder: LSPosed 1.10.1（Zygisk）
     validations:
       required: true
+
   - type: input
     id: headset
     attributes:
@@ -39,6 +48,7 @@ body:
       placeholder: 水月雨 梦回2 / QCC5151
     validations:
       required: true
+
   - type: dropdown
     id: scope
     attributes:
@@ -49,13 +59,35 @@ body:
         - 不确定
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 二、问题描述
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 问题类型
+      options:
+        - 弹窗（不弹 / 重复弹 / 图标或排版异常）
+        - 控制功能（ANC、手势等设置无效）
+        - 电量显示
+        - 连接稳定性（断连、连上无反应）
+        - 应用崩溃或闪退
+        - 权限相关
+        - 其他
+    validations:
+      required: true
+
   - type: textarea
     id: symptom
     attributes:
       label: 现象
-      description: 哪一项失效（弹窗 / ANC / 电量 / 连接 / 控制）？越具体越好
+      description: 具体表现，例如「关掉弹窗后 GAIA 连上又弹一次」
     validations:
       required: true
+
   - type: textarea
     id: steps
     attributes:
@@ -66,13 +98,20 @@ body:
         3. ...
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 三、日志与确认
+
   - type: textarea
     id: logs
     attributes:
       label: 日志
-      description: 应用「设置 → 日志抓取」导出 zip 后直接拖进这里
+      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里
     validations:
       required: true
+
   - type: checkboxes
     id: checks
     attributes:

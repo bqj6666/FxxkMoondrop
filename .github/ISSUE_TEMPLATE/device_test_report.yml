@@ -1,13 +1,19 @@
-name: 🎧 耳机实机测试反馈
-description: 报告某款耳机的 GATT 指纹与自适应结果（对应置顶的实机测试请求）
+name: 耳机实机测试反馈
+description: 报告某款耳机的 GATT 指纹与自适应结果
 title: "[实机测试] "
 labels: ["help wanted"]
 body:
   - type: markdown
     attributes:
       value: |
-        本项目按**蓝牙 GATT 服务指纹**判定兼容性，不看型号名。
+        本项目按蓝牙 GATT 服务指纹判定兼容性，不看型号名。
         命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯）理论上即可接入。
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 一、设备信息
+
   - type: input
     id: headset
     attributes:
@@ -15,6 +21,7 @@ body:
       placeholder: 水月雨 知更鸟 Robin
     validations:
       required: true
+
   - type: input
     id: chip
     attributes:
@@ -22,6 +29,12 @@ body:
       placeholder: BT8952F / QCC5151
     validations:
       required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 二、识别结果
+
   - type: dropdown
     id: fingerprint
     attributes:
@@ -33,6 +46,7 @@ body:
         - 未导出日志 / 看不懂
     validations:
       required: true
+
   - type: dropdown
     id: result
     attributes:
@@ -44,17 +58,24 @@ body:
         - 无法识别 / 不弹窗
     validations:
       required: true
+
   - type: textarea
     id: detail
     attributes:
-      label: 补充说明
+      label: 各功能可用情况
       description: 哪几项能用、哪几项不能用（ANC / 电量 / 弹窗 / 手势等）
     validations:
       required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 三、日志
+
   - type: textarea
     id: logs
     attributes:
       label: 日志
-      description: 应用「设置 → 日志抓取」导出 zip 后直接拖进这里
+      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里
     validations:
       required: true
