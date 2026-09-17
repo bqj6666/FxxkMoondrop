@@ -87,14 +87,16 @@ class PermissionChecker {
             // 3.0.5: 三态 —— 只看 root 会把「有模块无 root」误报成无 Root 模式，
             // 而 GMS 桥接与官方面板注入其实由 LSPosed 模块承担，不需要 App 有 root。
             val rooted = rootOk
-            // 这里用缓存值（不阻塞）；未探测过时视为未知，落到「仅 root」分支。
-            val hookCached = EnvProbe.hookActiveCached()
+            // 3.0.5-hotfix: 本函数（第 5 项）本来就要实测 hook，且两个调用方都在子线程，
+            // 所以这里直接取实测结果 —— 若用缓存，未探测过时会被当成「模块未激活」而误报
+            // （和设置页把「未探测」当「不可用」是同一个错）。
+            val hookActive = EnvProbe.isFastPairHookActive(ctx)
             list.add(Item(Lang.t(ctx, "运行模式", "Run mode"), true,
                     when {
-                        rooted && hookCached == true -> Lang.t(ctx,
+                        rooted && hookActive -> Lang.t(ctx,
                                 "Root 模式：GMS 桥接与官方面板注入可用，Root 增强功能也可用",
                                 "Root mode: GMS bridge & official panel injection available, plus root enhancements")
-                        hookCached == true -> Lang.t(ctx,
+                        hookActive -> Lang.t(ctx,
                                 "模块模式：GMS 桥接与官方面板注入可用；Root 增强功能不可用",
                                 "Module mode: GMS bridge & official panel injection available; root enhancements unavailable")
                         rooted -> Lang.t(ctx,
@@ -106,8 +108,7 @@ class PermissionChecker {
                     },
                     ACTION_NONE, 0))
 
-            // 5. FastPairHook 模块（LSPosed）
-            val hookActive = EnvProbe.isFastPairHookActive(ctx)
+            // 5. FastPairHook 模块（LSPosed）—— 复用上面实测的结果（同一次 checkAll 内不会变）
             list.add(Item(Lang.t(ctx, "FastPairHook 模块（LSPosed）", "FastPairHook module (LSPosed)"),
                     hookActive,
                     if (hookActive) Lang.t(ctx, "已激活（GMS 扫描桥接正常）", "Active (GMS scan bridging OK)")

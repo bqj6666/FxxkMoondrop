@@ -5,7 +5,24 @@
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
 ## 3.0.5 (305)
-> 修复：模块已激活时不再回落到「无 Root 模式」；root 探测失败不再成为永久结论，并新增重试入口。
+> 修复：**没有 root 但模块已启用时，依赖模块的功能被整片置灰**；模块激活不再与「有 root」混为一谈；
+> root 探测失败不再成为永久结论，并新增重试入口。
+
+### 修复：没 root 就被整片禁用（依赖模块的功能不该看 root）
+- **问题**：旧判定 `EnvProbe.isNoRootMode()` = `!isRooted() && hookActiveCached() != true`，
+  而 hook 缓存**未探测时是 null** —— 一进设置页（此时还没探测过）就会被判成「无 Root 模式」：
+  弹窗图标、官方降噪面板、蓝牙详情页面板全部置灰、开关点了没反应，
+  后台也不再尝试拉起官方 App。可这三项本来就由 **GMS 进程里的 Hook** 承担，
+  **与 App 自身有没有 root 无关**：没 root 但 LSPosed 模块已启用 = 照常可用。
+- **修复**：
+  - 判定拆开：新增 `EnvProbe.hookUsable()` = **只有确定未激活（false）才算不可用**，
+    未探测（null）不再当作不可用；设置页只按它置灰，文案改为
+    「需要 FastPairHook 模块（在 LSPosed 中启用后可用）」。
+  - 设置页首次进入时若 hook 尚未探测，后台补探一次（离开主线程），确认未激活才重刷页面。
+  - 真正依赖 root 的两条链路（`MoondropBooter` 用 su 拉起官方 App、
+    `LogCollector` 用 root 复制到公共目录）改为只看 `isRooted()`，不再被模块状态牵连。
+  - 权限检查「运行模式」改用同一次检查里的**实测结果**，不再把「还没探测」显示成「模块未激活」。
+  - 删除已无调用方的 `isNoRootMode()` / `hasRootEntry()` / `noRootSummary()`，避免再次被误用。
 
 ### 修复：「模块激活」与「有 root」不再混为一谈
 - **问题**：`EnvProbe.isNoRootMode()` 只看 root 探测结果；`GaiaBleClient.init` 更是

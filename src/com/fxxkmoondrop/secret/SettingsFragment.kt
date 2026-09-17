@@ -106,10 +106,11 @@ class SettingsFragment : Fragment() {
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), 0, dp(16), dp(24))
 
-        // 无 Root 模式（本页多处要用：官方集成 / 弹窗图标 / Root 保活）。
-        // 依赖 GMS Hook（LSPosed，需 Root）的功能在此模式下必然不可用，一律置灰 + 说明，
-        // 避免用户开了却没有任何效果、误以为功能坏了。
-        val noRootMode = EnvProbe.isNoRootMode()
+        // 本页这几项（官方集成 / 弹窗图标）由 GMS 进程里的 Hook 承担，
+        // 与 App 自身有没有 root **无关**：没 root 但 LSPosed 模块已启用 = 照常可用。
+        // 因此只在 Hook **确定**未激活时才置灰；尚未探测（null）不置灰，
+        // 否则一进设置页就没 root 把功能整片禁掉（3.0.5 的问题）。
+        val hookOff = !EnvProbe.hookUsable()
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
@@ -227,12 +228,12 @@ class SettingsFragment : Fragment() {
             iconState.visibility = View.VISIBLE
         }
         iconCustomExistsAsync(showIconState)
-        // 无 Root 模式：自定义图标由 GMS 进程内的 Hook 读取（readIconBytes），
-        // 没有 Root / LSPosed 时 Hook 不工作，选了也不会有任何效果 —— 置灰并说明。
+        // 自定义图标由 GMS 进程内的 Hook 读取（readIconBytes，经 PrefsProvider）：
+        // 只要 LSPosed 模块激活就能用，不需要 App 有 root —— 仅模块未激活时置灰并说明。
         val iconRow = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_image, Lang.t("弹窗图标", "Popup icon"),
-                if (noRootMode)
-                    Lang.t("无 Root 模式不可用（图标由 GMS 弹窗侧的模块读取）",
-                            "Unavailable in no-root mode (read by the module inside the GMS popup)")
+                if (hookOff)
+                    Lang.t("需要 FastPairHook 模块（在 LSPosed 中启用后可用）",
+                            "Requires the FastPairHook module (enable it in LSPosed)")
                 else
                     Lang.t("Google 弹窗显示的耳机图标（从相册选择，或恢复默认）",
                             "Earbud icon shown in the Google popup (choose from gallery, or restore default)"),
@@ -242,7 +243,7 @@ class SettingsFragment : Fragment() {
                 showIconDialog(exists)
             }
         }
-        if (noRootMode) {
+        if (hookOff) {
             iconRow.isEnabled = false
             iconRow.alpha = 0.4f
             iconRow.setOnClickListener(null)
@@ -258,15 +259,15 @@ class SettingsFragment : Fragment() {
         // ── 第 3 项：分类功能开关 ──
         //  每个开关对应一条真实生效的链路：关掉后相应 hook / 通知即停用（跨进程读同一个 SP）。
         //  默认全开，保持既有行为不变。
-        if (noRootMode) {
+        if (hookOff) {
             box.addView(makeSubLabel(Lang.t(
-                "无 Root 模式：仅通知栏与主界面控制降噪；以下官方集成项不可用",
-                "No-root mode: control ANC from notification & main UI only; official integration unavailable")))
+                "FastPairHook 模块未激活：以下官方集成项不可用（在 LSPosed 中启用后恢复）",
+                "FastPairHook inactive: official integration unavailable (enable the module in LSPosed to restore)")))
         }
         box.addView(makeSubLabel(Lang.t("官方集成", "Official integration")))
         val swOfficial = makeTintedSwitch()
-        swOfficial.isChecked = if (noRootMode) false else getSP().getBoolean("feat_official_panel", true)
-        if (noRootMode) {
+        swOfficial.isChecked = if (hookOff) false else getSP().getBoolean("feat_official_panel", true)
+        if (hookOff) {
             swOfficial.isEnabled = false
             swOfficial.isClickable = false
             swOfficial.alpha = 0.4f
@@ -276,15 +277,15 @@ class SettingsFragment : Fragment() {
                 Lang.t("把耳机状态接进 Google 的官方降噪面板（音量面板 / 提示音和振动）",
                         "Feed state into Google's official ANC panel (volume & sound panels)"),
                 swOfficial, null)
-        if (!noRootMode) {
+        if (!hookOff) {
             swOfficial.setOnCheckedChangeListener { _, checked ->
                 getSP().edit().putBoolean("feat_official_panel", checked).commit()
             }
         }
 
         val swDetail = makeTintedSwitch()
-        swDetail.isChecked = if (noRootMode) false else getSP().getBoolean("feat_detail_panel", true)
-        if (noRootMode) {
+        swDetail.isChecked = if (hookOff) false else getSP().getBoolean("feat_detail_panel", true)
+        if (hookOff) {
             swDetail.isEnabled = false
             swDetail.isClickable = false
             swDetail.alpha = 0.4f
@@ -294,7 +295,7 @@ class SettingsFragment : Fragment() {
                 Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片",
                         "Inject the control card into the system device-details page"),
                 swDetail, null)
-        if (!noRootMode) {
+        if (!hookOff) {
             swDetail.setOnCheckedChangeListener { _, checked ->
                 getSP().edit().putBoolean("feat_detail_panel", checked).commit()
             }
@@ -569,6 +570,16 @@ class SettingsFragment : Fragment() {
 
         sv.addView(box, FrameLayout.LayoutParams(-1, -2))
         root.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Hook 状态首次可能是「尚未探测」（null）：上面按「可用」渲染（不置灰），
+        // 这里后台补探一次（PING 阻塞 ~2s，必须离开主线程）；确认未激活才重刷本页，
+        // 走 scheduleRebuild 现成的生命周期防护。已探测过则不重复探。
+        if (EnvProbe.hookActiveCached() == null) {
+            val appCtx = requireContext().applicationContext
+            Thread {
+                if (!EnvProbe.isFastPairHookActive(appCtx)) scheduleRebuild(0)
+            }.start()
+        }
         return root
     }
 

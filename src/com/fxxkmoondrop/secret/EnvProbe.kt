@@ -165,35 +165,16 @@ class EnvProbe private constructor() {
         }
 
         /**
-         * **无 Root 模式**：既没有可用 root 入口，**也没有已激活的 LSPosed 模块**。
+         * 「依赖 LSPosed Hook 的功能」是否应视为可用。
          *
-         * 此模式下自动回落为「仅靠 GAIA BLE 直连」控制耳机：
-         * 通知栏的控制按钮与 App 主界面照常可用（读电量、切降噪都走
-         * 标准 BluetoothGatt，本身不需要 Root），而依赖 root 或 GMS Hook 的增强功能
-         * （GMS 桥接 Hook、官方面板注入、root 拉起官方 App；保活自 3.0.5 起已不需要 root）
-         * 一律静默停用，不再尝试、也不再报错或弹窗。
-         *
-         * 3.0.5：不再「只看 root」就断言模块不可用。GMS 桥接与官方面板注入靠的是
-         * LSPosed 模块（Hook 跑在 GMS 进程里），App 自身不需要 root；所以模块激活时
-         * 即便没有 root 也不该回落成无 Root 模式。hook 缓存未就绪（null）时按旧行为
-         * 保守处理，不改变启动时序。
+         * 官方面板注入、蓝牙详情页面板、弹窗图标这几项由 **GMS 进程里的 Hook** 承担，
+         * 与 App 自身有没有 root 无关：没 root 但模块已启用 = 照常可用。
+         * 所以只有**确定**未激活（false）才算不可用；尚未探测（null）不得当作不可用 ——
+         * 否则一进设置页就把整片功能置灰（3.0.5 的「没 root 就被禁用」即源于此）。
          *
          * 无阻塞，可主线程调用。
          */
         @JvmStatic
-        fun isNoRootMode(): Boolean = !isRooted() && hookActiveCached() != true
-
-        /** 原始语义：仅看设备是否存在可用 root 入口（提示文案与诊断用）。 */
-        @JvmStatic
-        fun hasRootEntry(): Boolean = isRooted()
-
-        /** 无 Root 模式下不可用的功能说明（UI 展示用，按语言返回）。 */
-        @JvmStatic
-        fun noRootSummary(ctx: Context?): String {
-            if (ctx == null) return ""
-            return Lang.t(ctx,
-                "无 Root 模式：仅通过通知栏与主界面控制降噪（GAIA 直连，无需 Root）",
-                "No-root mode: control noise cancellation from the notification and main UI only (GAIA direct, no root needed)")
-        }
+        fun hookUsable(): Boolean = hookActiveCached() != false
     }
 }

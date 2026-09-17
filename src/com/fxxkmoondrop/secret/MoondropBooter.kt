@@ -25,10 +25,11 @@ class MoondropBooter {
         fun maybeStart(context: Context?) {
             if (context == null) return
             if (!context.getSharedPreferences("cfg", 0).getBoolean("auto_gaia", true)) return
-            // 无 Root 模式：这条链路靠 su 拉起官方 App，必然失败；
+            // 这条链路靠 su 拉起官方 App，没有可用 root 入口时必然失败；
             // 直接跳过，避免每次连接都白跑一次 exec 并往日志里刷失败。
-            if (EnvProbe.isNoRootMode()) {
-                Log.i(TAG, "no-root mode: skip su launch of Moondrop app")
+            // 只看 root：LSPosed 模块激活与否不影响 su 可用性。
+            if (!EnvProbe.isRooted()) {
+                Log.i(TAG, "no root entry: skip su launch of Moondrop app")
                 return
             }
             val now = System.currentTimeMillis()
