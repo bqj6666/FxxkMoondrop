@@ -310,8 +310,8 @@ class SettingsFragment : Fragment() {
         }
         val rowDetail = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_tune,
                 Lang.t("蓝牙详情页面板", "Bluetooth details panel"),
-                Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片",
-                        "Inject the control card into the system device-details page"),
+                Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片；未连接时整块收起，连上但耳机未就绪时用官方加载行原位占位",
+                        "Inject the control card into the system device-details page; hidden while disconnected, replaced by the official loading row until the headset is ready"),
                 swDetail, null)
         if (!hookOff) {
             swDetail.setOnCheckedChangeListener { _, checked ->
@@ -382,11 +382,12 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        // ── 显示抗风噪按钮（alpha2.26.2：可选隐藏，弹窗与主界面同步生效）──
+        // ── 显示抗风噪按钮（alpha2.26.2 起可选隐藏；3.1.0 起详情页开关同样受它约束）──
         val swWind = makeTintedSwitch()
         swWind.isChecked = getSP().getBoolean("show_wind", true)
         val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_air, Lang.t("显示抗风噪按钮", "Show wind-noise button"),
-                Lang.t("在弹窗和主界面显示抗风噪模式；关闭后仅显示 关闭/降噪/透传", "Show wind-noise mode in popup & main UI; off shows only Off/ANC/Transparency"), swWind, null)
+                Lang.t("抗风是降噪的加强档：蓝牙详情页的快捷开关只在耳机处于「降噪／抗风」档时出现，切到通透或关闭会自动收起；关掉本项后弹窗、主界面与详情页都不再提供抗风",
+                        "Wind is the boosted ANC level: the quick switch on the Bluetooth details page appears only while the headset is on ANC or Wind, and folds away on Transparency/Off; turning this off removes Wind everywhere"), swWind, null)
         swWind.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("show_wind", checked).commit()
         }
