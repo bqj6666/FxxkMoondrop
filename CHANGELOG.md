@@ -6,6 +6,31 @@
 
 ---
 
+## 3.0.2 (302)
+> 修复：布丁（PUDDING / MD-TWS-056）等 Classic Bluetooth 设备在 RFCOMM/SPP 上「连得上但控制无效」。
+
+### 修复：RFCOMM 发送缺少 GAIA 传输帧封装（issue #4）
+- **问题**：RFCOMM/SPP 路径一直直接发送**裸 PDU**（`00 1D <cmdValue> <payload>`），
+  没有官方 GAIA 传输帧头。设备侧解析器读到的首字节是 `0x00`（非法 SOF），整帧错位，
+  于是对每条命令都不回有效应答 —— 现象就是「RFCOMM 已连接、命令发出去了，
+  但能力探测一直超时、降噪点击无反应」。日志特征：`framer pending 1 bytes (partial frame)`
+  反复出现、且全程没有一条 `RX pdu`。
+- **依据**：反编译本机安装的官方 Moondrop App 内的 Qualcomm GAIA Client SDK
+  （`com.qualcomm.qti.gaiaclient.core.gaia.core.transport.TransportProtocol$Rfcomm$Frame.format`），
+  官方 RFCOMM 封装为 `FF | version | flags | length | PDU`，其中
+  `length = PDU 长度 - 4`，`flags` 的 bit0=校验和、bit1=双字节长度
+  （双字节长度仅 `version >= 4` 且长度 > 255 时启用）；官方 `GaiaFormatter.Rfcomm` 默认**不带校验和**。
+- **修复**：新增 `wrap()` 按上述格式封装；发送封装**自适应**——先 `FRAMED_V4`、
+  再 `FRAMED_V3`、最后回退旧的 `BARE`，每种尝试 3.5 秒，**收到第一个有效回包即锁定**该封装
+  （设备固件差异不硬编码，靠回包自证）。
+- **顺带修复接收路径两个确定性缺陷**：
+  1. 旧实现 `input.read(full, n, avail)` **不检查返回值** —— 少读时 `ByteArray` 尾部
+     会留下 `0x00` 填充，凭空造出假字节污染帧缓冲；
+  2. 旧实现固定 `sleep(50ms)` 后只查一次 `available()` 判定 burst 结束，分段到达的帧
+     会被切碎。改为「累积到线路静默 45ms」再切分，并新增 `RX burst(<n>) <HEX>` 十六进制诊断日志。
+
+---
+
 ## 3.0.1 (301)
 > 修复：未收录型号被误判为「不支持的设备」而永久拉黑。
 

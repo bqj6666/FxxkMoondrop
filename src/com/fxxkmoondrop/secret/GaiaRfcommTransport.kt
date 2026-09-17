@@ -37,14 +37,36 @@ class GaiaRfcommTransport(
         private const val TAG = "GaiaRfcomm"
         /** 标准 SPP UUID */
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-        /** burst 完成等待时间（ms）：读到首字节后稍候，让同 burst 后续字节到达 */
-        private const val FRAME_WAIT_MS = 50L
+        /** burst 静默期（ms）：线路连续安静这么久就认定一个 burst 结束 */
+        private const val QUIET_MS = 45L
+
+        /** 传输帧（官方 RFCOMM 封装）：FF | Ver | Flags | Len | PDU */
+        private const val MODE_FRAMED_V4 = 0
+        private const val MODE_FRAMED_V3 = 1
+        /** 裸 PDU：00 1D | cmdValue | payload（无封装，旧行为） */
+        private const val MODE_BARE = 2
+        private val MODE_NAMES = arrayOf("FRAMED_V4", "FRAMED_V3", "BARE")
+        /**
+         * 每种发送封装的尝试窗口（ms）。收到任何有效回包前按窗口轮换，
+         * 收到后锁定 —— 设备固件差异（是否要 FF 传输帧、版本 3 还是 4）
+         * 无法预先得知，靠回包自适应，不硬编码。
+         */
+        private const val MODE_TRY_MS = 3500L
     }
 
     private var socket: BluetoothSocket? = null
     @Volatile private var running = false
     @Volatile private var connected = false
     private var readThread: Thread? = null
+
+    /** 本次连接是否已收到过至少一个有效 PDU（用于锁定发送封装） */
+    @Volatile private var receivedAny = false
+    /** 连接建立时刻（封装轮换计时基准） */
+    @Volatile private var connectedAt = 0L
+    /** 已锁定的发送封装；-1 = 尚未锁定，仍在轮换 */
+    @Volatile private var lockedMode = -1
+    /** 最近一次实际使用的发送封装（收到回包时据此锁定） */
+    @Volatile private var lastSentMode = MODE_FRAMED_V4
 
     /** alpha2.41.4: 流式帧切分器（跨 burst 保留半截帧） */
     private val framer = GaiaRfcommFramer()
@@ -61,6 +83,10 @@ class GaiaRfcommTransport(
             connected = true
             running = true
             framer.reset()
+            receivedAny = false
+            lockedMode = -1
+            lastSentMode = MODE_FRAMED_V4
+            connectedAt = System.currentTimeMillis()
             readThread = Thread({ readLoop() }, "GaiaRfcomm-Reader").apply { isDaemon = true }
             readThread?.start()
             Log.i(TAG, "RFCOMM connected to " + device.address + " name=" + device.name)
@@ -76,6 +102,59 @@ class GaiaRfcommTransport(
         }
     }
 
+    /** 当前应使用的发送封装：已锁定则用锁定的，否则按窗口轮换。 */
+    private fun currentMode(): Int {
+        val locked = lockedMode
+        if (locked >= 0) return locked
+        val elapsed = System.currentTimeMillis() - connectedAt
+        val idx = ((elapsed / MODE_TRY_MS) % MODE_NAMES.size).toInt()
+        return when (idx) {
+            MODE_FRAMED_V3 -> MODE_FRAMED_V3
+            MODE_BARE -> MODE_BARE
+            else -> MODE_FRAMED_V4
+        }
+    }
+
+    /** 收到有效回包：锁定当前发送封装（此后不再轮换）。 */
+    private fun markReceived() {
+        if (receivedAny) return
+        receivedAny = true
+        val m = lastSentMode
+        lockedMode = m
+        Log.i(TAG, "framing locked to " + MODE_NAMES[m])
+        AppLog.i(TAG, "protocol: RFCOMM framing locked to " + MODE_NAMES[m])
+    }
+
+    /**
+     * 按官方 GAIA v4 RFCOMM 封装打包（反编译本机官方 App 的
+     * `com.qualcomm.qti.gaiaclient.core.gaia.core.transport.TransportProtocol.Rfcomm.Frame.format` 得到）：
+     *
+     *   byte0 = 0xFF (SOF)
+     *   byte1 = version
+     *   byte2 = flags（bit0=校验和, bit1=双字节长度；官方 GaiaFormatter.Rfcomm 默认无校验和）
+     *   byte3.. = 长度 = PDU 长度 - 4（双字节长度仅 version>=4 且长度 > 255 时）
+     *   之后 = PDU 原样
+     *
+     * 旧实现直接发裸 PDU，设备侧解析器读到的 SOF 是 0x00（非法），整帧错位 → 无有效回包。
+     */
+    private fun wrap(pdu: ByteArray, version: Int): ByteArray {
+        val payloadLen = (pdu.size - 4).coerceAtLeast(0)
+        val ext = version >= 4 && payloadLen > 255
+        val headerLen = if (ext) 5 else 4
+        val out = ByteArray(headerLen + pdu.size)
+        out[0] = 0xFF.toByte()
+        out[1] = version.toByte()
+        out[2] = if (ext) 0x02 else 0x00
+        if (ext) {
+            out[3] = ((payloadLen shr 8) and 0xFF).toByte()
+            out[4] = (payloadLen and 0xFF).toByte()
+        } else {
+            out[3] = (payloadLen and 0xFF).toByte()
+        }
+        System.arraycopy(pdu, 0, out, headerLen, pdu.size)
+        return out
+    }
+
     /** 发送 GAIA 帧（线程安全写入）。 */
     fun send(packet: ByteArray) {
         val s = socket
@@ -84,10 +163,17 @@ class GaiaRfcommTransport(
             return
         }
         try {
+            val mode = currentMode()
+            lastSentMode = mode
+            val out = when (mode) {
+                MODE_BARE -> packet
+                MODE_FRAMED_V3 -> wrap(packet, 3)
+                else -> wrap(packet, 4)
+            }
             val os = s.outputStream
-            os.write(packet)
+            os.write(out)
             os.flush()
-            Log.d(TAG, "TX " + packet.contentToString())
+            Log.d(TAG, "TX " + MODE_NAMES[mode] + " " + out.contentToString())
         } catch (e: IOException) {
             Log.e(TAG, "RFCOMM write failed", e)
             onError("RFCOMM 写入失败: " + e.message)
@@ -103,6 +189,9 @@ class GaiaRfcommTransport(
         try { readThread?.interrupt() } catch (_: Exception) { }
         readThread = null
         framer.reset()
+        receivedAny = false
+        lockedMode = -1
+        connectedAt = 0L
         Log.d(TAG, "RFCOMM disconnected")
     }
 
@@ -126,29 +215,40 @@ class GaiaRfcommTransport(
             return
         } ?: return
 
-        val buf = ByteArray(256)
+        val buf = ByteArray(512)
         while (running) {
             try {
                 val n = input.read(buf)
                 if (n <= 0) continue
                 if (!running) break
 
-                // 等待短暂时间让后续字节到达（同 burst）
-                Thread.sleep(FRAME_WAIT_MS)
-                val avail = try { input.available() } catch (_: Exception) { 0 }
-                val burst = if (avail > 0) {
-                    val full = ByteArray(n + avail)
-                    System.arraycopy(buf, 0, full, 0, n)
-                    input.read(full, n, avail)
-                    full
-                } else {
-                    buf.copyOfRange(0, n)
+                // 3.0.2: 累积到静默期结束（旧实现只 sleep 固定 50ms 再查一次
+                // available()，且 read(full, n, avail) 的返回值不检查 —— 少读时
+                // 尾部会被 ByteArray 的 0x00 填充，凭空造出假字节污染帧缓冲）。
+                val acc = ArrayList<Byte>(n)
+                for (i in 0 until n) acc.add(buf[i])
+                var quietSince = System.currentTimeMillis()
+                while (running) {
+                    if (System.currentTimeMillis() - quietSince >= QUIET_MS) break
+                    val avail = try { input.available() } catch (_: Exception) { 0 }
+                    if (avail <= 0) {
+                        Thread.sleep(5)
+                        continue
+                    }
+                    val tmp = ByteArray(if (avail > 512) 512 else avail)
+                    val r = try { input.read(tmp, 0, tmp.size) } catch (_: Exception) { -1 }
+                    if (r <= 0) break
+                    for (i in 0 until r) acc.add(tmp[i])
+                    quietSince = System.currentTimeMillis()
                 }
-                val burstEnd = try { input.available() <= 0 } catch (_: Exception) { true }
+                val burst = ByteArray(acc.size)
+                for (i in acc.indices) burst[i] = acc[i]
+                Log.d(TAG, "RX burst(" + burst.size + ") " + toHex(burst))
 
-                // alpha2.41.4: 流式切分，逐 PDU 分发
-                val pdus = framer.feed(burst, burstEnd)
+                // 静默期结束 -> 该 burst 已完整，按 burstEnd=true 切分
+                val pdus = framer.feed(burst, true)
                 for (pdu in pdus) {
+                    markReceived()
                     Log.d(TAG, "RX pdu " + pdu.contentToString())
                     val copyForCallback = pdu.copyOf()
                     handler.post { onPacket(copyForCallback) }
@@ -167,5 +267,17 @@ class GaiaRfcommTransport(
                 Log.e(TAG, "readLoop unexpected error", e)
             }
         }
+    }
+
+    /** 十六进制诊断串（定位设备实际回包格式用；过长的只打前 64 字节）。 */
+    private fun toHex(b: ByteArray): String {
+        val n = if (b.size > 64) 64 else b.size
+        val sb = StringBuilder(n * 3 + 8)
+        for (i in 0 until n) {
+            if (i > 0) sb.append(' ')
+            sb.append(String.format("%02X", b[i].toInt() and 0xFF))
+        }
+        if (b.size > n) sb.append(" ...(").append(b.size).append("B)")
+        return sb.toString()
     }
 }
