@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- FxxkMoondrop M3 构建链文本 manifest（由二进制 AXML 完整转写，组件/权限/元数据不增不减） -->
-<!-- 版本号参数化：alpha2.12 / 228，由 build_m3.py 替换 -->
+<!-- 版本号以 app/build.gradle.kts 的 defaultConfig 为准（AGP 合并时覆盖此处）；
+     这两个属性此前停留在旧链的 alpha2.27 / 254，3.0.4 起同步为正式版本号，避免仓库里残留 alpha 字样。 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.fxxkmoondrop.secret"
-    android:versionCode="254"
-    android:versionName="alpha2.27">
+    android:versionCode="304"
+    android:versionName="3.0.4">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
