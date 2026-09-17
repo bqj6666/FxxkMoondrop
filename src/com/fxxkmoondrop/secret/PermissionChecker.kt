@@ -58,7 +58,8 @@ class PermissionChecker {
             }
             list.add(Item(Lang.t(ctx, "电池优化白名单", "Battery optimization whitelist"),
                     battOk,
-                    if (battOk) Lang.t(ctx, "已加入", "Exempted") else Lang.t(ctx, "未加入，后台监听可能被系统杀掉", "Not exempted, background monitoring may be killed"),
+                    if (battOk) Lang.t(ctx, "已加入", "Exempted") else Lang.t(ctx, "未加入，点按一键申请（否则后台可能被系统冻结）",
+                            "Not exempted, tap to request (otherwise background may be frozen)"),
                     ACTION_BATTERY, 0))
 
             // 3.5 Root 权限（3.0.5 新增，带显式重试入口）

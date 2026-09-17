@@ -64,6 +64,12 @@ class MainActivity : FragmentActivity() {
         }
 
         if (savedInstanceState == null) showTab(curTab)
+
+        // 3.0.5: 保活默认常开（不再有开关、不再需要 Root）。
+        // 无 root 路径 = 开机自启 + 30s 看门狗 + 系统电池优化白名单弹窗（只主动问一次）；
+        // 有 root 时 KeepAlive 内部再静默做一次 deviceidle/appops 增强。
+        try { KeepAlive.ensure(this) } catch (_: Throwable) { }
+        try { KeepAlive.requestWhitelistOnce(this) } catch (_: Throwable) { }
     }
 
     /** 官方 M3 切换：Fragment fade 过渡（内容动，底栏静止） */

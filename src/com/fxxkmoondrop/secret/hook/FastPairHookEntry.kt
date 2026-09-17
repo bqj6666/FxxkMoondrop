@@ -397,8 +397,21 @@ class FastPairHookEntry {
 
     // ==================== 图标 ====================
 
-    /** 加载自定义图标（Download/moondrop_icon.png），失败则代码绘制默认图标 */
+    /** 加载自定义图标：优先 ContentProvider（无需 Root），其次 GMS 老路径，最后内置默认图 */
     private fun loadOrDrawIcon(): Bitmap? {
+        // 3.0.5: 先试 Provider（应用内 filesDir，用户改图后无需 Root 即可生效）
+        try {
+            val bytes = readIconFromProvider()
+            if (bytes != null && bytes.isNotEmpty()) {
+                val b = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (b != null) {
+                    Log.d(TAG, "[FastPairHook] icon from provider: " + bytes.size + "B")
+                    return b
+                }
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] icon provider decode fail: " + t)
+        }
         try {
             val f = File(ICON_PATH)
             if (f.exists() && f.length() > 0) {
@@ -1669,8 +1682,9 @@ class FastPairHookEntry {
         bos.write(data, 0, data.size)
     }
 
-    /** 读取自定义图标字节（Download/moondrop_icon.png） */
+    /** 读取自定义图标字节：优先 Provider（无需 Root），其次 GMS 老路径。 */
     private fun readIconBytes(): ByteArray? {
+        readIconFromProvider()?.let { return it }
         try {
             val f = File(ICON_PATH)
             if (f.exists() && f.length() > 0 && f.length() < 1024 * 1024) {
@@ -1690,6 +1704,53 @@ class FastPairHookEntry {
             Log.d(TAG, "[FastPairHook] readIconBytes fail: " + t)
         }
         return null
+    }
+
+    /** 模块自身的 Context（GMS 进程内跨包取资源/解析器）。 */
+    private fun modCtx(): Context? {
+        sModCtx?.let { return it }
+        return try {
+            val app = HookHelper.callStaticMethod(
+                    Class.forName("android.app.ActivityThread"), "currentApplication")
+            if (app is Context) {
+                val c = app.createPackageContext("com.fxxkmoondrop.secret",
+                        Context.CONTEXT_IGNORE_SECURITY)
+                sModCtx = c
+                c
+            } else null
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] modCtx fail: " + t)
+            null
+        }
+    }
+
+    /**
+     * 3.0.5: 从模块的 ContentProvider 读取自定义图标（应用内 filesDir，无需 Root）。
+     * 与 show_wind / lang 走同一条跨进程通道，任何机器上都能用。
+     */
+    private fun readIconFromProvider(): ByteArray? {
+        return try {
+            val ctx = modCtx() ?: return null
+            val ins = ctx.contentResolver.openInputStream(Uri.parse(ICON_URI)) ?: return null
+            ins.use { input ->
+                val bos = ByteArrayOutputStream()
+                val tmp = ByteArray(8192)
+                while (true) {
+                    val n = input.read(tmp)
+                    if (n <= 0) break
+                    bos.write(tmp, 0, n)
+                    if (bos.size() > 1024 * 1024) return null   // 超限：当作没有自定义图标
+                }
+                val b = bos.toByteArray()
+                if (b.isNotEmpty()) {
+                    Log.d(TAG, "[FastPairHook] icon bytes from provider: " + b.size)
+                    b
+                } else null
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] readIconFromProvider fail: " + t)
+            null
+        }
     }
 
     private fun writeVarint(bos: ByteArrayOutputStream, v: Int) {
@@ -1801,6 +1862,8 @@ class FastPairHookEntry {
         const val EXTRA_DEVICE_NAME = "device_name"
         /** 首选自定义图标路径（放到 Download 目录即可被读取） */
         const val ICON_PATH = "/data/user/0/com.google.android.gms/files/moondrop_icon.png"
+        /** 3.0.5: 应用内图标的跨进程读取入口（无需 Root）。 */
+        const val ICON_URI = "content://com.fxxkmoondrop.secret.prefs/moondrop_icon"
         const val MOD_ASSET_ICON = "ga2_icon.png" // alpha1.14fix4: 内置默认图标
 
         /** v1.0: 三模式按钮 -> FxxkMoondrop 应用（GAIA 降噪控制） */

@@ -18,6 +18,8 @@
          HeadsetDetectService 从不调用 startForeground()，实为普通后台服务
          （靠 START_STICKY + AlarmManager 保活），该权限无任何作用。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 3.0.5: 无 Root 保活 —— 用系统弹窗申请电池优化白名单（旧实现只能用 root 的 deviceidle 命令） -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 不再声明 SYSTEM_ALERT_WINDOW：本模块从不创建悬浮窗，
          弹窗走的是 GMS 进程内的既有窗口（受 GMS 自身权限约束），与本应用无关。 -->
 

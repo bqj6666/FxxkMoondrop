@@ -26,6 +26,29 @@
   （避免一个 UI 流程里反复 exec），TTL 过后任何调用自动重试；`retryNow()` 供用户显式动作立即重试。
   hook 探测同样处理（`hookActiveCached()` / `retryHookProbe()`，对应「刚在 LSPosed 里启用模块」）。
 
+### 保活改为「无需 Root、默认常开」（移除设置里的 Root 强力保活开关）
+- **问题**：强力保活整套都挂在 Root 上（`dumpsys deviceidle whitelist` + `appops` + 写 `service.d`
+  开机脚本），没 Root 就完全用不了；设置页还得让用户自己开、自己确认风险。
+- **修复**：新增 `KeepAlive`，保活改为常开、且不再需要 Root：
+  - 开机自启用 `BOOT_COMPLETED`、看门狗用 30s `AlarmManager` + `START_STICKY`（本来就不需要 Root）；
+  - **电池优化白名单**改用系统的 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 弹窗申请
+    （新增权限声明），只主动问一次，避免骚扰；被拒后可在「设置 → 检查权限」里手动再点；
+  - 有 Root 时**额外**静默做 `deviceidle` + `appops` 增强（失败不影响，也不再有开关/风险弹窗）。
+- 设置页移除「Root 强力保活」开关与风险确认弹窗；权限检查的「电池优化白名单」变为**点击即申请**。
+- 至此，**应用不再需要直接授予 Root**：唯一仍然碰 Root 的可选项（把图标兼容写到 GMS 老路径）已改为增强路径。
+
+### 修复：弹窗自定义图标「选了没反应」（结果回调丢失 + 必须 Root）
+- **问题一（结果回调）**：选图用的是 `requireActivity().startActivityForResult(...)` 配合
+  `Fragment.onActivityResult`。实测（Android 15 / ColorOS）回调根本到不了 Fragment ——
+  选完图片什么都没发生。证据：应用 cacheDir 里连中间产物 `moondrop_custom_icon.png` 都没有生成，
+  即 `saveIconFromUri` 从未被调用。
+- **问题二（必须 Root）**：图标要写进 GMS 私有目录
+  `/data/user/0/com.google.android.gms/files/moondrop_icon.png`，没有 Root（或 Root 被隐藏）必然失败。
+- **修复**：选图改用 `registerForActivityResult(GetContent())` 启动器；
+  图标改为写**本应用 filesDir**，由 exported 的 `PrefsProvider`（`openFile`）跨进程提供给 GMS 侧 Hook 读取
+  （与 `show_wind` / `lang` 同一条通道），因此**无需 Root**；有 Root 时仍额外写一份 GMS 老路径。
+  顺带新增 `icon_ver`，Hook 侧可据此判断图标是否换过。
+
 ### 新增：权限检查里的「重新检测 Root」入口
 - 权限检查新增 **Root 权限** 一项，显示当前状态与选中的入口（`su` / `kp`），点击即在
   后台清缓存并重新探测（探测会 exec、可能弹授权框，绝不在主线程做），完成后回到 UI 线程重渲染。

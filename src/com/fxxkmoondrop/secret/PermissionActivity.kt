@@ -245,8 +245,8 @@ class PermissionActivity : Activity() {
                         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2)
                     }
                 }
-                PermissionChecker.ACTION_BATTERY -> startActivity(
-                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                // 3.0.5: 直接弹系统白名单确认框（无需 Root），不再只把用户丢到设置列表页
+                PermissionChecker.ACTION_BATTERY -> KeepAlive.requestWhitelist(this)
                 PermissionChecker.ACTION_ROOT_RECHECK -> {
                     // 3.0.5: 清掉 root / hook 的负结果 -> 后台重新探测 -> 回 UI 线程重渲染。
                     // 探测会 exec（可能弹授权框），绝不能在主线程做。

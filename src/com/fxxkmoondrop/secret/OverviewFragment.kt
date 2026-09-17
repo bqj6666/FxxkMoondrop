@@ -91,7 +91,6 @@ class OverviewFragment : Fragment() {
     // alpha2.28: ANC icon bitmap cache (4 modes x 2 colors = 8 slots)
     private var ancIconCache: Array<android.graphics.drawable.Drawable?>? = null
     @Volatile private var moonProcState = Lang.t("未知", "Unknown")
-    @Volatile private var cachedHasRoot: Boolean? = null // alpha2.28: cache root check result
     private val autoRefreshHandler = Handler(Looper.getMainLooper())
 
     /** alpha1.36: HeadsetGate 异步补扫命中后推送 MAC（非阻塞链路闭环；onResume 注册 onStop 注销） */
@@ -953,8 +952,8 @@ class OverviewFragment : Fragment() {
                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
                     }
                 }
-                PermissionChecker.ACTION_BATTERY ->
-                    requireActivity().startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                // 3.0.5: 一键申请电池优化白名单（无需 Root）
+                PermissionChecker.ACTION_BATTERY -> KeepAlive.requestWhitelist(requireActivity())
                 else -> toast(it.detail)
             }
         } catch (e: Exception) {
@@ -1076,22 +1075,25 @@ class OverviewFragment : Fragment() {
         autoRefreshHandler.removeCallbacks(autoRefreshRunnable)
     }
 
-    private fun iconCustomExists(): Boolean {
-        // alpha2.28: still sync but fast (test -f is ~50ms on su)
-        val r = runRoot("test -f " + GMS_ICON_PATH + " && echo CUSTOM")
-        return r != null && r.contains("CUSTOM")
-    }
+    /** 3.0.5: 自定义图标存在性改为查本应用 filesDir（无需 Root，毫秒级）。 */
+    private fun iconCustomExists(): Boolean = IconStore.exists(requireContext().applicationContext)
 
-    /** alpha2.28: async version for UI callers */
     private fun iconCustomExistsAsync(callback: (Boolean) -> Unit) {
-        Thread {
-            val r = runRoot("test -f " + GMS_ICON_PATH + " && echo CUSTOM")
-            val exists = r != null && r.contains("CUSTOM")
-            requireActivity().runOnUiThread { callback(exists) }
-        }.start()
+        callback(iconCustomExists())
     }
 
     // ── alpha1.14fix5: 弹窗图标选择 → Material experience 卡片（与权限弹窗同风格）──
+    /**
+     * 3.0.5: 相册选图改用 ActivityResultLauncher。
+     *
+     * 旧实现走 `requireActivity().startActivityForResult` + Fragment.onActivityResult，
+     * 实测（Android 15 / ColorOS）结果根本不回调到 Fragment —— 选中图片后什么都没发生，
+     * 也就是用户看到的「图标怎么改都没反应」。
+     */
+    private val iconPicker = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri -> if (uri != null) saveIconFromUri(uri) }
+
     private fun showIconDialog(custom: Boolean) {
         val dlg = Dialog(requireContext())
         val win = dlg.window
@@ -1159,12 +1161,8 @@ class OverviewFragment : Fragment() {
             row.setOnClickListener {
                 dlg.dismiss()
                 if (which == 0) {
-                    val pick = Intent(Intent.ACTION_GET_CONTENT)
-                    pick.type = "image/*"
-                    pick.addCategory(Intent.CATEGORY_OPENABLE)
                     try {
-                        requireActivity().startActivityForResult(
-                                Intent.createChooser(pick, Lang.t("选择耳机图标", "Choose earbud icon")), REQ_PICK_ICON)
+                        iconPicker.launch("image/*")
                     } catch (t: Throwable) {
                         toast(Lang.t("无法打开选择器: ", "Cannot open picker: ") + t.message)
                     }
@@ -1187,11 +1185,10 @@ class OverviewFragment : Fragment() {
     }
 
     private fun resetCustomIcon() {
-        Thread {
-            val r = runRoot("rm -f " + GMS_ICON_PATH + " && echo OK")
-            val ok = r != null && r.contains("OK")
-            requireActivity().runOnUiThread { toast(if (ok) Lang.t("已恢复默认图标（下次连接生效）", "Default icon restored (takes effect next connect)") else Lang.t("恢复失败，请检查 Root", "Restore failed, check Root")) }
-        }.start()
+        // 3.0.5: 只删本应用内的图标文件（无需 Root）
+        val ok = IconStore.clear(requireContext().applicationContext)
+        toast(if (ok) Lang.t("已恢复默认图标（下次连接生效）", "Default icon restored (takes effect next connect)")
+        else Lang.t("恢复失败", "Restore failed"))
     }
 
     private fun saveIconFromUri(uri: Uri) {
@@ -1234,17 +1231,9 @@ class OverviewFragment : Fragment() {
                     requireActivity().runOnUiThread { toast(Lang.t("图片仍超 1MB，请换小图", "Image still over 1MB, please pick a smaller one")) }
                     return@Thread
                 }
-                val uid = runRoot("stat -c %u:%g /data/user/0/com.google.android.gms")?.trim()
-                if (uid == null || !uid.contains(":")) {
-                    requireActivity().runOnUiThread { toast(Lang.t("读取 GMS 属主失败", "Failed to read GMS owner")) }
-                    return@Thread
-                }
-                val cmd = "cp '" + out.absolutePath + "' " + GMS_ICON_PATH +
-                        " && chown " + uid + " " + GMS_ICON_PATH +
-                        " && chmod 644 " + GMS_ICON_PATH + " && echo OK"
-                val r = runRoot(cmd)
-                val ok = r != null && r.contains("OK")
-                requireActivity().runOnUiThread { toast(if (ok) Lang.t("弹窗图标已更新（下次连接生效）", "Popup icon updated (takes effect next connect)") else Lang.t("写入图标失败，请检查 Root", "Write icon failed, check Root")) }
+                // 3.0.5: 写本应用 filesDir（无需 Root），GMS 侧 Hook 经 ContentProvider 读取
+                val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
+                requireActivity().runOnUiThread { toast(if (ok) Lang.t("弹窗图标已更新（下次连接生效）", "Popup icon updated (takes effect next connect)") else Lang.t("写入图标失败", "Write icon failed")) }
                 if (scaled !== bmp) scaled.recycle()
                 if (bmp != null && !bmp.isRecycled) bmp.recycle()
             } catch (t: Throwable) {
@@ -1253,72 +1242,7 @@ class OverviewFragment : Fragment() {
         }.start()
     }
 
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == REQ_PICK_ICON && resultCode == android.app.Activity.RESULT_OK &&
-                data != null && data.data != null) {
-            saveIconFromUri(data.data!!)
-        }
-    }
 
-    // ── Root 强力保活 ──
-    private fun showRootWarnDialog(sw: PillSwitch) {
-        val (d, box) = M3Ui.materialDialog(requireContext(), primaryColor, cardSurfaceColor)
-        box.addView(M3Ui.dialogTitle(requireContext(), Lang.t("权限风险警告", "Permission risk warning"), onSurfaceColor),
-                LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(14)))
-        val msg = TextView(requireContext())
-        msg.text = Lang.t(
-                "开启后将使用 Root 权限执行系统命令：\n" +
-                "• 将本应用加入系统电池优化白名单（防 Doze 杀后台）\n" +
-                "• 允许后台运行，写入 Magisk 开机脚本实现开机自启\n\n" +
-                "请确认：\n" +
-                "• 设备已获取 Root 权限\n" +
-                "• 你了解 Root 操作的风险\n" +
-                "• 本应用来源可信",
-                "This will run system commands with Root permission:\n" +
-                "• Add this app to the battery optimization whitelist (prevent Doze killing background)\n" +
-                "• Allow background run and write a Magisk boot script for auto-start\n\n" +
-                "Please confirm:\n" +
-                "• The device is rooted\n" +
-                "• You understand the risk of Root operations\n" +
-                "• This app source is trustworthy")
-        msg.textSize = 14f
-        msg.setTextColor(onVariantColor)
-        msg.setLineSpacing(dp(3).toFloat(), 1.3f)
-        box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(24)))
-        val btnRow = LinearLayout(requireContext())
-        btnRow.orientation = LinearLayout.HORIZONTAL
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), onVariantColor) {
-            sw.setChecked(false)
-            d.dismiss()
-        })
-        btnRow.addView(spacer(dp(6)))
-        btnRow.addView(makeMaterialTextButton(Lang.t("继续开启", "Continue"), primaryColor) {
-            d.dismiss()
-            applyRootProtect(true)
-        })
-        box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.window?.setWindowAnimations(android.R.style.Animation_Dialog)
-        d.setCancelable(false)
-        d.show()
-    }
-
-    /** alpha2.28: cached root check (first call on background thread, result cached) */
-    private fun hasRoot(): Boolean {
-        cachedHasRoot?.let { return it }
-        // Run on background thread to avoid blocking UI
-        val latch = java.util.concurrent.CountDownLatch(1)
-        Thread {
-            val out = runRoot("id")
-            cachedHasRoot = RootShell.isRootId(out)
-            latch.countDown()
-        }.start()
-        try { latch.await(2000, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) { }
-        return cachedHasRoot ?: false
-    }
 
     /** 3.0.4: 统一走 RootShell（su / kp 自适应）；失败返回 null。 */
     private fun runRoot(cmd: String): String? = RootShell.exec(cmd)
@@ -1772,37 +1696,6 @@ class OverviewFragment : Fragment() {
         Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
     }
 
-    private fun applyRootProtect(enable: Boolean) {
-        // 无 Root 模式：直接静默返回。这里不该弹「未检测到 Root」错误框 ——
-        // 检测到没 Root 本来就是自动回落的前提，不是用户操作失误。
-        if (enable && EnvProbe.isNoRootMode()) return
-        if (enable) {
-            if (!hasRoot()) {
-                showSimpleDialog(Lang.t("未检测到 Root", "Root not detected"), Lang.t("未检测到 Root 权限，无法启用强力保活。请确认设备已 root 且允许本应用使用 su。", "Root permission not detected. Cannot enable force keep-alive. Please confirm the device is rooted and allows su for this app."))
-                requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
-                        .edit().putBoolean("root_protect", false).commit()
-                return
-            }
-            val script = "#!/system/bin/sh\n" +
-                    "dumpsys deviceidle whitelist +com.fxxkmoondrop.secret\n" +
-                    "appops set com.fxxkmoondrop.secret RUN_IN_BACKGROUND allow\n" +
-                    "appops set com.fxxkmoondrop.secret RUN_ANY_IN_BACKGROUND allow\n" +
-                    "appops set com.fxxkmoondrop.secret START_FOREGROUND allow\n"
-            runRoot("mkdir -p /data/adb/service.d && echo '" + script + "' > /data/adb/service.d/50-moondrop-keepalive.sh && chmod 755 /data/adb/service.d/50-moondrop-keepalive.sh")
-            val out = runRoot("dumpsys deviceidle whitelist +com.fxxkmoondrop.secret; " +
-                    "appops set com.fxxkmoondrop.secret RUN_IN_BACKGROUND allow; " +
-                    "appops set com.fxxkmoondrop.secret RUN_ANY_IN_BACKGROUND allow; " +
-                    "appops set com.fxxkmoondrop.secret START_FOREGROUND allow; echo DONE")
-            requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
-                    .edit().putBoolean("root_protect", true).commit()
-            toast(if (out != null && out.contains("DONE")) Lang.t("已启用：电池白名单 + 开机脚本", "Enabled: battery whitelist + boot script") else Lang.t("已写入配置，请重启后生效", "Config written, restart to take effect"))
-        } else {
-            runRoot("rm -f /data/adb/service.d/50-moondrop-keepalive.sh")
-            requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
-                    .edit().putBoolean("root_protect", false).commit()
-            toast(Lang.t("已关闭强力保活", "Force keep-alive disabled"))
-        }
-    }
 
     /** 弹窗小按钮：filled=true 实心主色，false 浅色容器色 */
     private fun makeSmallButton(text: String, filled: Boolean,
@@ -1871,7 +1764,5 @@ class OverviewFragment : Fragment() {
         private val ANC_NAMES = AncProfileLib.ANC_MODE_NAMES_FULL
         private const val SIM_MAC = "AA:BB:CC:DD:EE:FF"
         private const val SIM_NAME = "Moondrop Golden Ages 2"
-        private const val REQ_PICK_ICON = 0xE16
-        private const val GMS_ICON_PATH = "/data/user/0/com.google.android.gms/files/moondrop_icon.png"
     }
 }

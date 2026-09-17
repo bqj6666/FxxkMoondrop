@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.util.Log
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 
 /**
  * alpha2.26.5: 跨进程配置读取。
@@ -16,9 +17,16 @@ import android.net.Uri
  *
  * alpha2.38.10: 新增 "lang" 分支（显示语言：0=auto 1=zh 2=en），供弹窗跨进程读取。
  *
+ * 3.0.5: 新增 moondrop_icon —— 用 openFile() 把应用内 filesDir/moondrop_icon.png
+ * 提供给 GMS 进程的 Hook 读取，于是「弹窗自定义图标」**不再需要 Root**
+ * （旧实现要往 /data/user/0/com.google.android.gms/files/ 写文件，只有 Root 才能做）。
+ * 同时暴露 icon_ver，供 Hook 判断图标是否换过。
+ *
  * 用法:
  *   content://com.fxxkmoondrop.secret.prefs/show_wind        -> _value=1/0
  *   content://com.fxxkmoondrop.secret.prefs/lang             -> _value=0/1/2
+ *   content://com.fxxkmoondrop.secret.prefs/icon_ver         -> _value=<int>
+ *   content://com.fxxkmoondrop.secret.prefs/moondrop_icon    -> openFile() 读 PNG 字节
  */
 class PrefsProvider : ContentProvider() {
 
@@ -39,6 +47,7 @@ class PrefsProvider : ContentProvider() {
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
         val value: Int = when {
             key == "lang" -> sp.getInt("lang", 0)
+            key == IconStore.KEY_VER -> sp.getInt(IconStore.KEY_VER, 0)
             // 第 3 项：分类功能开关。`feat_*` 一律按布尔读，默认**开**（保持既有行为，
             // 用户显式关掉才停用对应功能），供 hook 侧跨进程判定。
             key == "show_wind" || key.startsWith("feat_") ->
@@ -48,6 +57,24 @@ class PrefsProvider : ContentProvider() {
         val c = MatrixCursor(arrayOf("_key", "_value"))
         c.addRow(arrayOf(key, value))
         return c
+    }
+
+    /**
+     * 3.0.5: 图标文件对外只读。GMS 进程的 Hook 直接 openInputStream 读 PNG 字节，
+     * 走的是系统 ContentResolver 通道，与 show_wind / lang 同一条链路。
+     */
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
+        val key = uri.lastPathSegment
+        if (key != "moondrop_icon") return super.openFile(uri, mode)
+        val ctx = context ?: return null
+        val f = IconStore.localFile(ctx)
+        if (!f.exists() || f.length() <= 0) return null
+        return try {
+            ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY)
+        } catch (t: Throwable) {
+            Log.w("PrefsProvider", "openFile icon failed: $t")
+            null
+        }
     }
 
     private fun handleDcCmd(uri: Uri): Cursor? {

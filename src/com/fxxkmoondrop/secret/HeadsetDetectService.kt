@@ -120,6 +120,8 @@ class HeadsetDetectService : Service() {
         AncBridge.bind(this) // alpha1.20: 绑定广播 Context（模式状态同步通道）
         GaiaBleClient.getInstance().init(this) // alpha1.32: 注册 LE 地址 receiver + 无缓存时请求发现
         DeviceMatcher.loadPersisted(this) // alpha2.52: 恢复指纹探测的学习/拒绝名单
+        // 3.0.5: 服务起来即确保保活链（看门狗 + 白名单），不再依赖 Root 开关
+        try { KeepAlive.ensure(this) } catch (_: Throwable) { }
 
         receiver = HeadsetReceiver()
         val f = IntentFilter()

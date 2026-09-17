@@ -170,7 +170,7 @@ class EnvProbe private constructor() {
          * 此模式下自动回落为「仅靠 GAIA BLE 直连」控制耳机：
          * 通知栏的控制按钮与 App 主界面照常可用（读电量、切降噪都走
          * 标准 BluetoothGatt，本身不需要 Root），而依赖 root 或 GMS Hook 的增强功能
-         * （GMS 桥接 Hook、官方面板注入、root 拉起官方 App、Root 强力保活）
+         * （GMS 桥接 Hook、官方面板注入、root 拉起官方 App；保活自 3.0.5 起已不需要 root）
          * 一律静默停用，不再尝试、也不再报错或弹窗。
          *
          * 3.0.5：不再「只看 root」就断言模块不可用。GMS 桥接与官方面板注入靠的是
