@@ -42,6 +42,19 @@
 - 诊断：能力探测结论文本写入 AppLog（`probe: len=... truncated=... ancPath=... features=...`），
   用户导出的日志里可直接看到探测结果。
 
+### 加固：Hook 返回值类型安全化（防宿主进程崩溃）
+- 新增 `HookGuard`：libxposed / LSPosed 的 Hook 桥按目标方法**返回类型**解包回调返回值，
+  目标返回基本类型（如 `boolean`）而回调给 null 时，桥内解包即抛异常 —— 崩的是**宿主进程**
+  （GMS / Settings / SystemUI），不是模块自己。本模块大量使用「不满足条件就 early-return null
+  放行原逻辑」的写法，对 void 方法恰好正确，对少数返回基本类型的方法就是一颗雷。
+- 现有 24 处 early-return 全部改走 `HookGuard.nullSafe(chain)`：由目标方法的真实返回类型决定
+  安全值（void / 引用类型 → null，语义不变；基本类型 → 该类型默认值并记警告日志）。
+- `HookGuardTest` 新增 8 例覆盖这张回落表（void / 引用 / boolean / int / 类型不匹配 / 构造器 / 空 chain）。
+
+### 界面：版本号去掉 "Alpha" 字样
+- 关于页与主页英雄卡此前固定显示 `V3.0.3Alpha`。3.0 起已是正式版，改为直接显示 `V3.0.3`
+  （仍以 PackageManager 为唯一来源，不硬编码；旧 alpha 版本号的兼容剥离保留）。
+
 ---
 
 ## 3.0.2 (302)

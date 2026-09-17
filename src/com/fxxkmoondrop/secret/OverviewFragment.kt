@@ -213,9 +213,8 @@ class OverviewFragment : Fragment() {
         statusSub!!.gravity = Gravity.START
         try {
             val pi = requireContext().packageManager.getPackageInfo(requireContext().packageName, 0)
-            var vn = pi.versionName ?: ""
-            if (vn.lowercase().startsWith("alpha")) vn = vn.substring(5)
-            statusSub!!.text = "V" + vn + "Alpha"
+            // 3.0.3: 去掉 "Alpha" 后缀，直接显示正式版本号（V3.0.3）
+            statusSub!!.text = "V" + (pi.versionName ?: "").removePrefix("alpha")
         } catch (_: Exception) {
             statusSub!!.text = ""
         }

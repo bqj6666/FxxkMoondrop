@@ -132,6 +132,9 @@ dependencies {
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
     testImplementation("junit:junit:4.13.2")
+    // 3.0.3: HookGuardTest 需要 XposedInterface.Chain 做桩，测试期才把它放进 classpath
+    // （主代码仍是 compileOnly，运行时由 LSPosed 提供，不进 APK）
+    testImplementation("io.github.libxposed:api:102.0.0")
 }
 
 // —— LSPosed 推荐作用域 EDF 注入（构建后处理：注入 scope.list/ascope.list + 重签）——

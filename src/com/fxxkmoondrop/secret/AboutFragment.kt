@@ -35,15 +35,15 @@ class AboutFragment : Fragment() {
         layoutParams = LinearLayout.LayoutParams(1, h)
     }
 
-    /** 版本号：alpha2.52 -> V2.52Alpha（与主页一致）。唯一来源是 PackageManager，不硬编码 */
+    /** 版本号：`V3.0.3`（与主页一致）。唯一来源是 PackageManager，不硬编码。
+     *  3.0.3: 去掉 "Alpha" 后缀 —— 3.0 起已是正式版，界面不该再挂 alpha 字样。 */
     private fun verText(): String {
         val vn: String? = try {
             requireContext().packageManager
                     .getPackageInfo(requireContext().packageName, 0).versionName
         } catch (_: Exception) { null }
         if (vn.isNullOrBlank()) return ""
-        val core = if (vn.lowercase().startsWith("alpha")) vn.substring(5) else vn
-        return "V" + core + "Alpha"
+        return "V" + vn.removePrefix("alpha")
     }
 
     private fun openUrl(url: String) {

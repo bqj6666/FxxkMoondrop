@@ -25,6 +25,7 @@ import com.fxxkmoondrop.secret.DexKitLocator
 import com.fxxkmoondrop.secret.DeviceMatcher
 import com.fxxkmoondrop.secret.AncProfileLib
 import com.fxxkmoondrop.secret.M3Ui
+import com.fxxkmoondrop.secret.HookGuard
 import com.fxxkmoondrop.secret.HookHelper
 import com.fxxkmoondrop.secret.BatteryStore
 import com.fxxkmoondrop.secret.GaiaBleClient
@@ -128,8 +129,8 @@ class FastPairHookEntry {
             module.hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val iv = chain.args[0] as? ImageView ?: return@intercept null
-                    val bmp = loadOrDrawIcon() ?: return@intercept null
+                    val iv = chain.args[0] as? ImageView ?: return@intercept HookGuard.nullSafe(chain)
+                    val bmp = loadOrDrawIcon() ?: return@intercept HookGuard.nullSafe(chain)
                     iv.setImageBitmap(bmp)
                     Log.d(TAG, "[FastPairHook] (dthi.O) icon injected")
                 } catch (t: Throwable) {
@@ -150,8 +151,8 @@ class FastPairHookEntry {
             module.hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val iv = chain.args[0] as? ImageView ?: return@intercept null
-                    val bmp = loadOrDrawIcon() ?: return@intercept null
+                    val iv = chain.args[0] as? ImageView ?: return@intercept HookGuard.nullSafe(chain)
+                    val bmp = loadOrDrawIcon() ?: return@intercept HookGuard.nullSafe(chain)
                     iv.setImageBitmap(bmp)
                     Log.d(TAG, "[FastPairHook] (dthi.q) icon injected")
                 } catch (t: Throwable) {
@@ -169,11 +170,11 @@ class FastPairHookEntry {
             module.hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val act = chain.thisObject as? android.app.Activity ?: return@intercept null
+                    val act = chain.thisObject as? android.app.Activity ?: return@intercept HookGuard.nullSafe(chain)
                     val cname = act.javaClass.name
                     if (!cname.contains("HalfSheet")) {
                         Log.d(TAG, "[FastPairHook] onResume seen: " + cname + " (not HalfSheet, skip)")
-                        return@intercept null
+                        return@intercept HookGuard.nullSafe(chain)
                     }
                     Log.d(TAG, "[FastPairHook] HalfSheet MATCH onResume: " + cname)
                     sHalfSheetActivity = act
@@ -221,9 +222,9 @@ class FastPairHookEntry {
             module.hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val act = chain.thisObject as? android.app.Activity ?: return@intercept null
-                    if (!act.javaClass.name.contains("HalfSheet")) return@intercept null
-                    if (act !== sHalfSheetActivity) return@intercept null
+                    val act = chain.thisObject as? android.app.Activity ?: return@intercept HookGuard.nullSafe(chain)
+                    if (!act.javaClass.name.contains("HalfSheet")) return@intercept HookGuard.nullSafe(chain)
+                    if (act !== sHalfSheetActivity) return@intercept HookGuard.nullSafe(chain)
                     sHalfSheetActivity = null
                     // alpha2.41.6: 用户关闭弹窗后把最近显示时间刷新，让 postShow 的 12s 防重窗口生效，
                     // 并随广播带出设备名，供应用侧 PopupGate.markUserClosed 登记（本连接不再自动重弹）

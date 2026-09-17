@@ -170,10 +170,10 @@ class XposedEntry : XposedModule() {
                 try {
                     val thisObj = chain.thisObject
                     val connPrefsCls = Class.forName(CLS_CONN_PREFS, true, cl)
-                    if (!connPrefsCls.isInstance(thisObj)) return@intercept null
-                    val prefScreen = HookHelper.callMethod(thisObj, "getPreferenceScreen") ?: return@intercept null
-                    if (HookHelper.callMethod(prefScreen, "findPreference", KEY_ENTRY) != null) return@intercept null
-                    val context = HookHelper.callMethod(thisObj, "getContext") as? Context ?: return@intercept null
+                    if (!connPrefsCls.isInstance(thisObj)) return@intercept HookGuard.nullSafe(chain)
+                    val prefScreen = HookHelper.callMethod(thisObj, "getPreferenceScreen") ?: return@intercept HookGuard.nullSafe(chain)
+                    if (HookHelper.callMethod(prefScreen, "findPreference", KEY_ENTRY) != null) return@intercept HookGuard.nullSafe(chain)
+                    val context = HookHelper.callMethod(thisObj, "getContext") as? Context ?: return@intercept HookGuard.nullSafe(chain)
                     val prefCls = Class.forName("androidx.preference.Preference", true, cl)
                     val pref = prefCls.getConstructor(Context::class.java).newInstance(context)
                     HookHelper.callMethod(pref, "setKey", KEY_ENTRY)
@@ -237,7 +237,7 @@ class XposedEntry : XposedModule() {
                     val key = HookHelper.callMethod(pref, "getKey") as? String
                     if (key != DeviceDetailsPanel.KEY) {
                         chain.proceed()
-                        return@intercept null
+                        return@intercept HookGuard.nullSafe(chain)
                     }
                     val holder = chain.args[0]
                     val itemView = HookHelper.getObjectField(holder, "itemView") as? android.view.ViewGroup
@@ -298,10 +298,10 @@ class XposedEntry : XposedModule() {
                 try {
                     val thisObj = chain.thisObject
                     val devCls = Class.forName(CLS_BT_DEVICE_DETAILS, true, cl)
-                    if (!devCls.isInstance(thisObj)) return@intercept null
-                    val prefScreen = HookHelper.callMethod(thisObj, "getPreferenceScreen") ?: return@intercept null
-                    if (HookHelper.callMethod(prefScreen, "findPreference", DeviceDetailsPanel.KEY) != null) return@intercept null
-                    val context = HookHelper.callMethod(thisObj, "getContext") as? Context ?: return@intercept null
+                    if (!devCls.isInstance(thisObj)) return@intercept HookGuard.nullSafe(chain)
+                    val prefScreen = HookHelper.callMethod(thisObj, "getPreferenceScreen") ?: return@intercept HookGuard.nullSafe(chain)
+                    if (HookHelper.callMethod(prefScreen, "findPreference", DeviceDetailsPanel.KEY) != null) return@intercept HookGuard.nullSafe(chain)
+                    val context = HookHelper.callMethod(thisObj, "getContext") as? Context ?: return@intercept HookGuard.nullSafe(chain)
                     val pref = prefCls.getConstructor(Context::class.java).newInstance(context)
                     HookHelper.callMethod(pref, "setKey", DeviceDetailsPanel.KEY)
                     val deviceName = (HookHelper.callMethod(thisObj, "getDeviceName") as? String)
@@ -311,7 +311,7 @@ class XposedEntry : XposedModule() {
                         }
                     deviceNameByPref[pref] = deviceName ?: ""
                     // alpha2.39: 只在 Moondrop 设备显示面板，其他蓝牙设备不注入
-                    if (!AncProfileLib.isMoondrop(deviceName)) return@intercept null
+                    if (!AncProfileLib.isMoondrop(deviceName)) return@intercept HookGuard.nullSafe(chain)
                     val zh = langZh(context)
                     HookHelper.callMethod(pref, "setTitle", if (zh) "Moondrop 耳机控制" else "Moondrop Headset Control")
                     HookHelper.callMethod(pref, "setSummary", if (zh) "降噪 / 空间音频 / 增益 / 指示灯" else "ANC / spatial / gain / LED")
@@ -492,7 +492,7 @@ class XposedEntry : XposedModule() {
             hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val context = chain.thisObject as? Context ?: return@intercept null
+                    val context = chain.thisObject as? Context ?: return@intercept HookGuard.nullSafe(chain)
                     registerCmdReceiver(context.applicationContext, cl)
                 } catch (th: Throwable) {
                     Log.e(TAG, "Application.onCreate hook err", th)
@@ -530,7 +530,7 @@ class XposedEntry : XposedModule() {
                     val v2 = uiToAncV2(ui)
                     if (v2 < 0) {
                         Log.d(TAG, "setCurrentMode ignore ui=$ui")
-                        return@intercept null  // short-circuit: don't call original
+                        return@intercept HookGuard.nullSafe(chain)  // short-circuit: don't call original
                     }
                     chain.args[0] = v2
                     Log.d(TAG, "setCurrentMode ui=$ui -> ancV2=$v2")
@@ -552,9 +552,9 @@ class XposedEntry : XposedModule() {
             hook(m).intercept { chain ->
                 chain.proceed()
                 try {
-                    val objAC = chain.args[0] ?: return@intercept null
-                    val objValue = chain.args[1] ?: return@intercept null
-                    if ((objAC as Enum<*>).name != "MODE") return@intercept null
+                    val objAC = chain.args[0] ?: return@intercept HookGuard.nullSafe(chain)
+                    val objValue = chain.args[1] ?: return@intercept HookGuard.nullSafe(chain)
+                    if ((objAC as Enum<*>).name != "MODE") return@intercept HookGuard.nullSafe(chain)
                     val iValue = HookHelper.callMethod(objValue, "getValue") as Int
                     Log.d(TAG, "AC onInfo MODE value=$iValue")
                     broadcastAncMode(1, iValue)
