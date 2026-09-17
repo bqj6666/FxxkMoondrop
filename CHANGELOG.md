@@ -4,6 +4,33 @@
 > 本项目为 **LSPosed/Xposed 模块**，注入 GMS（`com.google.android.gms`）Hook 高通 GAIA 蓝牙协议 + Moondrop 私有 `9ECA0000` 协议。
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
+## 3.0.4 (304)
+> 修复：FolkPatch（APatch 系）等使用 `kp` 作为 root 入口的设备上「识别不到 Root」，以及由此连带失效的 Root 功能。
+
+### 修复：Root 检测不认 `kp`（APatch / FolkPatch 系）
+- **问题**：`EnvProbe.detectRoot()` 只探测文件名 `su` / `magisk` / `magisk64`，而
+  FolkPatch（APatch 的非并行扩展分支）默认把 root 入口装在 **`/system/bin/kp`** ——
+  反编译其源码可证：`uapi/scdefs.h` 中 `#define SU_PATH "/system/bin/kp"`、
+  `LEGACY_SU_PATH "/system/bin/su"`，`APatchApp.DEFAULT_SU_PATH = "/system/bin/kp"`，
+  `su` 仅作旧版兼容路径。这类设备因此被判成「未检测到 Root」，整体掉进无 Root 模式
+  （跳过 GMS 桥接探测、停用强力保活与静默拉起等）。
+- **修复**：检测标记补 `kp`；惯例目录补 `/debug_ramdisk`、`/data/adb/{ap,ap/bin,fp,fp/bin,ksu,ksu/bin}`。
+  注：`/data/adb` 在真机上实测为 `drwx------ root root`（普通 App 不可读），
+  这些条目只在放宽权限的 ROM 上提供额外命中机会，真正生效的是 `/system/bin/kp` 这类世界可读路径。
+
+### 修复：Root 命令执行不再硬编码 `su`
+- **问题**：四处调用均为 `Runtime.getRuntime().exec(arrayOf("su", "-c", ...))`
+  （日志 Root 导出、静默拉起官方 App、强力保活写入/清除、Root 可用性自检）。
+  在 `su` 不存在而只有 `kp` 的设备上，即便检测通过也会全部静默失败。
+- **修复**：新增 `RootShell`，按 `su` → `/system/bin/su` → `/system/xbin/su` → `kp` →
+  `/system/bin/kp` → `/debug_ramdisk/su` → `/data/adb/ksu/bin/su` 顺序探测，
+  **取第一个执行 `id` 返回 uid=0 的入口并缓存**。`su` 排在最前，因此
+  Magisk / KernelSU / 旧 APatch 设备选中的仍是 `su`，行为与旧版一致。
+  命令改为合并读 stdout+stderr、带超时（授权框弹出时留有点击时间，不无限等待）。
+
+### 诊断
+- 日志抓取的「运行环境」段改为 `Root: 检测到 | 入口=<su|kp|…>`，便于一眼看出选中的是哪个入口。
+
 ---
 
 ## 3.0.3 (303)

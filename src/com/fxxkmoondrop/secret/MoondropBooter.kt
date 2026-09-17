@@ -36,7 +36,8 @@ class MoondropBooter {
             if (isProcessRunning()) return
             try {
                 val cmd = "am start -n $PKG/$ACTIVITY --ez fxxk_silent true --exclude-from-recents"
-                val rc = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd)).waitFor()
+                // 3.0.4: 走 RootShell（su/kp 自适应），FolkPatch 等设备上 su 不存在时不至于静默失败
+                val rc = RootShell.execExit(cmd)
                 lastLaunch = System.currentTimeMillis()
                 Log.i(TAG, "launch result=$rc")
             } catch (e: Exception) {

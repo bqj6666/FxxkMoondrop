@@ -743,25 +743,10 @@ class SettingsFragment : Fragment() {
     }
 
     // ── Root 强力保活（与 alpha1.34 行为一致）──
-    private fun hasRoot(): Boolean {
-        val out = runRoot("id")
-        return out != null && out.contains("uid=0")
-    }
+    private fun hasRoot(): Boolean = RootShell.isRootId(runRoot("id"))
 
-    private fun runRoot(cmd: String): String? {
-        return try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-            val br = BufferedReader(InputStreamReader(p.inputStream))
-            val sb = StringBuilder()
-            while (true) {
-                val line = br.readLine() ?: break
-                sb.append(line).append('\n')
-            }
-            sb.toString()
-        } catch (_: Exception) {
-            null
-        }
-    }
+    /** 3.0.4: 统一走 RootShell（su / kp 自适应）；失败返回 null。 */
+    private fun runRoot(cmd: String): String? = RootShell.exec(cmd)
 
     private fun showRootWarnDialog(sw: MaterialSwitch) {
         val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)

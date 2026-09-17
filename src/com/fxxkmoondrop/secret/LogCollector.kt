@@ -8,6 +8,7 @@ import android.content.ContentValues
 import android.provider.MediaStore
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -123,20 +124,15 @@ class LogCollector {
 
         /** 用 Root 复制到公共根目录；失败返回 null。 */
         private fun tryCopyToPublicRoot(src: File, fileName: String): String? {
-            // 无 Root 模式没有 su 可用，直接走兜底（调用方本来就有非 Root 路径）。
+            // 无 Root 模式没有 root 可用，直接走兜底（调用方本来就有非 Root 路径）。
             if (EnvProbe.isNoRootMode()) return null
             try {
                 val dest = Environment.getExternalStorageDirectory().absolutePath + "/" + fileName
-                val cmd = "rm -f '$dest'; cp '${src.absolutePath}' '$dest'; chmod 644 '$dest'; ls -l '$dest'"
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-                val r = BufferedReader(InputStreamReader(p.inputStream))
-                var tail = ""
-                while (true) {
-                    val line = r.readLine() ?: break
-                    tail = line
-                }
-                val rc = p.waitFor()
-                if (rc == 0 && File(dest).exists() && File(dest).length() > 0) return dest
+                val cmd = "rm -f '$dest'; cp '${src.absolutePath}' '$dest'; chmod 644 '$dest'"
+                // 3.0.4: 走 RootShell（su/kp 自适应），不再硬编码 su
+                val out = RootShell.exec(cmd) ?: return null
+                if (File(dest).exists() && File(dest).length() > 0) return dest
+                Log.w("LogCollector", "root copy 未见目标文件: " + out.takeLast(120))
             } catch (_: Exception) { }
             return null
         }
@@ -259,7 +255,9 @@ class LogCollector {
             val sb = StringBuilder()
             sb.append("==== 运行环境 ====\n")
             try {
-                sb.append("Root: ").append(if (EnvProbe.isRooted()) "检测到" else "未检测到").append('\n')
+                // 3.0.4: 附上实际选中的 root 入口，便于定位 FolkPatch（kp）这类非 su 设备
+                sb.append("Root: ").append(if (EnvProbe.isRooted()) "检测到" else "未检测到")
+                sb.append(" | 入口=").append(RootShell.binary() ?: "无").append('\n')
                 sb.append("FastPairHook 模块: ")
                         .append(if (EnvProbe.isFastPairHookActive(probeCtx)) "已激活" else "未激活").append('\n')
             } catch (e: Exception) {

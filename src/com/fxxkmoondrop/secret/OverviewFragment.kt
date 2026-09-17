@@ -1313,26 +1313,15 @@ class OverviewFragment : Fragment() {
         val latch = java.util.concurrent.CountDownLatch(1)
         Thread {
             val out = runRoot("id")
-            cachedHasRoot = out != null && out.contains("uid=0")
+            cachedHasRoot = RootShell.isRootId(out)
             latch.countDown()
         }.start()
         try { latch.await(2000, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) { }
         return cachedHasRoot ?: false
     }
 
-    private fun runRoot(cmd: String): String? {
-        return try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-            val br = BufferedReader(InputStreamReader(p.inputStream))
-            val sb = StringBuilder()
-            var l: String?
-            while (br.readLine().also { l = it } != null) sb.append(l).append("\n")
-            p.waitFor()
-            sb.toString()
-        } catch (_: Exception) {
-            ""
-        }
-    }
+    /** 3.0.4: 统一走 RootShell（su / kp 自适应）；失败返回 null。 */
+    private fun runRoot(cmd: String): String? = RootShell.exec(cmd)
 
     override fun onDestroyView() {
         super.onDestroyView()

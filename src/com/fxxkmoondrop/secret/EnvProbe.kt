@@ -53,18 +53,32 @@ class EnvProbe private constructor() {
                     }
                 }
             } catch (_: Throwable) { }
-            // 2) 惯例位置（su / Magisk 常见安装点）
+            // 2) 惯例位置
             dirs.add("/sbin")
             dirs.add("/su/bin")
             dirs.add("/system/bin")
             dirs.add("/system/xbin")
             dirs.add("/system/sbin")
             dirs.add("/system/bin/magisk")
+            dirs.add("/debug_ramdisk")
+            // 3.0.4: APatch 系（含 FolkPatch / KernelSU 变体）的入口与工作目录。
+            // 注意 /data/adb 实测是 drwx------ root（普通 App 读不进去），列在这里只作
+            // 「碰到放宽权限的 ROM 就多一次命中机会」，真正起作用的是 /system/bin/kp 这类世界可读路径。
             dirs.add("/data/adb")
             dirs.add("/data/adb/magisk")
+            dirs.add("/data/adb/ap")
+            dirs.add("/data/adb/ap/bin")
+            dirs.add("/data/adb/fp")
+            dirs.add("/data/adb/fp/bin")
+            dirs.add("/data/adb/ksu")
+            dirs.add("/data/adb/ksu/bin")
             for (d in dirs) {
                 try {
                     if (File(d, "su").exists()) return true
+                    // 3.0.4: APatch / FolkPatch 默认把 root 入口装成 kp
+                    // （反编译 FolkPatch uapi/scdefs.h：SU_PATH="/system/bin/kp"）。
+                    // 旧实现只认 su/magisk，导致这类设备被判成「未检测到 Root」。
+                    if (File(d, "kp").exists()) return true
                     if (File(d, "magisk").exists()) return true
                     if (File(d, "magisk64").exists()) return true
                 } catch (_: Throwable) { }
