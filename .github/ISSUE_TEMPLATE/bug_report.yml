@@ -1,0 +1,84 @@
+name: 🐛 Bug 反馈
+description: 连接耳机后功能异常、弹窗异常、崩溃等问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请确认：模块已在 LSPosed 中启用，**作用域已勾选 `com.google.android.gms`**。
+        English is fine, fill in what you can.
+        缺版本号 / 机型 / 日志的报告无法定位，可能会被直接关闭。
+  - type: input
+    id: module_version
+    attributes:
+      label: 模块版本
+      description: 应用「关于」页显示的版本号
+      placeholder: alpha2.52 (287)
+    validations:
+      required: true
+  - type: input
+    id: android_device
+    attributes:
+      label: Android 版本 / 机型
+      placeholder: Android 15（ColorOS 15）/ 一加 13
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Xposed 框架及版本
+      placeholder: LSPosed 1.10.1（Zygisk）
+    validations:
+      required: true
+  - type: input
+    id: headset
+    attributes:
+      label: 耳机型号 / 主控
+      description: 主控不确定可只写型号（高通 QCC = GAIA，中科蓝讯 BT89xx = 9ECA）
+      placeholder: 水月雨 梦回2 / QCC5151
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 作用域 com.google.android.gms 是否已勾选
+      options:
+        - 已勾选
+        - 未勾选
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 哪一项失效（弹窗 / ANC / 电量 / 连接 / 控制）？越具体越好
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 权限全部授予
+        2. 耳机连接手机
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 应用「设置 → 日志抓取」导出 zip 后直接拖进这里
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认
+      options:
+        - label: 我已搜索过现有 issue，确认不是重复
+          required: true
+        - label: 我已附上日志导出文件
+          required: true
