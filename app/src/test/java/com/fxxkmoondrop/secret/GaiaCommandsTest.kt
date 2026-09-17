@@ -148,7 +148,7 @@ class GaiaCommandsTest {
         assertTrue(s.contains(GaiaConstants.FEATURE_BATTERY))
         assertTrue(s.contains(GaiaConstants.FEATURE_DAC_GAIN))
         assertTrue(s.contains(GaiaConstants.FEATURE_LED))
-        assertTrue(s.contains(GaiaConstants.F_ANC_V2))
+        assertTrue(s.contains(GaiaCommands.F_ANC_V2))
         // 布丁没有 AudioCuration(8) / 空间音频(18)，也不该被误判成 ANC V1(2)
         assertFalse(s.contains(GaiaCommands.F_AUDIO_CURATION))
         assertFalse(s.contains(GaiaCommands.F_SPATIAL_AUDIO))
