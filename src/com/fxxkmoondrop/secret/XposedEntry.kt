@@ -41,6 +41,15 @@ class XposedEntry : XposedModule() {
         private const val CLS_ANCV2_SUB = "com.moondroplab.moondrop.moondrop_app.native.handlers.AncV2Handler\$ancV2Subscriber\$1"
         private const val CLS_CONN_PREFS = "com.android.settings.connecteddevice.AdvancedConnectedDeviceDashboardFragment"
         private const val CLS_BT_DEVICE_DETAILS = "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment"
+
+        /** 官方详情页「耳机控制」切片（SlicePreference）key；本 ROM 没给它设 URI，官方那行是空的。 */
+        private const val KEY_SLICE_CONTROL = "bt_extra_control"
+
+        /** 官方详情页的加载占位行（取自官方 bluetooth_device_details_fragment.xml）。 */
+        private const val KEY_LOADING = "loading_pref"
+
+        /** 官方「操作按钮」那一行的 key（蓝牙详情页官方控件自己的键，用它当排序锚点）。 */
+        private const val KEY_ANCHOR_ROWS = "action_buttons"
         private const val CLS_GAIA_APP = "com.moondroplab.moondrop.moondrop_app.GaiaClientApplication"
         private const val CLS_GAIA_SERVICE = "com.qualcomm.qti.gaiaclient.core.GaiaClientService"
 
@@ -80,7 +89,7 @@ class XposedEntry : XposedModule() {
         val cl = param.classLoader
         Log.d(TAG, "onPackageReady: $pkg")
         when (pkg) {
-            PKG_SETTINGS -> { hookSettings(cl); hookDeviceDetailsPanel(cl) }
+            PKG_SETTINGS -> { hookSettings(cl); hookDeviceDetailsPanel(cl); hookDetailProfileVisibility(cl) }
             PKG_MOONDROP -> hookMoondrop(cl)
             PKG_BLUETOOTH -> hookBluetooth(cl)
             PKG_GMS -> fastPairHook.onGmsLoaded(this, cl)
@@ -194,6 +203,51 @@ class XposedEntry : XposedModule() {
                 }
             }
             Log.d(TAG, "hookSettings: DashboardFragment.onCreatePreferences hooked")
+            try {
+                val startM = fragCls.getDeclaredMethod("onStart")
+                hook(startM).intercept { chain ->
+                    chain.proceed()
+                    try {
+                        val thisObj = chain.thisObject
+                        if (AncProfileLib.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
+                    } catch (th: Throwable) { Log.e(TAG, "detail extras onStart error", th) }
+                    null
+                }
+                Log.d(TAG, "hookSettings: DashboardFragment.onStart hooked")
+            } catch (th: Throwable) { Log.d(TAG, "onStart hook failed: $th") }
+            try {
+                val resM = fragCls.getDeclaredMethod("onResume")
+                hook(resM).intercept { chain ->
+                    chain.proceed()
+                    try {
+                        val thisObj = chain.thisObject
+                        if (AncProfileLib.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
+                    } catch (th: Throwable) { Log.e(TAG, "detail extras onResume error", th) }
+                    null
+                }
+                Log.d(TAG, "hookSettings: DashboardFragment.onResume hooked")
+            } catch (th: Throwable) { Log.d(TAG, "onResume hook failed: $th") }
+            try {
+                // 详情页销毁时摘掉页面级状态观察者，避免观察者挂在已结束的页面上不放。
+                // Settings 的 DashboardFragment 自己没覆盖 onDestroy，声明式查找会直接抛；
+                // 回退到含父类的方法查找，找不到就退化为"只清页面级观察者"的其它时机。
+                val destroyM = try {
+                    fragCls.getDeclaredMethod("onDestroy")
+                } catch (e: NoSuchMethodException) {
+                    fragCls.getMethod("onDestroy")
+                }
+                hook(destroyM).intercept { chain ->
+                    chain.proceed()
+                    try {
+                        if (chain.thisObject === lastDetailFragment) {
+                            lastDetailFragment = null
+                            clearDetailWatch()
+                        }
+                    } catch (th: Throwable) { Log.d(TAG, "detail watch cleanup failed: $th") }
+                    null
+                }
+                Log.d(TAG, "hookSettings: DashboardFragment.onDestroy hooked")
+            } catch (th: Throwable) { Log.d(TAG, "onDestroy hook failed: $th") }
         } catch (th: Throwable) {
             Log.d(TAG, "hookSettings failed: $th")
         }
@@ -235,7 +289,19 @@ class XposedEntry : XposedModule() {
                 try {
                     val pref = chain.thisObject
                     val key = HookHelper.callMethod(pref, "getKey") as? String
+                    val holder0 = chain.args[0]
+                    val iv0 = HookHelper.getObjectField(holder0, "itemView") as? android.view.ViewGroup
                     if (key != DeviceDetailsPanel.KEY) {
+                        // 列表重排会把行视图回收给别的条目，我们挂上去的面板会跟着残留，
+                        // 于是同一条面板会在别的位置再画一份（表现为重复行/大片空白）。
+                        // 换绑到别的条目时把残留的面板摘掉，只保留本条目自己那一行。
+                        try {
+                            iv0?.findViewWithTag<android.view.View>("fxxk_device_panel")?.let { iv0.removeView(it) }
+                            // 被我们藏起来的孩子恢复可见：紧接着官方自己的绑定会重设各自该有的可见性。
+                            if (iv0 != null) for (ci in 0 until iv0.childCount) {
+                                iv0.getChildAt(ci).visibility = android.view.View.VISIBLE
+                            }
+                        } catch (th: Throwable) { Log.d(TAG, "strip stale panel failed: $th") }
                         chain.proceed()
                         return@intercept HookGuard.nullSafe(chain)
                     }
@@ -250,25 +316,47 @@ class XposedEntry : XposedModule() {
                             val st = fetchDcState(ctx, deviceName)
                             if (st != null) DeviceDetailsPanel.refresh(panel, st)
                         }
-                        itemView.removeAllViews()
+                        // 官方行自带的子视图只「藏」不「删」：同一个行视图会被适配器回收给别的条目用，
+                        // 删掉后别人重新绑定时找不到自己的控件，整行就变空白（实测「实时字幕」就是这样）。
+                        for (ci in 0 until itemView.childCount) {
+                            val child = itemView.getChildAt(ci)
+                            if (child.tag != "fxxk_device_panel") child.visibility = android.view.View.GONE
+                        }
                         itemView.addView(panel, android.view.ViewGroup.LayoutParams(
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                             android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
                         val st0 = fetchDcState(ctx, deviceName)
                         if (st0 != null) DeviceDetailsPanel.refresh(panel, st0)
+                        // 详情页重排后适配器可能给同一个条目留下残留行，于是面板被画两遍。
+                        // 等视图落位后按父容器清一次重复：只保留第一行，其余折叠成 0 高度。
+                        val rowsRoot = itemView.rootView
+                        panel.post { normalizePanelRows(rowsRoot) }
+                        panel.postDelayed({ normalizePanelRows(rowsRoot) }, 600)
+                        panel.postDelayed({ normalizePanelRows(rowsRoot) }, 1500)
                         // alpha2.39: 跨进程自动刷新（推模式）。模块端状态变化 -> notifyChange -> 此处重新拉取并刷新。
                         panel.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
                             private var unregisterKey: android.net.Uri? = null
                             private var observer: android.database.ContentObserver? = null
                             override fun onViewAttachedToWindow(v: android.view.View) {
                                 try {
+                                    // 新挂上来的实例可能还带着默认（全显）状态，先按最近状态自刷一次。
+                                    DeviceDetailsPanel.refreshFromLatest(v)
                                     val uri = android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/dc_cmd")
                                     unregisterKey = uri
                                     val ob = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
                                         override fun onChange(selfChange: Boolean) {
                                             try {
                                                 val st = fetchDcState(ctx, deviceName)
-                                                if (st != null) DeviceDetailsPanel.refresh(panel, st)
+                                                if (st != null) {
+                                                    // 官方重排会挪行、旧行被回收，同一页可能残留多份面板：
+                                                    // 闭包里那份可能已脱离视图树，必须从当前页面的窗口根遍历刷全。
+                                                    val pageRoot = (HookHelper.callMethod(
+                                                            lastDetailFragment, "getView") as? android.view.View)
+                                                            ?.rootView ?: itemView.rootView
+                                                    DeviceDetailsPanel.refreshAll(pageRoot, st)
+                                                }
+                                                // 连接/就绪状态变了：切片与官方加载行跟着切换
+                                                applyControlSliceState(cl, ctx, lastDetailFragment)
                                             } catch (th: Throwable) { Log.e(TAG, "panel observer error", th) }
                                         }
                                     }
@@ -321,22 +409,29 @@ class XposedEntry : XposedModule() {
                     Log.e(TAG, "device details inject error", th)
                 }
             }
-            // alpha2.39: 蓝牙详情页用 displayOrder 白名单控制 pref 可见性，把面板 key 注入白名单，避免被移进 invisible_profile_category 隐藏。
+            // 官方蓝牙详情页每次重排后，把我们的几行摆到官方位置（见 placeOurRows）。
             try {
                 val cfgCls = Class.forName("com.android.settings.bluetooth.BluetoothDetailsConfigurableFragment", true, cl)
                 val orderM = cfgCls.getDeclaredMethod("updatePreferenceOrder")
                 hook(orderM).intercept { chain ->
+                    chain.proceed()
+                    // 官方 updatePreferenceOrder 会把「不在它名单里」的项整体挪进
+                    // invisible_profile_category（该分类自身 visible=false），于是官方自己的行
+                    // （含 HD 音频所属的蓝牙配置分类、相关工具等）全被藏掉。
+                    // 这里只在它跑完之后让那个分类显形，不搬动任何子项、不代管任何一行的可见性。
+                    // 注意：不能在这个 pass 里直接改可见性 —— 官方此刻正在重排条目，
+                    // 中途插入层级/可见性变化会让适配器留下不再重绑的残留行（面板被画两遍）。
+                    // 因此延到本 pass 结束、主线程下一次消息再应用（含把我们自己的行摆回官方位置）。
                     try {
                         val thisObj = chain.thisObject
-                        val displayOrder = HookHelper.getObjectField(thisObj, "displayOrder") as? List<*>
-                        if (displayOrder != null && !displayOrder.contains(DeviceDetailsPanel.KEY)) {
-                            val nl = ArrayList<Any?>()
-                            nl.addAll(displayOrder)
-                            nl.add(DeviceDetailsPanel.KEY)
-                            HookHelper.setObjectField(thisObj, "displayOrder", nl)
+                        if (AncProfileLib.isMoondrop(detailDeviceName(thisObj))) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                try { showOfficialExtras(cl, thisObj) }
+                                catch (th: Throwable) { Log.e(TAG, "detail extras error", th) }
+                            }
                         }
-                    } catch (th: Throwable) { Log.e(TAG, "displayOrder inject error", th) }
-                    chain.proceed()
+                    } catch (th: Throwable) { Log.e(TAG, "detail extras error", th) }
+                    null
                 }
                 Log.d(TAG, "hookDeviceDetailsPanel: updatePreferenceOrder hooked")
             } catch (th: Throwable) {
@@ -345,6 +440,370 @@ class XposedEntry : XposedModule() {
             Log.d(TAG, "hookDeviceDetailsPanel: BluetoothDeviceDetailsFragment hooked")
         } catch (th: Throwable) {
             Log.d(TAG, "hookDeviceDetailsPanel failed: $th")
+        }
+    }
+
+    /**
+     * 让官方详情页里被藏起来的那些行有机会渲染。
+     *
+     * 只做一件最小的事：该分类里已经有可见子项时，把分类本身显示出来；不搬动子项、不代管各行的可见性
+     * —— 每行出不出来仍由官方各自的 controller 决定。
+     */
+    private fun showOfficialExtras(cl: ClassLoader, thisObj: Any?) {
+        val cat = HookHelper.callMethod(thisObj, "getInvisiblePrefCategory") ?: return
+        lastDetailFragment = thisObj
+        // 「耳机控制」切片行：官方没给它设 URI，本 ROM 也没设，内容为空时会渲染成空行。
+        // 这里用设备自带元数据里的切片地址挂上官方控制器，挂得上才有内容、才放它出来。
+        val ctx = HookHelper.callMethod(thisObj, "getContext") as? Context
+        val sliceUri = controlSliceUri(cl, ctx, detailDevice(thisObj))
+        val screenObj = HookHelper.callMethod(thisObj, "getPreferenceScreen")
+        if (sliceUri != null) attachControlSlice(cl, ctx, screenObj, sliceUri)
+        // 三行（切片 / 官方加载行 / 我们的面板）的显示与位置统一走 applyControlSliceState。
+        applyControlSliceState(cl, ctx, thisObj)
+        watchDetailState(cl, ctx, thisObj)
+        if (!hasVisibleChild(cat)) return
+        HookHelper.callMethod(cat, "setVisible", true)
+        val rowsAnchor = HookHelper.callMethod(thisObj, "getView") as? android.view.View
+        rowsAnchor?.postDelayed({ normalizePanelRows(rowsAnchor) }, 1200)
+
+        showGroupsWithVisibleChild(cl, cat)
+        // 官方重排 + 本次显形之后，适配器可能留下没被回收的残留行：它们在列表里就是
+        // 一大片空白，把后面的行（含我们的面板）整体往下挤。让列表按适配器内容重新布局一次，
+        // 残留行会被回收、行距恢复；重排是异步的，所以再补两次。
+        // 官方重排后列表会留下没被回收的残留行，在屏幕上就是一大片空白，把后面的行
+        // （含我们的面板）整体往下挤。只让列表重新布局一次、不动适配器：
+        // notifyDataSetChanged 会把官方「实时字幕」那类自绘条目重新膨胀成空白卡片，实测不能用。
+        val hostView = HookHelper.callMethod(thisObj, "getView") as? android.view.View
+        repairListOrder(hostView)
+        val ui = android.os.Handler(android.os.Looper.getMainLooper())
+        ui.postDelayed({ repairListOrder(hostView) }, 400)
+        ui.postDelayed({ repairListOrder(hostView) }, 1200)
+    }
+
+    /** 最近一次渲染详情页的 fragment（状态推送到达时用它重新判可见性）。 */
+    @Volatile private var lastDetailFragment: Any? = null
+
+    /** 详情页那一级的跨进程状态观察者（面板隐藏时也生效），只保留最新一条。 */
+    @Volatile private var lastDetailObserver: android.database.ContentObserver? = null
+    @Volatile private var lastDetailObserverCtx: Context? = null
+
+    /** 详情页那一级的蓝牙状态广播接收（适配器开关 / 设备链路断开）。 */
+    @Volatile private var lastBtReceiver: android.content.BroadcastReceiver? = null
+    @Volatile private var lastBtReceiverCtx: Context? = null
+
+    /**
+     * 「耳机控制」切片与官方加载行的状态 / 位置。
+     *
+     * 官方本来的设计就是：配置没加载完时，用自己那个加载行（loading_pref）占位；加载完再换成真实行。
+     * 这里沿用同一套官方组件，只按本机真实状态决定谁出来：
+     *  - 设备元数据里没有控制切片地址（机型不支持）-> 切片和加载行都不出现，不留一条永远转的进度条；
+     *  - 有地址但本机还没就绪（GAIA 未完成服务发现，命令发不出去）-> 加载行原地占位，切片收起；
+     *  - 就绪 -> 切片出来（位置由 [placeOurRows] 固定：官方操作按钮那一行之后）。
+     * 位置沿用官方布局：两者都挂在屏幕根、不塞进不可见分类，也不额外搬动别的行。
+     */
+    private fun applyControlSliceState(cl: ClassLoader, ctx: Context?, thisObj: Any?) {
+        if (ctx == null || thisObj == null) return
+        try {
+            val screen = HookHelper.callMethod(thisObj, "getPreferenceScreen") ?: return
+            // 状态只有两个来源：设备元数据（机型是否带控制切片）+ 模块进程的实时连接状态。
+            // 不写死机型、不写死地址。
+            val hasSlice = controlSliceUri(cl, ctx, detailDevice(thisObj)) != null
+            val st = fetchDcState(ctx, detailDeviceName(thisObj))
+            val connected = st?.connected == true
+            val ready = st?.gaiaReady == true
+            val cat = HookHelper.callMethod(thisObj, "getInvisiblePrefCategory")
+            val slicePref = HookHelper.callMethod(screen, "findPreference", KEY_SLICE_CONTROL)
+            val loading = HookHelper.callMethod(screen, "findPreference", KEY_LOADING)
+            val panelPref = HookHelper.callMethod(screen, "findPreference", DeviceDetailsPanel.KEY)
+
+            // 三行的显示规则统一在 DetailRows（规则本身有单测），位置由 placeOurRows 摆。
+            val vis = DetailRows.visibility(hasSlice, connected, ready)
+
+            for ((pref, visible) in listOf(
+                    slicePref to vis.slice,
+                    loading to vis.loading,
+                    panelPref to vis.panel)) {
+                if (pref == null) continue
+                // 官方把它们塞在不可见分类里，要按官方位置渲染就得先挂回屏幕根。
+                if (visible && HookHelper.callMethod(pref, "getParent") !== screen) {
+                    HookHelper.callMethod(cat, "removePreference", pref)
+                    HookHelper.callMethod(screen, "addPreference", pref)
+                }
+                HookHelper.callMethod(pref, "setVisible", visible)
+            }
+            placeOurRows(screen)
+            Log.d(TAG, "detail rows: hasSlice=$hasSlice connected=$connected ready=$ready" +
+                    " slice=${vis.slice} loading=${vis.loading} panel=${vis.panel}")
+        } catch (th: Throwable) { Log.e(TAG, "applyControlSliceState failed", th) }
+    }
+
+    /**
+     * 在详情页 fragment 层面盯住模块进程的状态推送。
+     *
+     * 面板行自己那条观察者只在「面板可见」时才会注册；耳机没连上时面板是隐藏的，
+     * 就没人盯着状态了 —— 连上之后页面会一直停在隐藏状态，得重开才恢复。
+     * 这里挂一条与页面同级的观察者补上，页面重建时先摘掉上一条，避免重复注册。
+     */
+    private fun watchDetailState(cl: ClassLoader, ctx: Context?, thisObj: Any?) {
+        if (ctx == null || thisObj == null) return
+        try {
+            clearDetailWatch()
+            val ob = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    try { applyControlSliceState(cl, ctx, thisObj) }
+                    catch (th: Throwable) { Log.e(TAG, "detail state observer error", th) }
+                }
+            }
+            ctx.contentResolver.registerContentObserver(
+                    android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/dc_cmd"), false, ob)
+            lastDetailObserver = ob
+            lastDetailObserverCtx = ctx.applicationContext
+
+            // 耳机断开时模块进程不一定会推送状态（适配器被关掉时连断连回调都收不到），
+            // 所以这里自己听系统的蓝牙广播补一刀：适配器开关、设备链路断开都重算一次可见性。
+            clearBtWatch()
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context?, intent: Intent?) {
+                    try { applyControlSliceState(cl, ctx, thisObj) }
+                    catch (th: Throwable) { Log.e(TAG, "detail bt broadcast error", th) }
+                }
+            }
+            val filter = android.content.IntentFilter().apply {
+                addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                ctx.registerReceiver(receiver, filter)
+            }
+            lastBtReceiver = receiver
+            lastBtReceiverCtx = ctx.applicationContext
+        } catch (th: Throwable) { Log.e(TAG, "watchDetailState failed", th) }
+    }
+
+    /**
+     * 把我们的几行摆到官方位置：官方操作按钮 -> 官方降噪切片 -> 官方加载行 -> 我们的面板。
+     *
+     * 为什么要自己摆：官方那次重排会把「不在它名单里的项」收进它自己生成的分类，于是我们的行会跟着
+     * 那个分类在页面上漂（有时紧跟官方操作按钮、有时沉到底部）。这里在官方重排跑完之后把这几行摘成
+     * 屏幕根的直接子项，并按官方「操作按钮」那一行的 order 依次给号 —— PreferenceGroup 本来就按
+     * order 决定插入位置；只动我们自己的行，不碰官方任何一行。
+     * 锚点是官方自己的 key（[KEY_ANCHOR_ROWS]）；拿不到就什么都不做，保持官方原样。
+     */
+    private fun placeOurRows(screen: Any?) {
+        if (screen == null) return
+        try {
+            val anchor = HookHelper.callMethod(screen, "findPreference", KEY_ANCHOR_ROWS) ?: return
+            val base = (HookHelper.callMethod(anchor, "getOrder") as? Int) ?: return
+            var next = base + 1
+            for (key in listOf(KEY_SLICE_CONTROL, KEY_LOADING, DeviceDetailsPanel.KEY)) {
+                val pref = HookHelper.callMethod(screen, "findPreference", key) ?: continue
+                val parent = HookHelper.callMethod(pref, "getParent")
+                if (parent != null) HookHelper.callMethod(parent, "removePreference", pref)
+                HookHelper.callMethod(pref, "setOrder", next)
+                HookHelper.callMethod(screen, "addPreference", pref)
+                next++
+            }
+        } catch (th: Throwable) { Log.d(TAG, "placeOurRows failed: $th") }
+    }
+
+    /** 摘掉详情页那一级的蓝牙广播接收。 */
+    private fun clearBtWatch() {
+        val r = lastBtReceiver ?: return
+        try { lastBtReceiverCtx?.unregisterReceiver(r) } catch (_: Throwable) {}
+        lastBtReceiver = null
+        lastBtReceiverCtx = null
+    }
+
+    /** 摘掉详情页那一级的状态观察者与蓝牙广播（页面销毁 / 重新挂之前调用）。 */
+    private fun clearDetailWatch() {
+        clearBtWatch()
+        val ob = lastDetailObserver ?: return
+        try { lastDetailObserverCtx?.contentResolver?.unregisterContentObserver(ob) } catch (_: Throwable) {}
+        lastDetailObserver = null
+        lastDetailObserverCtx = null
+    }
+
+    /**
+     * 让「面板行」收敛成一份，并保证它自己不被藏起来。
+     *
+     * 详情页的行视图会被适配器回收复用：面板可能被带到别的行上（重复行/空行）。这里**不看**上一次
+     * 绑定的行，而是问适配器：这一行现在承载的是不是我们的条目；
+     *  - 是 -> 保证整行与面板都可见（官方重排可能让我们被顺带藏掉）；
+     *  - 不是却残留着面板视图 -> 把那块残留从该行摘掉、把被我们藏起来的孩子放出来，
+     *    但不动该行自己的可见性（官方行不能被我们藏）。
+     */
+    private fun normalizePanelRows(anchor: android.view.View?) {
+        try {
+            val rv = findRecyclerById(anchor) ?: return
+            val ad = HookHelper.callMethod(rv, "getAdapter") ?: return
+            var kept = 0
+            var stripped = 0
+            for (i in 0 until rv.childCount) {
+                val row = rv.getChildAt(i) as? android.view.ViewGroup ?: continue
+                val pv = row.findViewWithTag<android.view.View>("fxxk_device_panel")
+                val pos = (HookHelper.callMethod(rv, "getChildAdapterPosition", row) as? Int) ?: -1
+                val item = if (pos >= 0) HookHelper.callMethod(ad, "getItem", pos) else null
+                if ((HookHelper.callMethod(item, "getKey") as? String) == DeviceDetailsPanel.KEY) {
+                    row.visibility = android.view.View.VISIBLE
+                    pv?.visibility = android.view.View.VISIBLE
+                    kept++
+                } else if (pv != null) {
+                    row.removeView(pv)
+                    for (ci in 0 until row.childCount) row.getChildAt(ci).visibility = android.view.View.VISIBLE
+                    stripped++
+                }
+            }
+            if (kept != 1 || stripped > 0) Log.d(TAG, "panel rows kept=$kept stripped=$stripped")
+        } catch (th: Throwable) { Log.d(TAG, "normalizePanelRows failed: $th") }
+    }
+
+    /** 让详情页列表重新布局一次，回收官方重排留下的残留行（不动适配器）。 */
+    private fun repairListOrder(view: android.view.View?) {
+        try {
+            val rv = findRecyclerById(view) ?: return
+            rv.requestLayout()
+            Log.d(TAG, "list relayout n=" + rv.childCount)
+        } catch (th: Throwable) { Log.d(TAG, "repairListOrder failed: " + th) }
+    }
+
+    /**
+     * 递归把「自己有可见子项、但自己被藏了」的分组显示出来。
+     *
+     * 官方把子项藏进分组的同时也会把分组自身设为不可见（实时字幕所在的「相关工具」就是这样），
+     * 只显示最外层分类的话这些行仍然出不来。判断只看官方自己的可见性，不指定任何具体项。
+     */
+    private fun showGroupsWithVisibleChild(cl: ClassLoader, group: Any?) {
+        val groupCls = try {
+            Class.forName("androidx.preference.PreferenceGroup", true, cl)
+        } catch (th: Throwable) { return }
+        val n = (HookHelper.callMethod(group, "getPreferenceCount") as? Int) ?: return
+        for (i in 0 until n) {
+            val child = HookHelper.callMethod(group, "getPreference", i) ?: continue
+            if (!groupCls.isInstance(child)) continue
+            if (!hasVisibleChild(child)) continue
+            HookHelper.callMethod(child, "setVisible", true)
+            showGroupsWithVisibleChild(cl, child)
+        }
+    }
+
+    /** 按 id 找详情页那一个 RecyclerView，避免抓到切片内部的列表。 */
+    private fun findRecyclerById(root: android.view.View?): android.view.ViewGroup? {
+        val v = root ?: return null
+        if (v is android.view.ViewGroup) {
+            val id = v.id
+            if (id != -1) {
+                try {
+                    if (v.resources.getResourceEntryName(id) == "recycler_view") return v
+                } catch (_: Throwable) {}
+            }
+            for (i in 0 until v.childCount) findRecyclerById(v.getChildAt(i))?.let { return it }
+        }
+        return null
+    }
+
+    /** 这个 PreferenceGroup 是否已有可见子项。 */
+    private fun hasVisibleChild(group: Any?): Boolean {
+        val n = (HookHelper.callMethod(group, "getPreferenceCount") as? Int) ?: return false
+        for (i in 0 until n) {
+            val c = HookHelper.callMethod(group, "getPreference", i) ?: continue
+            if (HookHelper.callMethod(c, "isVisible") == true) return true
+        }
+        return false
+    }
+
+    /**
+     * 设备元数据里的「耳机控制」切片地址。
+     *
+     * 元数据里的 `view_width` 是空的，GMS 对空宽度直接返回空切片；这里用本机屏幕宽度补齐
+     * （实测 view_width=屏幕宽度时才拿到内容），地址本身仍来自设备元数据，不写死。
+     */
+    private fun controlSliceUri(cl: ClassLoader, ctx: Context?, device: Any?): android.net.Uri? {
+        if (ctx == null || device == null) return null
+        return try {
+            val bt = Class.forName("com.android.settingslib.bluetooth.BluetoothUtils", true, cl)
+            val raw = HookHelper.callStaticMethod(bt, "getFastPairCustomizedField", device,
+                    "HEARABLE_CONTROL_SLICE_WITH_WIDTH") as? String
+            if (raw.isNullOrEmpty()) return null
+            val w = ctx.resources.displayMetrics.widthPixels
+            android.net.Uri.parse(raw.replace("view_width=", "view_width=$w"))
+        } catch (th: Throwable) {
+            Log.d(TAG, "controlSliceUri failed: $th")
+            null
+        }
+    }
+
+    /**
+     * 把「耳机控制」切片挂到 SlicePreference 上，走官方同一套流程：
+     * 控制器 setSliceUri -> displayPreference -> onStart。
+     */
+    private fun attachControlSlice(cl: ClassLoader, ctx: Context?, screen: Any?, uri: android.net.Uri) {
+        if (ctx == null || screen == null) return
+        try {
+            val ctrl = Class.forName("com.android.settings.slices.SlicePreferenceController", true, cl)
+                    .getConstructor(Context::class.java, String::class.java)
+                    .newInstance(ctx, KEY_SLICE_CONTROL)
+            HookHelper.callMethod(ctrl, "setSliceUri", uri)
+            HookHelper.callMethod(ctrl, "displayPreference", screen)
+            HookHelper.callMethod(ctrl, "onStart")
+            Log.d(TAG, "control slice attached: $uri")
+        } catch (th: Throwable) { Log.e(TAG, "attachControlSlice failed", th) }
+    }
+
+    /** 详情页当前的 BluetoothDevice（cachedDevice.getDevice）。 */
+    private fun detailDevice(thisObj: Any?): Any? =
+            HookHelper.callMethod(HookHelper.getObjectField(thisObj, "cachedDevice"), "getDevice")
+
+    /** 详情页当前的设备名（先用官方 getDeviceName，退回 cachedDevice.getName）。 */
+    private fun detailDeviceName(thisObj: Any?): String? {
+        val n = HookHelper.callMethod(thisObj, "getDeviceName") as? String
+        if (!n.isNullOrEmpty()) return n
+        return HookHelper.callMethod(HookHelper.getObjectField(thisObj, "cachedDevice"), "getName") as? String
+    }
+
+    /**
+     * 别让 ROM 把耳机详情页的官方档位行藏掉（对本机表现为隐藏 通话音频 / 媒体音频 / HD 音频）。
+     *
+     * 官方隐藏名单有两个来源，都是官方 API，我们只是对 Moondrop 设备不去填：
+     * 1) BluetoothFeatureProvider.getInvisibleProfilePreferenceKeys（ROM 侧额外名单，参数里就带设备）；
+     * 2) BluetoothDetailsProfilesController.setInvisibleProfiles（来自设备设置配置的 INVISIBLE_PROFILES）。
+     * 行的可见性仍由官方自己的判断决定 —— 例如「HD 音频」只在 A2DP 可用且设备报告支持可选编解码器时出现，
+     * 也就是连接着才会有，我们不另立规则。
+     */
+    private fun hookDetailProfileVisibility(cl: ClassLoader) {
+        try {
+            val implCls = Class.forName("com.android.settings.bluetooth.BluetoothFeatureProviderImpl", true, cl)
+            val devCls = Class.forName("android.bluetooth.BluetoothDevice", true, cl)
+            val m = implCls.getDeclaredMethod("getInvisibleProfilePreferenceKeys", Context::class.java, devCls)
+            hook(m).intercept { chain ->
+                val dev = chain.args.getOrNull(1)
+                val name = HookHelper.callMethod(dev, "getName") as? String
+                if (AncProfileLib.isMoondrop(name)) {
+                    return@intercept HookGuard.safe(chain, java.util.Collections.emptySet<String>())
+                }
+                chain.proceed()
+            }
+            Log.d(TAG, "hookDetailProfileVisibility: provider hooked")
+        } catch (th: Throwable) {
+            Log.d(TAG, "hookDetailProfileVisibility provider failed: $th")
+        }
+        try {
+            val ctrlCls = Class.forName("com.android.settings.bluetooth.BluetoothDetailsProfilesController", true, cl)
+            val m = ctrlCls.getDeclaredMethod("setInvisibleProfiles", List::class.java)
+            hook(m).intercept { chain ->
+                val name = HookHelper.callMethod(
+                        HookHelper.getObjectField(chain.thisObject, "mCachedDevice"), "getName") as? String
+                if (AncProfileLib.isMoondrop(name)) {
+                    return@intercept HookGuard.safe(chain, null)
+                }
+                chain.proceed()
+            }
+            Log.d(TAG, "hookDetailProfileVisibility: profiles controller hooked")
+        } catch (th: Throwable) {
+            Log.d(TAG, "hookDetailProfileVisibility controller failed: $th")
         }
     }
 
@@ -413,7 +872,7 @@ class XposedEntry : XposedModule() {
                 .buildUpon().appendQueryParameter("action", "fetch")
             val cur = ctx.contentResolver.query(b.build(), null, null, null, null) ?: return null
             var anc = 0; var spatial = 0; var headTracking = -1; var gain = 0; var led = 0; var connected = 0
-            var gaia = 0; var modes = IntArray(0)
+            var gaia = 0; var modes = IntArray(0); var showWind = true
             cur.use {
                 while (it.moveToNext()) {
                     val k = it.getString(0)
@@ -432,6 +891,7 @@ class XposedEntry : XposedModule() {
                         "led" -> led = v
                         "connected" -> connected = v
                         "gaia" -> gaia = v
+                        "showWind" -> showWind = v == 1
                     }
                 }
             }
@@ -440,6 +900,7 @@ class XposedEntry : XposedModule() {
                 connected = connected == 1,
                 gaiaReady = gaia == 1,
                 modes = modes,
+                showWind = showWind,
                 ancMode = anc,
                 spatialOn = spatial == 1,
                 spatialUiMode = headTracking,

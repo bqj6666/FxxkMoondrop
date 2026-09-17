@@ -80,6 +80,9 @@ class SettingsFragment : Fragment() {
         rebuildHandler.postDelayed(rebuildRunnable, delayMs)
     }
 
+    private var runModeNameTv: TextView? = null    // 运行模式行的模式名（模块探测落定后就地刷新）
+    private var runModeDetailTv: TextView? = null  // 运行模式行的说明
+
     private var seedRow: LinearLayout? = null // alpha2.8: 种子颜色行（动态取色关闭时显示；出现/消失动画）
 
     override fun onCreateView(inflater: LayoutInflater, containerView: ViewGroup?,
@@ -111,6 +114,21 @@ class SettingsFragment : Fragment() {
         // 因此只在 Hook **确定**未激活时才置灰；尚未探测（null）不置灰，
         // 否则一进设置页就没 root 把功能整片禁掉（3.0.5 的问题）。
         val hookOff = !EnvProbe.hookUsable()
+
+        // ── 运行模式（单独一块，只展示当前环境，不掺别的设置项）──
+        //   三态由「有无可用 root 入口」×「FastPairHook 模块是否已激活」决定：
+        //   Root 模式 / 模块模式（无 root 但模块激活）/ 无 Root 模式。
+        //   模块未探测时显示「检测中…」，探测落定后（见本函数末尾）就地刷新这一行。
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("运行模式", "Run mode")))
+        val rowRunMode = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_info,
+                EnvProbe.runModeName(requireContext()), EnvProbe.runModeDetail(requireContext()),
+                null, null)
+        listRowLabels(rowRunMode)?.let { (nameTv, detailTv) ->
+            runModeNameTv = nameTv
+            runModeDetailTv = detailTv
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowRunMode))
+        box.addView(spacer(dp(14)))
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
@@ -572,15 +590,41 @@ class SettingsFragment : Fragment() {
         root.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // Hook 状态首次可能是「尚未探测」（null）：上面按「可用」渲染（不置灰），
-        // 这里后台补探一次（PING 阻塞 ~2s，必须离开主线程）；确认未激活才重刷本页，
-        // 走 scheduleRebuild 现成的生命周期防护。已探测过则不重复探。
+        // 这里后台补探一次（PING 阻塞 ~2s，必须离开主线程）。已探测过则不重复探。
+        //   未激活 -> 重刷本页（要置灰那几项），走 scheduleRebuild 现成的生命周期防护；
+        //   已激活 -> 不必重画整页，只把运行模式行的文案换成实测结果（免得丢滚动位置）。
         if (EnvProbe.hookActiveCached() == null) {
             val appCtx = requireContext().applicationContext
             Thread {
-                if (!EnvProbe.isFastPairHookActive(appCtx)) scheduleRebuild(0)
+                if (!EnvProbe.isFastPairHookActive(appCtx)) {
+                    scheduleRebuild(0)
+                } else {
+                    activity?.runOnUiThread {
+                        if (isAdded) {
+                            runModeNameTv?.text = EnvProbe.runModeName(appCtx)
+                            runModeDetailTv?.text = EnvProbe.runModeDetail(appCtx)
+                        }
+                    }
+                }
             }.start()
         }
         return root
+    }
+
+    /**
+     * 取 [M3Ui.listRow] 里「标题 / 副标题」两个 TextView。
+     * 运行模式行要用：模块状态是子线程探测出来的，落定后就地改文本，
+     * 比整页重建更轻（重建会丢滚动位置）。结构不符时返回 null —— 只影响刷新，不影响渲染。
+     */
+    private fun listRowLabels(row: View): Pair<TextView, TextView>? {
+        val labels = runCatching {
+            val outer = row as LinearLayout
+            outer.getChildAt(outer.childCount - 1) as LinearLayout
+        }.getOrNull() ?: return null
+        if (labels.childCount < 2) return null
+        val title = runCatching { labels.getChildAt(0) as TextView }.getOrNull() ?: return null
+        val sub = runCatching { labels.getChildAt(1) as TextView }.getOrNull() ?: return null
+        return title to sub
     }
 
     // ── UI 辅助 ──

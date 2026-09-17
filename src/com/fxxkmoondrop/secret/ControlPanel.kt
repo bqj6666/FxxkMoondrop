@@ -42,6 +42,8 @@ object ControlPanel {
         val gaiaReady: Boolean = false,
         /** 该设备实际支持的 UI 档位（能力探测驱动）。空 = 未知，按型号档案显示。 */
         val modes: IntArray = IntArray(0),
+        /** 用户的「显示抗风档」偏好。由状态源给出（设置进程拿不到 app 私有偏好）。 */
+        val showWind: Boolean = true,
         val ancMode: Int,
         val spatialOn: Boolean,
         val spatialUiMode: Int,
@@ -52,85 +54,120 @@ object ControlPanel {
         val hasLed: Boolean
     )
 
-    /** 构建降噪面板卡片（标题 + 4 档模式圆钮）。返回根 LinearLayout。 */
-    fun buildAncCard(
+    /** 抗风档的 UI 档位号（[AncProfileLib.modeNamesFull] 顺序固定：0 关 / 1 降噪 / 2 透传 / 3 抗风）。 */
+    const val WIND_UI_MODE = AncProfileLib.UI_MODE_WIND
+
+    /** 退出抗风后回到的档位（降噪）。 */
+    private const val ANC_UI_MODE = AncProfileLib.UI_MODE_ANC
+
+    /** 抗风开关行标记（详情页面板按它找行）。 */
+    const val ROW_WIND = "fxxk_wind_row"
+
+    private const val SWITCH_WIND = "fxxk_wind_switch"
+
+    /** 程序化 setChecked 时用它挡住回调，避免把界面回填当成用户操作又发一条命令。 */
+    private val syncing = java.util.WeakHashMap<android.widget.CompoundButton, Boolean>()
+
+    /**
+     * 开关行：左侧标签 + 右侧设置页原版开关；[rowTag] 标识整行、[switchTag] 标识开关。
+     *
+     * 面板里所有「开关式」功能（空间音频、抗风…）共用这一行，样式天然一致，不会各自漂移。
+     * 开关控件优先取设置 App 自己的布局（见 [buildSettingsSwitch]），拿不到再按动态色兜底。
+     */
+    fun buildSwitchRow(
         ctx: Context,
         pal: ThemeUtil.Palette,
-        onMode: (Int) -> Unit,
-        cardBg: Int? = null
+        rowTag: String,
+        switchTag: String,
+        label: CharSequence
     ): LinearLayout {
-        val dp = { px: Int -> (px * ctx.resources.displayMetrics.density).toInt() }
-        val containerCol = pal.container
-        val onContainerC = pal.onContainer
-        val cardC = cardBg ?: pal.card
-
-        val title = TextView(ctx)
-        title.text = Lang.t(ctx, "降噪控制", "Noise Control")
-        title.textSize = 14f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(pal.outline)
-        title.setPadding(dp(16), 0, dp(16), 0)
-
         val row = LinearLayout(ctx)
         row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = Gravity.CENTER
-        row.setPadding(dp(16), dp(16), dp(16), dp(16))
-        val bg = GradientDrawable()
-        bg.shape = GradientDrawable.RECTANGLE
-        bg.setColor(cardC)
-        bg.setCornerRadius(dp(28).toFloat())
-        row.background = bg
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.tag = rowTag
+        val tv = TextView(ctx)
+        tv.text = label
+        tv.textSize = 12f
+        tv.setTextColor(pal.onContainer)
+        row.addView(tv, LinearLayout.LayoutParams(-2, -2))
+        row.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+        row.addView(buildSwitch(ctx, pal, switchTag), LinearLayout.LayoutParams(-2, -2))
+        return row
+    }
 
-        // 3.0.3: 4 -> 5 列。自适应列初始 GONE，由 refreshAncCard 按设备能力
-        // （modes 含 4 才显示）决定可见性，能力未知时不会凭空出现。
-        for (m in 0..4) {
-            val fm = m
-            val col = LinearLayout(ctx)
-            col.orientation = LinearLayout.VERTICAL
-            col.gravity = Gravity.CENTER
-            val holder = FrameLayout(ctx)
-            val b = View(ctx)
-            b.tag = "fxxk_main_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerCol)
-            b.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(b, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(ctx)
-            icon.tag = "fxxk_main_icon"
-            icon.setImageDrawable(buildMainModeIcon(ctx, fm, dp(32), onContainerC))
-            val il = FrameLayout.LayoutParams(dp(32), dp(32))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
-            holder.setOnClickListener { onMode(fm) }
-            val sz = dp(72)
-            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
-            col.addView(spacer(ctx, dp(2)))
-            val lbl = TextView(ctx)
-            lbl.text = AncProfileLib.modeNamesFull(ctx)[fm]
-            lbl.textSize = 12f
-            lbl.gravity = Gravity.CENTER
-            lbl.isSingleLine = true
-            lbl.setTextColor(onContainerC)
-            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
-            row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+    /**
+     * 抗风开关（与空间音频同一行样式）。
+     *
+     * 降噪档位切换交给官方详情页自己的「耳机控制」切片，我们只留这一个快捷键：
+     * 开 = 切到抗风档，关 = 回到降噪档。返回的是**整块**（行 + 行后 4dp 间距），
+     * 由 [refreshWindRow] 整块显隐；是否出现由当前档位 + 设备能力 + 用户偏好决定。
+     */
+    fun buildWindRow(ctx: Context, pal: ThemeUtil.Palette, onToggle: (Boolean) -> Unit): LinearLayout {
+        val row = buildSwitchRow(ctx, pal, ROW_WIND + "_inner", SWITCH_WIND,
+                AncProfileLib.modeNamesFull(ctx)[WIND_UI_MODE])
+        row.findViewWithTag<android.widget.CompoundButton>(SWITCH_WIND)?.setOnCheckedChangeListener { v, checked ->
+            if (syncing.containsKey(v)) return@setOnCheckedChangeListener
+            onToggle(checked)
         }
-        // 抗风列可见性沿用用户设置（与主界面一致）
-        val showWind = ctx.getSharedPreferences("cfg", 0).getBoolean("show_wind", true)
-        row.getChildAt(3)?.visibility = if (showWind) View.VISIBLE else View.GONE
-        // 3.0.3: 自适应列初始隐藏，等能力上报（modes 含 4）后由 refreshAncCard 打开
-        row.getChildAt(4)?.visibility = View.GONE
+        // 行 + 行后间距合成一整块（[ROW_WIND] 标在这块上）：一起显隐，隐藏时不留空档。
+        val unit = LinearLayout(ctx)
+        unit.orientation = LinearLayout.VERTICAL
+        unit.tag = ROW_WIND
+        unit.addView(row, LinearLayout.LayoutParams(-1, -2))
+        // spacer 自带 (1, h) 的 params，别再传一套覆盖掉，否则间距会变 0。
+        unit.addView(spacer(ctx, (4 * ctx.resources.displayMetrics.density).toInt()))
+        return unit
+    }
 
-        val card = LinearLayout(ctx)
-        card.orientation = LinearLayout.VERTICAL
-        card.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
-        card.addView(spacer(ctx, dp(8)))
-        card.addView(row)
-        // 保留标题供外部刷新引用
-        card.tag = "fxxk_anc_card"
-        row.tag = "fxxk_anc_row"
-        return card
+    /** 抗风开关要切到的目标档位：开 -> 抗风，关 -> 降噪。 */
+    fun windTargetMode(on: Boolean): Int = if (on) WIND_UI_MODE else ANC_UI_MODE
+
+    /**
+     * 刷新抗风开关。
+     *
+     * 出现条件两条，缺一即整块隐藏：
+     *  1) 设备实际支持抗风档、且用户没关掉「显示抗风档」偏好（[AncProfileLib.ancColumnVisible]），不写死机型；
+     *  2) 当前处于「降噪」或「抗风」档（[AncProfileLib.windSwitchAvailable]）—— 抗风是降噪的加强档，
+     *     用户从抗风直接切到通透/关闭后开关自动弹回关闭并隐藏，不用手动收尾。
+     * 勾选态 = 当前正处于抗风档；未就绪（GAIA 未完成服务发现）时置灰。
+     */
+    fun refreshWindRow(row: LinearLayout, state: State, pal: ThemeUtil.Palette) {
+        val supported = AncProfileLib.ancColumnVisible(WIND_UI_MODE, state.modes, state.showWind)
+        // 档位未知（=-1）：维持现有姿态，别让换档途中一次抖动刷新把开关闪没。
+        val show = when {
+            !supported -> false
+            state.ancMode >= 0 -> AncProfileLib.windSwitchAvailable(state.ancMode)
+            else -> row.visibility == View.VISIBLE
+        }
+        row.visibility = if (show) View.VISIBLE else View.GONE
+        android.util.Log.d(TAG, "wind row vis=" + row.visibility + " supported=" + supported +
+                " ancMode=" + state.ancMode)
+        val sw = row.findViewWithTag<android.widget.CompoundButton>(SWITCH_WIND) ?: return
+        val enabled = state.gaiaReady && supported
+        sw.isEnabled = enabled
+        sw.isClickable = enabled
+        sw.isFocusable = enabled
+        sw.alpha = if (enabled) 1f else 0.4f
+        setCheckedSilently(sw, state.ancMode == WIND_UI_MODE)
+    }
+
+    /** 设置页原版开关；[buildSettingsSwitch] 拿不到时退回平台 Switch + 动态色。 */
+    private fun buildSwitch(ctx: Context, pal: ThemeUtil.Palette, tag: String): android.widget.CompoundButton =
+            buildSettingsSwitch(ctx, tag) ?: android.widget.Switch(ctx).apply {
+                this.tag = tag
+                trackTintList = ColorStateList(
+                        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                        intArrayOf(pal.primary, pal.surfaceContainerHighest))
+                thumbTintList = ColorStateList(
+                        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                        intArrayOf(pal.onPrimary, pal.outline))
+            }
+
+    /** 静默勾选：值已一致时不做任何事，改动期间挡掉该开关的回调。 */
+    private fun setCheckedSilently(sw: android.widget.CompoundButton, checked: Boolean) {
+        if (sw.isChecked == checked) return
+        syncing[sw] = true
+        try { sw.isChecked = checked } finally { syncing.remove(sw) }
     }
 
     /** 构建功能控制面板卡片（空间音频 / 追踪 / 增益 / 指示灯）。返回根 LinearLayout。 */
@@ -138,7 +175,9 @@ object ControlPanel {
         ctx: Context,
         pal: ThemeUtil.Palette,
         callbacks: Callbacks,
-        cardBg: Int? = null
+        cardBg: Int? = null,
+        /** 可选的开关式快捷行（如抗风），排在本卡片最上面，与其它行同一套边距。 */
+        windRow: View? = null
     ): LinearLayout {
         val dp = { px: Int -> (px * ctx.resources.displayMetrics.density).toInt() }
         val containerCol = pal.container
@@ -147,24 +186,21 @@ object ControlPanel {
 
         val card = LinearLayout(ctx)
         card.orientation = LinearLayout.VERTICAL
-        card.setPadding(dp(10), dp(12), dp(10), dp(12))
+        // 8dp：官方详情页行的左右 32dp 之外再收 8dp，内容与官方切片行的内容同一条竖线，不贴边。
+        card.setPadding(dp(8), dp(12), dp(8), dp(12))
+        if (windRow != null) {
+            // 行后间距由 [buildWindRow] 的整块自带：整块隐藏时不会残留一段空白。
+            card.addView(windRow, LinearLayout.LayoutParams(-1, -2))
+        }
         val bg = GradientDrawable()
         bg.shape = GradientDrawable.RECTANGLE
         bg.setColor(cardC)
         bg.setCornerRadius(dp(28).toFloat())
         card.background = bg
 
-        // 空间音频行
-        val spatialRow = LinearLayout(ctx)
-        spatialRow.orientation = LinearLayout.HORIZONTAL
-        spatialRow.gravity = Gravity.CENTER_VERTICAL
-        spatialRow.tag = "dc_spatial_row"
-        val sLabel = TextView(ctx)
-        sLabel.text = Lang.t(ctx, "空间音频", "Spatial Audio")
-        sLabel.textSize = 12f
-        sLabel.setTextColor(onContainerC)
-        spatialRow.addView(sLabel, LinearLayout.LayoutParams(-2, -2))
-        spatialRow.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+        // 空间音频行：与抗风共用同一个开关行构件，样式一致。
+        val spatialRow = buildSwitchRow(ctx, pal, "dc_spatial_row", "dc_spatial_switch",
+                Lang.t(ctx, "空间音频", "Spatial Audio"))
         // alpha2.53: 直接复用设置 App 原版开关控件。
         //
         // 踩过的两个坑：
@@ -174,18 +210,11 @@ object ControlPanel {
         // Settings 自己的做法是 inflate layout/preference_widget_switch_compat，该布局里的
         // MaterialSwitch 带 android:theme="@style/Theme.Material3.DynamicColors.DayNight" 覆盖，
         // 所以能正常构造。此处照搬同一路径 —— 拿到的就是设置页原版开关。
-        val spatialSwitch: android.widget.CompoundButton = buildSettingsSwitch(ctx, "dc_spatial_switch")
-                ?: android.widget.Switch(ctx).apply {
-                    tag = "dc_spatial_switch"
-                    trackTintList = ColorStateList(
-                            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                            intArrayOf(pal.primary, pal.surfaceContainerHighest))
-                    thumbTintList = ColorStateList(
-                            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                            intArrayOf(pal.onPrimary, pal.outline))
+        spatialRow.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
+                ?.setOnCheckedChangeListener { v, isChecked ->
+                    if (syncing.containsKey(v)) return@setOnCheckedChangeListener
+                    callbacks.setSpatialEnabled(isChecked)
                 }
-        spatialSwitch.setOnCheckedChangeListener { _, isChecked -> callbacks.setSpatialEnabled(isChecked) }
-        spatialRow.addView(spatialSwitch, LinearLayout.LayoutParams(-2, -2))
         card.addView(spatialRow, LinearLayout.LayoutParams(-1, -2))
 
         // 追踪子模式行
@@ -337,40 +366,6 @@ object ControlPanel {
         return card
     }
 
-    /** 刷新降噪卡片（标题 + 4 档模式）高亮。mode 为当前 UI 模式（0..3）。 */
-    fun refreshAncCard(card: LinearLayout, mode: Int, modes: IntArray = IntArray(0)) {
-        val row = card.findViewWithTag<LinearLayout>("fxxk_anc_row") ?: return
-        val ctx = card.context
-        val modeOn = mode in 0..4
-        // 第 1 项（设备库分配）：只显示**本设备真正支持**的档位。
-        // modes 为空 = 能力未知 -> 全部显示（按型号档案兜底），不误伤未知型号。
-        val knownModes = modes.isNotEmpty()
-        val showWind = ctx.getSharedPreferences("cfg", 0).getBoolean("show_wind", true)
-        for (i in 0 until row.childCount) {
-            val col = row.getChildAt(i) as? LinearLayout ?: continue
-            val supported = (!knownModes || modes.contains(i)) && (i != 3 || showWind)
-            col.visibility = if (supported) android.view.View.VISIBLE else android.view.View.GONE
-            if (!supported) continue
-            val holder = col.getChildAt(0) as? FrameLayout ?: continue
-            val bg = holder.findViewWithTag<View>("fxxk_main_bg")
-            val icon = holder.findViewWithTag<ImageView>("fxxk_main_icon")
-            val active = modeOn && i == mode
-            val primaryC = ThemeUtil.dyn(ctx, "system_accent1_400",
-                if (ThemeUtil.isDark(ctx)) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
-            // 与 buildAncCard 初始底色一致：深色用 system_accent1_800（深紫），避免发白
-            val containerC = ThemeUtil.dyn(ctx, "system_accent1_800",
-                if (ThemeUtil.isDark(ctx)) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
-            if (bg != null) {
-                val g = GradientDrawable()
-                g.shape = GradientDrawable.OVAL
-                g.setColor(if (active) primaryC else containerC)
-                if (active) g.setStroke((2 * ctx.resources.displayMetrics.density).toInt(), 0xFFFFFFFF.toInt())
-                bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
-            }
-            icon?.setImageDrawable(buildMainModeIcon(ctx, i, dp(ctx, 26), if (active) 0xFFFFFFFF.toInt() else onContainerOf(ctx)))
-        }
-    }
-
     /** 刷新功能卡片高亮。state 由调用方提供；可见性按 resolveDc + 能力探测决定。 */
     fun refreshDcCard(card: LinearLayout, state: State, profile: AncProfileLib.DcProfile) {
         val ctx = card.context
@@ -386,7 +381,9 @@ object ControlPanel {
         gainRow?.visibility = if (profile.hasGain) View.VISIBLE else View.GONE
         ledRow?.visibility = if (profile.hasLed) View.VISIBLE else View.GONE
 
-        val anyVisible = profile.hasSpatial || profile.hasGain || profile.hasLed
+        // 抗风那一行也在这个卡里：它可见时整卡就得在（例如只支持抗风、不支持空间音频的机型）。
+        val windVisible = card.findViewWithTag<LinearLayout>(ROW_WIND)?.visibility == View.VISIBLE
+        val anyVisible = profile.hasSpatial || profile.hasGain || profile.hasLed || windVisible
         card.visibility = if (anyVisible) View.VISIBLE else View.GONE
 
         val spSwitch = card.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
@@ -396,7 +393,7 @@ object ControlPanel {
             sw.isClickable = state.gaiaReady
             sw.isFocusable = state.gaiaReady
             sw.alpha = if (state.gaiaReady) 1f else 0.4f
-            if (sw.isChecked != state.spatialOn) sw.isChecked = state.spatialOn
+            setCheckedSilently(sw, state.spatialOn)
         }
 
         // alpha2.39.1: 禁用态用暗中性灰（dark 下 onVariant 偏浅会发白），不发白

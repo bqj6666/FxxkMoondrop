@@ -192,7 +192,7 @@ object DeviceNotif {
             }
         }
 
-        // 颜色统一走 M3 动态取色（与 App 内面板同一套 token，见 ControlPanel.refreshAncCard）
+        // 颜色统一走 M3 动态取色（与 App 内面板同一套 token，见 ControlPanel.refreshDcCard）
         val dark = ThemeUtil.isDark(c)
         val primary = ThemeUtil.dyn(c, "system_accent1_400",
             if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())

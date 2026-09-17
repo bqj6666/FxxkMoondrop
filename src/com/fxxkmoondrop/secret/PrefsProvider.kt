@@ -116,6 +116,12 @@ class PrefsProvider : ContentProvider() {
         // 第 1 项：本设备实际支持的 UI 档位（能力探测驱动，数据驱动多设备适配）。
         // 以逗号分隔；空串 = 能力未知，UI 侧退化为「按型号档案」显示。
         c.addRow(arrayOf("modes", g.supportedUiModes().joinToString(",")))
+        // 抗风档的显示偏好：由模块进程读自己的 cfg，Settings 进程直接读不到那份私有偏好，
+        // 所以走这条通道带过去，免得详情页把用户「隐藏抗风」的选择忽略掉。
+        val windOn = try {
+            context?.getSharedPreferences("cfg", Context.MODE_PRIVATE)?.getBoolean("show_wind", true) ?: true
+        } catch (_: Throwable) { true }
+        c.addRow(arrayOf("showWind", if (windOn) 1 else 0))
         return c
     }
 

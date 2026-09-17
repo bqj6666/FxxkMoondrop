@@ -176,5 +176,45 @@ class EnvProbe private constructor() {
          */
         @JvmStatic
         fun hookUsable(): Boolean = hookActiveCached() != false
+
+        /**
+         * 当前运行模式**名称**（设置页那一行的标题）：Root 模式 / 模块模式 / 无 Root 模式。
+         *
+         * 由「有无可用 root 入口」×「FastPairHook 模块是否已激活」两轴决定；
+         * 模块尚未探测（null）时如实写「检测中」，探测落定后由设置页就地刷新。
+         * 无阻塞：只读 root 与 hook 的缓存结果，可主线程调用。
+         */
+        @JvmStatic
+        fun runModeName(ctx: Context?): String {
+            if (ctx == null) return ""
+            return when {
+                hookActiveCached() == null -> Lang.t(ctx, "检测中…", "Detecting…")
+                isRooted() -> Lang.t(ctx, "Root 模式", "Root mode")
+                hookActiveCached() == true -> Lang.t(ctx, "模块模式", "Module mode")
+                else -> Lang.t(ctx, "无 Root 模式", "No-root mode")
+            }
+        }
+
+        /** 当前运行模式的**一句说明**（设置页那一行的副标题）。 */
+        @JvmStatic
+        fun runModeDetail(ctx: Context?): String {
+            if (ctx == null) return ""
+            val rooted = isRooted()
+            return when (hookActiveCached()) {
+                true -> if (rooted)
+                    Lang.t(ctx, "FastPairHook 模块已激活；Root 增强功能可用",
+                            "FastPairHook module active; root enhancements available")
+                else
+                    Lang.t(ctx, "FastPairHook 模块已激活，无需 Root；Root 增强功能不可用",
+                            "FastPairHook module active without root; root enhancements unavailable")
+                false -> if (rooted)
+                    Lang.t(ctx, "FastPairHook 模块未激活，将使用内置自扫",
+                            "FastPairHook module inactive; built-in scan will be used")
+                else
+                    Lang.t(ctx, "仅通知栏与主界面控制降噪（GAIA 直连）",
+                            "ANC control from the notification and main UI only (GAIA direct)")
+                null -> Lang.t(ctx, "正在检测 FastPairHook 模块状态…", "Detecting FastPairHook module…")
+            }
+        }
     }
 }

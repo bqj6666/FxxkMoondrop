@@ -84,6 +84,8 @@ class OverviewFragment : Fragment() {
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
     private var ancWindCol: View? = null
+    /** 3.0.5: 自适应(4) 列。只有设备能力确证支持时显示（与设备详情页同规则）。 */
+    private var ancAdaptCol: View? = null
     private var dcSwitchSyncing = false
     @Volatile private var lastRefreshAncMs = 0L  // alpha2.28: refreshAnc 节流 // alpha2.26.2: 抗风按钮列（用户可选隐藏）
     private var ancMode = -1
@@ -274,8 +276,10 @@ class OverviewFragment : Fragment() {
         root.addView(spacer(dp(8)))
 
         // alpha1.20: 弹窗同款三按钮（圆形按钮 + 图标 + 小字），高亮=当前模式（与 Google 弹窗一致）
-        ancBtns = arrayOfNulls(4)
-        ancLabels = arrayOfNulls(4)
+        // 3.0.5: 4 -> 5 列。自适应列初始隐藏，由 updateAncStatus 按设备能力决定可见性
+        // （与设备详情页面板同一规则：能力未确证支持就不出现，避免点了没反应的空档位）。
+        ancBtns = arrayOfNulls(5)
+        ancLabels = arrayOfNulls(5)
         val ancRow = LinearLayout(requireContext())
         ancRow.orientation = LinearLayout.HORIZONTAL
         ancRow.gravity = Gravity.CENTER
@@ -283,7 +287,7 @@ class OverviewFragment : Fragment() {
         ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
         // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
         ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
-        for (m in 0..3) {
+        for (m in 0..4) {
             val fm = m
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
@@ -311,6 +315,7 @@ class OverviewFragment : Fragment() {
             }
             ancBtns!![m] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
+            if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
             // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
             val sz = dp(72)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
@@ -332,6 +337,7 @@ class OverviewFragment : Fragment() {
         val showWindInit = requireContext().getSharedPreferences("cfg", 0)
                 .getBoolean("show_wind", true)
         ancWindCol?.visibility = if (showWindInit) View.VISIBLE else View.GONE
+        ancAdaptCol?.visibility = View.GONE // 3.0.5: 等能力上报再决定
 
         root.addView(spacer(dp(8)))
 
@@ -1434,6 +1440,17 @@ class OverviewFragment : Fragment() {
             it.alpha = if (ancEnabled) 1f else 0.45f
         }
         ancBtnRow?.let { it.visibility = View.VISIBLE }
+        // 3.0.5: 自适应(4) 列只在设备能力确证支持时出现；能力未知/不支持一律隐藏。
+        // 只门控这一档：其余 0..3 维持既有行为，不改动现有设备的表现。
+        ancAdaptCol?.let { col ->
+            val uiModes = try {
+                GaiaBleClient.getInstance().supportedUiModes()
+            } catch (_: Throwable) {
+                IntArray(0)
+            }
+            // 3.0.5: 未连接一律不显示（连接后能力才会被探到；断开即收回）
+            col.visibility = if (realConnected && uiModes.contains(4)) View.VISIBLE else View.GONE
+        }
         ancBtns?.let { btns ->
             for (i in btns.indices) {
                 val hol = btns[i] ?: continue

@@ -169,6 +169,41 @@ object AncProfileLib {
     }
 
     /**
+     * 能力未知时按型号档案兜底宣告的 UI 档位（0 关 / 1 降噪 / 2 透传 / 3 抗风）。
+     *
+     * 只含**各 ANC 路径通用**的基础档：自适应(4)、直播(5) 属于固件新增能力，
+     * 没有能力证据就不该出现 —— 否则 4 档设备会多出点了没反应的空档位。
+     */
+    val BASIC_UI_MODES: IntArray get() = intArrayOf(0, 1, 2, 3)
+
+    /**
+     * 控制面板里某一档列是否该显示（纯逻辑，便于单测）。
+     *
+     * [knownUiModes] 为空 = 能力未知 -> 只兜底显示 [BASIC_UI_MODES]；
+     * 非空 = 以设备实际能力为准。抗风(3) 另受用户开关 [showWind] 约束。
+     */
+    fun ancColumnVisible(uiMode: Int, knownUiModes: IntArray, showWind: Boolean): Boolean {
+        if (uiMode == 3 && !showWind) return false
+        return if (knownUiModes.isEmpty()) BASIC_UI_MODES.contains(uiMode)
+        else knownUiModes.contains(uiMode)
+    }
+
+    /** 降噪档的 UI 档位号（顺序固定：0 关 / 1 降噪 / 2 透传 / 3 抗风）。 */
+    const val UI_MODE_ANC = 1
+
+    /** 抗风档的 UI 档位号。 */
+    const val UI_MODE_WIND = 3
+
+    /**
+     * 抗风开关此刻是否可用（纯逻辑，便于单测）。
+     *
+     * 抗风是「降噪」的加强档，只服务 [UI_MODE_ANC] <-> [UI_MODE_WIND] 这一对：
+     * 降噪档时可开；抗风档时仍要可用（否则关不掉）；切到关闭/透传/自适应后自动失效、整块隐藏。
+     */
+    fun windSwitchAvailable(ancMode: Int): Boolean =
+            ancMode == UI_MODE_ANC || ancMode == UI_MODE_WIND
+
+    /**
      * alpha2.32: 扩展设备控制（DC）能力档案。
      * 按型号记录空间音频/增益/LED 支持情况。
      * 优先使用档案；档案未命中时回退到 GAIA 能力探测（CapabilityProbe.hasFeature）。

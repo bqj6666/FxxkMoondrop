@@ -8,7 +8,8 @@ import android.os.PowerManager
 
 /**
  * 自动检查模块 App 各项必要权限，缺失时告知用户并可跳转授权。
- * 含 Root / FastPairHook(LSPosed) 运行模式项；GAIA 直连项为动态真实状态。
+ * 含 Root 权限与 FastPairHook(LSPosed) 模块项；GAIA 直连项为动态真实状态。
+ * 运行模式（Root / 模块 / 无 Root）不在这里：已移到设置页单独展示。
  * 不检查悬浮窗：本模块不创建悬浮窗，故不申请该权限。
  */
 class PermissionChecker {
@@ -82,31 +83,11 @@ class PermissionChecker {
                     },
                     ACTION_ROOT_RECHECK, 0))
 
-            // 4. 运行模式（显示项，非缺失项）
-            //
-            // 3.0.5: 三态 —— 只看 root 会把「有模块无 root」误报成无 Root 模式，
-            // 而 GMS 桥接与官方面板注入其实由 LSPosed 模块承担，不需要 App 有 root。
-            val rooted = rootOk
-            // 3.0.5-hotfix: 本函数（第 5 项）本来就要实测 hook，且两个调用方都在子线程，
-            // 所以这里直接取实测结果 —— 若用缓存，未探测过时会被当成「模块未激活」而误报
+            // FastPairHook 项与 GAIA 项共用的实测结果。
+            // 3.0.5-hotfix: 本函数本来就要实测 hook，且两个调用方都在子线程，所以直接取实测值 ——
+            // 若用缓存，未探测过时会被当成「模块未激活」而误报
             // （和设置页把「未探测」当「不可用」是同一个错）。
             val hookActive = EnvProbe.isFastPairHookActive(ctx)
-            list.add(Item(Lang.t(ctx, "运行模式", "Run mode"), true,
-                    when {
-                        rooted && hookActive -> Lang.t(ctx,
-                                "Root 模式：GMS 桥接与官方面板注入可用，Root 增强功能也可用",
-                                "Root mode: GMS bridge & official panel injection available, plus root enhancements")
-                        hookActive -> Lang.t(ctx,
-                                "模块模式：GMS 桥接与官方面板注入可用；Root 增强功能不可用",
-                                "Module mode: GMS bridge & official panel injection available; root enhancements unavailable")
-                        rooted -> Lang.t(ctx,
-                                "Root 模式：Root 增强功能可用；FastPairHook 模块未激活，将使用内置自扫",
-                                "Root mode: root enhancements available; FastPairHook inactive, built-in scan will be used")
-                        else -> Lang.t(ctx,
-                                "无 Root 模式：仅通知栏与主界面控制降噪（GAIA 直连，无需 Root）",
-                                "No-root mode: noise cancellation from notification & main UI only (GAIA direct)")
-                    },
-                    ACTION_NONE, 0))
 
             // 5. FastPairHook 模块（LSPosed）—— 复用上面实测的结果（同一次 checkAll 内不会变）
             list.add(Item(Lang.t(ctx, "FastPairHook 模块（LSPosed）", "FastPairHook module (LSPosed)"),
@@ -121,7 +102,7 @@ class PermissionChecker {
             if (hookActive) {
                 gaiaOk = true
                 gaiaDetail = Lang.t(ctx, "FastPairHook 桥接：LE 地址发现 → GAIA 直连", "FastPairHook bridge: LE discover → GAIA direct")
-            } else if (!rooted) {
+            } else if (!rootOk) {
                 gaiaOk = true
                 gaiaDetail = Lang.t(ctx, "备用模式：应用内置 BLE 自扫（无需 Root）", "Fallback: built-in BLE scan (no Root needed)")
             } else {

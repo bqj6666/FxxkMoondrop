@@ -322,8 +322,24 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    /**
+     * 是否处于「连上」状态。
+     *
+     * 除了自己的连接标记，还要求**蓝牙适配器是开着的**：适配器被关掉时上层不一定会等到
+     * 断连回调（实测 GATT 会被静默丢弃，只留下写命令失败），这会让界面一直停在「已连接」
+     * 的旧状态 —— 面板、官方切片、通知都跟着错。这里直接以适配器状态兜底，关掉即视为未连接。
+     * 拿不到适配器状态（权限异常等）时不改变原有判断。
+     */
     @Synchronized
-    fun isConnected(): Boolean = simConnected || (connected && (gatt != null || useRfcomm))
+    fun isConnected(): Boolean = simConnected ||
+            (connected && adapterEnabled() && (gatt != null || useRfcomm))
+
+    /** 蓝牙适配器是否开启；无法判断时返回 true（不改变原有判断）。 */
+    private fun adapterEnabled(): Boolean = try {
+        @Suppress("DEPRECATION")
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        adapter == null || adapter.isEnabled
+    } catch (_: Throwable) { true }
 
     /**
      * GAIA 是否已就绪（可收发 GAIA 命令）。
@@ -1066,10 +1082,12 @@ class GaiaBleClient private constructor() {
      */
     fun supportedUiModes(): IntArray = when (probe.ancPath) {
         // 3.0.3: ANC_V2 先问型号档案 —— 布丁支持 [关,降,透,抗,自适应]（不含直播），
-        // 这样官方面板 / 通知 / 弹窗都不会长出点了没反应的空档位。未收录型号仍按全 6 档宣告。
+        // 这样官方面板 / 通知 / 弹窗都不会长出点了没反应的空档位。
+        // 未收录型号只宣告基础 4 档（0..3）：自适应(4) 与直播(5) 属于固件新增能力，
+        // 无档案时拿不到证据，宣告出去就是「点了没反应」；宁可少一档也不给死按钮。
         GaiaCommands.ANC_PATH_ANC_V2 -> AncProfileLib.supportedAncV2UiModes(connectedDeviceName)
-                ?: intArrayOf(0, 1, 2, 3, 4, 5)
-        GaiaCommands.ANC_PATH_AUDIO_CURATION -> intArrayOf(0, 1, 2, 3)
+                ?: AncProfileLib.BASIC_UI_MODES
+        GaiaCommands.ANC_PATH_AUDIO_CURATION -> AncProfileLib.BASIC_UI_MODES
         GaiaCommands.ANC_PATH_ANC_V1 -> intArrayOf(0, 1)
         else -> IntArray(0)
     }

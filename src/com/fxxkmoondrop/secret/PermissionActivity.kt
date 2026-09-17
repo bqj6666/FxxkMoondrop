@@ -22,7 +22,8 @@ import android.widget.Toast
 
 /**
  * alpha2.1: 权限检测 —— 官方 M3 二级页（TopBar + tonal 状态头 + 官方分组卡列表）。
- * 检查蓝牙/通知/电池白名单/运行模式/FastPairHook/GAIA 直连，缺失项可点击跳转修复。
+ * 检查蓝牙 / 通知 / 电池白名单 / Root 权限 / FastPairHook / GAIA 直连，缺失项可点击跳转修复。
+ * 运行模式不在这里：已移到设置页单独展示。
  */
 class PermissionActivity : Activity() {
 
@@ -33,6 +34,7 @@ class PermissionActivity : Activity() {
     private lateinit var headTitle: TextView
     private lateinit var headSub: TextView
     private lateinit var progressRow: LinearLayout
+    private var skipNextResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -217,10 +219,27 @@ class PermissionActivity : Activity() {
         }
         row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
 
-        // 缺失且可修复 → chevron + 涟漪 + 点击跳转
-        // 3.0.5: ACTION_ROOT_RECHECK 即使显示为 ok（已授权）也允许点击重测
-        if ((!item.ok || item.action == PermissionChecker.ACTION_ROOT_RECHECK) &&
-                item.action != PermissionChecker.ACTION_NONE) {
+        // 尾随控件
+        //   · Root 权限（ACTION_ROOT_RECHECK）：刷新图标 —— 未授权时可点重测
+        //     （未在管理器授权时 root 会整体隐藏，必须留重试入口）；已取得 root 后
+        //     没有再测的必要，图标置灰、整行不可点。
+        //   · 其它缺失且可修复项：chevron + 涟漪，点击跳转修复。
+        if (item.action == PermissionChecker.ACTION_ROOT_RECHECK) {
+            val ic = ImageView(this)
+            ic.setImageResource(R.drawable.ic_refresh)
+            ic.imageTintList = ColorStateList.valueOf(if (item.ok) pal.onVariant else pal.primary)
+            val ilp = LinearLayout.LayoutParams(dp(20), dp(20))
+            ilp.marginStart = dp(10)
+            row.addView(ic, ilp)
+            if (item.ok) {
+                ic.alpha = 0.4f
+            } else {
+                row.background = RippleDrawable(
+                        ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000),
+                        GradientDrawable().apply { setColor(android.graphics.Color.TRANSPARENT) }, null)
+                row.setOnClickListener { fixPermission(item) }
+            }
+        } else if (!item.ok && item.action != PermissionChecker.ACTION_NONE) {
             val ch = M3Ui.chevron(this, pal.onVariant)
             val clp = LinearLayout.LayoutParams(dp(16), dp(16))
             clp.marginStart = dp(10)
@@ -272,9 +291,15 @@ class PermissionActivity : Activity() {
         }
     }
 
-    /** 从设置页返回后自动重新检查 */
+    /** 从设置页 / 系统设置返回后自动重新检查 */
     override fun onResume() {
         super.onResume()
+        // onCreate 末尾已经查过一次，紧随其后的首个 onResume 不再重复
+        // （每次检查含一次 ~2s 的模块 PING + 一次 su exec，白跑一遍很明显）。
+        if (skipNextResume) {
+            skipNextResume = false
+            return
+        }
         if (::listBox.isInitialized) startCheck()
     }
 
