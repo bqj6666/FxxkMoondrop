@@ -1,28 +1,32 @@
-name: Bug 反馈（受支持耳机）
-description: 已受支持耳机（指纹命中 GAIA / 9ECA0000）出现弹窗、控制、电量等功能异常
+name: Bug 反馈（受支持耳机）/ Bug report (supported headset)
+description: 已受支持耳机出现功能异常 / Malfunction on an already-recognized headset
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        本模板用于**已受支持的耳机**：日志中 GATT 指纹命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯），
-        模块能识别、但某几项功能不正常。
+        本模板用于**已受支持的耳机**：日志中 GATT 指纹命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯），模块能识别、但某几项功能不正常。
         若耳机**从未被识别**（不弹窗、日志无指纹命中），请改用「耳机实机测试反馈」模板。
         若问题与耳机连接无关（界面、设置、权限、崩溃等），请改用「Bug 反馈（应用本身）」模板。
         提交前请确认：模块已在 LSPosed 中启用，作用域已勾选 `com.google.android.gms`。
-        English is fine, fill in what you can.
+
+        ---
+        Use this template when the headset **is already recognized** (GATT fingerprint matches `GAIA` or `9ECA0000`) but some features do not work.
+        If the headset is **never recognized** (no popup, no fingerprint in the log), use "耳机实机测试反馈 / Headset compatibility report" instead.
+        If the problem is **unrelated to headset connection** (UI, settings, permissions, crash), use "Bug 反馈（应用本身）/ Bug report (app itself)" instead.
+        Before submitting: the module must be enabled in LSPosed with scope `com.google.android.gms` checked.
 
   - type: markdown
     attributes:
       value: |
-        ## 一、环境信息
+        ## 一、环境信息 / 1. Environment
 
   - type: input
     id: module_version
     attributes:
-      label: 模块版本
-      description: 应用「关于」页显示的版本号
+      label: 模块版本 / Module version
+      description: 应用「关于」页显示的版本号 / Version shown on the About page
       placeholder: alpha2.52 (287)
     validations:
       required: true
@@ -30,48 +34,48 @@ body:
   - type: input
     id: android_device
     attributes:
-      label: Android 版本 / 机型
-      placeholder: Android 15（ColorOS 15）/ 一加 13
+      label: Android 版本与机型 / Android version and device
+      placeholder: Android 15 (ColorOS 15) / OnePlus 13
     validations:
       required: true
 
   - type: input
     id: framework
     attributes:
-      label: Xposed 框架及版本
-      placeholder: LSPosed 1.10.1（Zygisk）
+      label: Xposed 框架及版本 / Xposed framework and version
+      placeholder: LSPosed 1.10.1 (Zygisk)
     validations:
       required: true
 
   - type: dropdown
     id: scope
     attributes:
-      label: 作用域 com.google.android.gms 是否已勾选
+      label: 作用域 com.google.android.gms 是否已勾选 / Is the com.google.android.gms scope enabled?
       options:
-        - 已勾选
-        - 未勾选
-        - 不确定
+        - 已勾选 / Yes
+        - 未勾选 / No
+        - 不确定 / Not sure
     validations:
       required: true
 
   - type: markdown
     attributes:
       value: |
-        ## 二、耳机与支持状态
+        ## 二、耳机与支持状态 / 2. Headset and support status
 
   - type: input
     id: headset
     attributes:
-      label: 耳机型号
-      placeholder: 水月雨 梦回2
+      label: 耳机型号 / Headset model
+      placeholder: 水月雨 梦回2 / Moondrop Golden Ages
     validations:
       required: true
 
   - type: input
     id: chip
     attributes:
-      label: 主控（不确定可留空）
-      description: 高通 QCC 走 GAIA，中科蓝讯 BT89xx 走 9ECA
+      label: 主控 / Chipset（不确定可留空 optional）
+      description: 高通 QCC 走 GAIA，中科蓝讯 BT89xx 走 9ECA / Qualcomm QCC uses GAIA, Bluetrum BT89xx uses 9ECA
       placeholder: QCC5151
     validations:
       required: false
@@ -79,52 +83,52 @@ body:
   - type: dropdown
     id: support_state
     attributes:
-      label: 该耳机的支持情况
-      description: 用来区分「曾经正常、现在坏了」和「一直不完整」
+      label: 该耳机的支持情况 / Support status of this headset
+      description: 用来区分「曾经正常、现在坏了」和「一直不完整」/ Distinguishes a regression from an always-incomplete support
       options:
-        - 曾经完全正常，某个版本后失效（回归）
-        - 一直部分功能不可用
-        - 一直无法控制，但模块能识别
-        - 不确定算不算受支持
+        - 曾经完全正常，某个版本后失效（回归）/ Worked before, broke after an update (regression)
+        - 一直部分功能不可用 / Some features never worked
+        - 一直无法控制，但模块能识别 / Never controllable, but recognized
+        - 不确定算不算受支持 / Not sure whether it is supported
     validations:
       required: true
 
   - type: markdown
     attributes:
       value: |
-        ## 三、问题描述
+        ## 三、问题描述 / 3. Problem
 
   - type: dropdown
     id: category
     attributes:
-      label: 问题类型
+      label: 问题类型 / Category
       options:
-        - 配对弹窗（不弹 / 重复弹 / 图标或排版异常）
-        - 连接与控制
-        - 电量显示
-        - ANC / 降噪
-        - 手势或按键
-        - 应用崩溃或闪退
-        - 权限相关
-        - 其他
+        - 配对弹窗（不弹 / 重复弹 / 图标或排版异常）/ Pairing popup
+        - 连接与控制 / Connection and control
+        - 电量显示 / Battery display
+        - ANC / 降噪 / ANC and noise cancelling
+        - 手势或按键 / Gestures and buttons
+        - 应用崩溃或闪退 / App crash
+        - 权限相关 / Permissions
+        - 其他 / Other
     validations:
       required: true
 
   - type: textarea
     id: symptom
     attributes:
-      label: 现象
-      description: 具体表现，例如「关掉弹窗后 GAIA 连上又弹一次」
+      label: 现象 / Symptoms
+      description: 具体表现 / What exactly happens, e.g. "the popup appears a second time after closing it"
     validations:
       required: true
 
   - type: textarea
     id: steps
     attributes:
-      label: 复现步骤
+      label: 复现步骤 / Steps to reproduce
       placeholder: |
-        1. 权限全部授予
-        2. 耳机连接手机
+        1. 权限全部授予 / Grant all permissions
+        2. 耳机连接手机 / Connect the headset
         3. ...
     validations:
       required: true
@@ -132,24 +136,24 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 四、日志与确认
+        ## 四、日志与确认 / 4. Logs and confirmation
 
   - type: textarea
     id: logs
     attributes:
-      label: 日志
-      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里
+      label: 日志 / Logs
+      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里 / Export the zip from Settings and drag it here
     validations:
       required: true
 
   - type: checkboxes
     id: checks
     attributes:
-      label: 确认
+      label: 确认 / Confirmation
       options:
-        - label: 我确认该耳机属于已受支持范围（日志有 GAIA 或 9ECA0000 指纹）
+        - label: 我确认该耳机属于已受支持范围（日志有 GAIA 或 9ECA0000 指纹）/ The headset is recognized (log shows a GAIA or 9ECA0000 fingerprint)
           required: true
-        - label: 我已搜索过现有 issue，确认不是重复
+        - label: 我已搜索过现有 issue，确认不是重复 / I searched existing issues and this is not a duplicate
           required: true
-        - label: 我已附上日志导出文件
+        - label: 我已附上日志导出文件 / I attached the exported log
           required: true

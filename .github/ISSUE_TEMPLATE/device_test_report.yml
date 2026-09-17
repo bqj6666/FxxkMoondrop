@@ -1,25 +1,29 @@
-name: 耳机实机测试反馈
-description: 未识别或待验证的耳机，反馈 GATT 指纹与自适应结果
+name: 耳机实机测试反馈 / Headset compatibility report
+description: 未识别或待验证的耳机，反馈 GATT 指纹与自适应结果 / Report GATT fingerprint and result for an unrecognized or unverified headset
 title: "[实机测试] "
 labels: ["help wanted"]
 body:
   - type: markdown
     attributes:
       value: |
-        本项目按蓝牙 GATT 服务指纹判定兼容性，不看型号名。
-        命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯）理论上即可接入。
+        本项目按蓝牙 GATT 服务指纹判定兼容性，不看型号名。命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯）理论上即可接入。
         若耳机已被识别、但某几项功能不正常，请改用「Bug 反馈（受支持耳机）」模板。
         若问题与耳机连接无关（界面、设置、权限、崩溃等），请改用「Bug 反馈（应用本身）」模板。
+
+        ---
+        Compatibility is determined by the Bluetooth GATT service fingerprint, not by the model name. A hit on `GAIA` (Qualcomm QCC) or `9ECA0000` (Bluetrum) means it should work.
+        If the headset **is recognized** but some features fail, use "Bug 反馈（受支持耳机）/ Bug report (supported headset)" instead.
+        If the problem is **unrelated to headset connection**, use "Bug 反馈（应用本身）/ Bug report (app itself)" instead.
 
   - type: markdown
     attributes:
       value: |
-        ## 一、设备信息
+        ## 一、设备信息 / 1. Device
 
   - type: input
     id: headset
     attributes:
-      label: 耳机型号
+      label: 耳机型号 / Headset model
       placeholder: 水月雨 知更鸟 Robin
     validations:
       required: true
@@ -27,7 +31,7 @@ body:
   - type: input
     id: chip
     attributes:
-      label: 主控（不确定可留空）
+      label: 主控 / Chipset（不确定可留空 optional）
       placeholder: BT8952F / QCC5151
     validations:
       required: false
@@ -35,8 +39,8 @@ body:
   - type: input
     id: module_version
     attributes:
-      label: 模块版本
-      description: 应用「关于」页显示的版本号
+      label: 模块版本 / Module version
+      description: 应用「关于」页显示的版本号 / Version shown on the About page
       placeholder: alpha2.52 (287)
     validations:
       required: true
@@ -44,49 +48,49 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 二、识别结果
+        ## 二、识别结果 / 2. Result
 
   - type: dropdown
     id: fingerprint
     attributes:
-      label: 日志中看到的 GATT 指纹
+      label: 日志中看到的 GATT 指纹 / GATT fingerprint in the log
       options:
-        - 命中 GAIA（高通 QCC）
-        - 命中 9ECA0000（中科蓝讯）
-        - 两者都没有
-        - 未导出日志 / 看不懂
+        - 命中 GAIA（高通 QCC）/ GAIA hit (Qualcomm QCC)
+        - 命中 9ECA0000（中科蓝讯）/ 9ECA0000 hit (Bluetrum)
+        - 两者都没有 / Neither
+        - 未导出日志 / 看不懂 / No log or unclear
     validations:
       required: true
 
   - type: dropdown
     id: result
     attributes:
-      label: 自适应结果
+      label: 自适应结果 / Adaption result
       options:
-        - 识别成功且控制正常
-        - 识别成功但部分控制失效
-        - 识别成功但控制全失效
-        - 无法识别 / 不弹窗
+        - 识别成功且控制正常 / Recognized, fully working
+        - 识别成功但部分控制失效 / Recognized, some controls fail
+        - 识别成功但控制全失效 / Recognized, no control at all
+        - 无法识别 / 不弹窗 / Not recognized, no popup
     validations:
       required: true
 
   - type: textarea
     id: detail
     attributes:
-      label: 各功能可用情况
-      description: 哪几项能用、哪几项不能用（ANC / 电量 / 弹窗 / 手势等）
+      label: 各功能可用情况 / Which features work
+      description: 哪几项能用、哪几项不能用（ANC / 电量 / 弹窗 / 手势等）/ List working and failing features (ANC, battery, popup, gestures)
     validations:
       required: false
 
   - type: markdown
     attributes:
       value: |
-        ## 三、日志
+        ## 三、日志 / 3. Logs
 
   - type: textarea
     id: logs
     attributes:
-      label: 日志
-      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里
+      label: 日志 / Logs
+      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里 / Export the zip from Settings and drag it here
     validations:
       required: true

@@ -1,5 +1,5 @@
-name: Bug 反馈（应用本身）
-description: 与耳机连接无关的问题：界面、设置、权限、日志导出、崩溃等
+name: Bug 反馈（应用本身）/ Bug report (app itself)
+description: 与耳机连接无关的问题 / Problems unrelated to headset connection
 title: "[应用] "
 labels: ["bug"]
 body:
@@ -9,18 +9,22 @@ body:
         本模板用于**与耳机连接无关**的问题：界面排版、设置项与开关、权限申请、日志导出、应用启动或崩溃等。
         若问题是耳机连接后弹窗、控制、电量异常，请改用「Bug 反馈（受支持耳机）」；
         若耳机从未被识别（不弹窗、日志无指纹命中），请改用「耳机实机测试反馈」。
-        English is fine, fill in what you can.
+
+        ---
+        Use this template for problems **unrelated to headset connection**: UI layout, settings and switches, permissions, log export, app startup or crash.
+        If the problem happens after connecting a headset (popup, control, battery), use "Bug 反馈（受支持耳机）/ Bug report (supported headset)" instead.
+        If the headset is never recognized, use "耳机实机测试反馈 / Headset compatibility report" instead.
 
   - type: markdown
     attributes:
       value: |
-        ## 一、环境信息
+        ## 一、环境信息 / 1. Environment
 
   - type: input
     id: module_version
     attributes:
-      label: 模块版本
-      description: 应用「关于」页显示的版本号
+      label: 模块版本 / Module version
+      description: 应用「关于」页显示的版本号 / Version shown on the About page
       placeholder: alpha2.52 (287)
     validations:
       required: true
@@ -28,77 +32,77 @@ body:
   - type: input
     id: android_device
     attributes:
-      label: Android 版本 / 机型
-      placeholder: Android 15（ColorOS 15）/ 一加 13
+      label: Android 版本与机型 / Android version and device
+      placeholder: Android 15 (ColorOS 15) / OnePlus 13
     validations:
       required: true
 
   - type: input
     id: framework
     attributes:
-      label: Xposed 框架及版本（不确定可留空）
-      placeholder: LSPosed 1.10.1（Zygisk）
+      label: Xposed 框架及版本 / Xposed framework and version（不确定可留空 optional）
+      placeholder: LSPosed 1.10.1 (Zygisk)
     validations:
       required: false
 
   - type: dropdown
     id: scope
     attributes:
-      label: 作用域 com.google.android.gms 是否已勾选
+      label: 作用域 com.google.android.gms 是否已勾选 / Is the com.google.android.gms scope enabled?
       options:
-        - 已勾选
-        - 未勾选
-        - 不确定
+        - 已勾选 / Yes
+        - 未勾选 / No
+        - 不确定 / Not sure
     validations:
       required: false
 
   - type: markdown
     attributes:
       value: |
-        ## 二、问题描述
+        ## 二、问题描述 / 2. Problem
 
   - type: dropdown
     id: area
     attributes:
-      label: 受影响的功能
+      label: 受影响的功能 / Affected area
       options:
-        - 界面显示或排版
-        - 设置项与开关
-        - 权限申请与检查
-        - 日志抓取或导出
-        - 应用启动、崩溃或闪退
-        - 安装、Root 或系统适配
-        - 其他
+        - 界面显示或排版 / UI display or layout
+        - 设置项与开关 / Settings and switches
+        - 权限申请与检查 / Permissions
+        - 日志抓取或导出 / Log capture or export
+        - 应用启动、崩溃或闪退 / Startup or crash
+        - 安装、Root 或系统适配 / Installation, root or system compatibility
+        - 其他 / Other
     validations:
       required: true
 
   - type: dropdown
     id: connect_related
     attributes:
-      label: 是否与耳机连接有关
-      description: 用来确认问题确实出在应用本身，而不是连接流程
+      label: 是否与耳机连接有关 / Is it related to headset connection?
+      description: 用来确认问题确实出在应用本身 / Confirms the problem is in the app itself
       options:
-        - 完全无关（不连耳机也会出现）
-        - 仅在连接耳机后出现
-        - 不确定
+        - 完全无关（不连耳机也会出现）/ Unrelated (happens without a headset)
+        - 仅在连接耳机后出现 / Only after connecting a headset
+        - 不确定 / Not sure
     validations:
       required: true
 
   - type: textarea
     id: symptom
     attributes:
-      label: 现象
-      description: 具体表现，例如「打开权限检查页就闪退」
+      label: 现象 / Symptoms
+      description: 具体表现 / What exactly happens, e.g. "the app crashes when opening the permission page"
     validations:
       required: true
 
   - type: textarea
     id: steps
     attributes:
-      label: 复现步骤
+      label: 复现步骤 / Steps to reproduce
       placeholder: |
-        1. 打开应用
-        2. 进入设置
+        1. 打开应用 / Open the app
+        2. 进入设置 / Go to Settings
         3. ...
     validations:
       required: true
@@ -106,32 +110,32 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 三、证据与确认
+        ## 三、证据与确认 / 3. Evidence and confirmation
 
   - type: textarea
     id: evidence
     attributes:
-      label: 截图或录屏
-      description: 界面类问题请直接拖入截图；崩溃可附系统崩溃日志
+      label: 截图或录屏 / Screenshot or screen recording
+      description: 界面类问题请直接拖入截图；崩溃可附系统崩溃日志 / Attach a screenshot for UI issues; a system crash log for crashes
     validations:
       required: false
 
   - type: textarea
     id: logs
     attributes:
-      label: 模块日志（有则附上）
-      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里
+      label: 模块日志（有则附上）/ Module logs (optional)
+      description: 应用「设置」页的「日志抓取」导出 zip 后直接拖进这里 / Export the zip from Settings and drag it here
     validations:
       required: false
 
   - type: checkboxes
     id: checks
     attributes:
-      label: 确认
+      label: 确认 / Confirmation
       options:
-        - label: 我确认该问题与耳机连接无关
+        - label: 我确认该问题与耳机连接无关 / I confirm this problem is unrelated to headset connection
           required: true
-        - label: 我已搜索过现有 issue，确认不是重复
+        - label: 我已搜索过现有 issue，确认不是重复 / I searched existing issues and this is not a duplicate
           required: true
-        - label: 我已附上截图、录屏或日志中的至少一项
+        - label: 我已附上截图、录屏或日志中的至少一项 / I attached at least one of screenshot, recording or log
           required: true
