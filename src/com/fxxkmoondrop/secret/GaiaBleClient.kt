@@ -229,15 +229,11 @@ class GaiaBleClient private constructor() {
             handler.postDelayed({
                 Thread({
                     try {
+                        // 3.0.5: 不再「没 root 就跳过 hook 探测」。
+                        // GMS 桥接靠的是 LSPosed 模块（Hook 跑在 GMS 进程），与 App 自身有没有
+                        // root 无关；而且未授权时 root 可能整体隐藏（FolkPatch 的 pathhide 等），
+                        // 「没 root」并不等于「模块没用」。一律实测。
                         val rooted = EnvProbe.isRooted()
-                        // 无 Root 模式：模块必然不可用，ping 只会白等满 4 秒超时。
-                        // 跳过探测直接走内置自扫（下面两个分支的结果本来就一样）。
-                        if (!rooted) {
-                            AppLog.i(GaiaConstants.TAG,
-                                "no-root mode -> app self-scan (skip hook probe)")
-                            handler.postDelayed({ startGenericScan() }, 800)
-                            return@Thread
-                        }
                         val hookOk = EnvProbe.isFastPairHookActive(context)
                         Log.d(GaiaConstants.TAG, "env: root=" + rooted + " module=" + hookOk)
                         if (hookOk) {

@@ -4,6 +4,34 @@
 > 本项目为 **LSPosed/Xposed 模块**，注入 GMS（`com.google.android.gms`）Hook 高通 GAIA 蓝牙协议 + Moondrop 私有 `9ECA0000` 协议。
 > 时间线从 2026-08-22 起（开发者实机验证款）。更早的 alpha1.x（单体 Activity + 旧打包链）不在本仓库。
 
+## 3.0.5 (305)
+> 修复：模块已激活时不再回落到「无 Root 模式」；root 探测失败不再成为永久结论，并新增重试入口。
+
+### 修复：「模块激活」与「有 root」不再混为一谈
+- **问题**：`EnvProbe.isNoRootMode()` 只看 root 探测结果；`GaiaBleClient.init` 更是
+  「没 root 就直接跳过 hook 探测」。可 GMS 桥接与官方面板注入靠的是 **LSPosed 模块**
+  （Hook 跑在 GMS 进程里），App 自身并不需要 root —— 有模块无 root 的设备因此被误判成
+  无 Root 模式：跳过模块探测、设置页相关项被置灰、权限检查显示「仅通知栏控制降噪」。
+- **修复**：
+  - `EnvProbe.isNoRootMode()` = 无 root **且** hook 未确认激活；hook 缓存未就绪时按旧行为保守处理，
+    启动时序不变。
+  - `GaiaBleClient.init` 一律实测 hook（不再因「没 root」跳过），日志如实写 `root=… module=…`。
+  - 权限检查「运行模式」改三态：**Root 模式** / **模块模式**（有模块无 root：桥接与面板注入可用，
+    Root 增强功能不可用）/ **无 Root 模式**。
+
+### 修复：root 探测失败不再永久缓存（未授权时 root 整体隐藏）
+- **背景**：未在 Root 管理器里授权时，root 会**整体隐藏**（FolkPatch 的 pathhide 等），
+  App 侧看到的现象和「设备根本没 root」完全相同 —— 因此不能把一次失败当作结论。
+- **修复** `RootShell`：**正结果进程内永久锁定**；**负结果只保留 10 秒 TTL**
+  （避免一个 UI 流程里反复 exec），TTL 过后任何调用自动重试；`retryNow()` 供用户显式动作立即重试。
+  hook 探测同样处理（`hookActiveCached()` / `retryHookProbe()`，对应「刚在 LSPosed 里启用模块」）。
+
+### 新增：权限检查里的「重新检测 Root」入口
+- 权限检查新增 **Root 权限** 一项，显示当前状态与选中的入口（`su` / `kp`），点击即在
+  后台清缓存并重新探测（探测会 exec、可能弹授权框，绝不在主线程做），完成后回到 UI 线程重渲染。
+- 提示文案据实分两种：见到了二进制但没拿到 uid=0 → 「已找到 root 入口但未取得授权…」；
+  完全没见到 → 「未检测到 root 入口。若设备已 root：请先在 Root 管理器中把本应用加入授权列表…」。
+
 ## 3.0.4 (304)
 > 修复：FolkPatch（APatch 系）等使用 `kp` 作为 root 入口的设备上「识别不到 Root」，以及由此连带失效的 Root 功能。
 

@@ -88,7 +88,11 @@ class EnvProbe private constructor() {
 
         /**
          * FastPairHook（LSPosed 模块）是否激活：向 GMS 发 PING，收到 PONG 即激活。
-         * 阻塞等待（PING_TIMEOUT_MS，1.8s），请在子线程调用；结果进程内缓存。
+         * 阻塞等待（PING_TIMEOUT_MS，1.8s），请在子线程调用。
+         *
+         * 缓存策略（3.0.5 同 RootShell）：**正结果永久缓存**（激活了就不会变）；
+         * 负结果可被 [retryHookProbe] 清掉，用于「刚在 LSPosed 里启用模块」的场景 ——
+         * 否则一次未激活会被记到进程结束，用户启用后仍被当成无模块。
          */
         @JvmStatic
         fun isFastPairHookActive(ctx: Context?): Boolean {
@@ -96,6 +100,18 @@ class EnvProbe private constructor() {
             val h = pingHook(ctx)
             sHookActive = h
             return h
+        }
+
+        /** 非阻塞读 hook 激活缓存：null = 还没探测过（调用方按旧行为保守处理）。 */
+        @JvmStatic
+        fun hookActiveCached(): Boolean? = sHookActive
+
+        /** 清掉 hook 的负结果，下次调用重新 PING（用于用户显式「重新检测」）。 */
+        @JvmStatic
+        fun retryHookProbe() {
+            synchronized(this) {
+                if (sHookActive != true) sHookActive = null
+            }
         }
 
         private fun pingHook(ctx: Context?): Boolean {
@@ -149,18 +165,27 @@ class EnvProbe private constructor() {
         }
 
         /**
-         * **无 Root 模式**：设备上没有 Root（因而 LSPosed 模块也必然不可用）。
+         * **无 Root 模式**：既没有可用 root 入口，**也没有已激活的 LSPosed 模块**。
          *
          * 此模式下自动回落为「仅靠 GAIA BLE 直连」控制耳机：
          * 通知栏的控制按钮与 App 主界面照常可用（读电量、切降噪都走
-         * 标准 BluetoothGatt，本身不需要 Root），而所有依赖 Root 的增强功能
-         * （GMS 桥接 Hook、官方面板注入、su 拉起官方 App、Root 强力保活）
+         * 标准 BluetoothGatt，本身不需要 Root），而依赖 root 或 GMS Hook 的增强功能
+         * （GMS 桥接 Hook、官方面板注入、root 拉起官方 App、Root 强力保活）
          * 一律静默停用，不再尝试、也不再报错或弹窗。
          *
-         * 只探测文件存在，不执行 su，无阻塞，可主线程调用。
+         * 3.0.5：不再「只看 root」就断言模块不可用。GMS 桥接与官方面板注入靠的是
+         * LSPosed 模块（Hook 跑在 GMS 进程里），App 自身不需要 root；所以模块激活时
+         * 即便没有 root 也不该回落成无 Root 模式。hook 缓存未就绪（null）时按旧行为
+         * 保守处理，不改变启动时序。
+         *
+         * 无阻塞，可主线程调用。
          */
         @JvmStatic
-        fun isNoRootMode(): Boolean = !isRooted()
+        fun isNoRootMode(): Boolean = !isRooted() && hookActiveCached() != true
+
+        /** 原始语义：仅看设备是否存在可用 root 入口（提示文案与诊断用）。 */
+        @JvmStatic
+        fun hasRootEntry(): Boolean = isRooted()
 
         /** 无 Root 模式下不可用的功能说明（UI 展示用，按语言返回）。 */
         @JvmStatic

@@ -218,7 +218,9 @@ class PermissionActivity : Activity() {
         row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
 
         // 缺失且可修复 → chevron + 涟漪 + 点击跳转
-        if (!item.ok && item.action != PermissionChecker.ACTION_NONE) {
+        // 3.0.5: ACTION_ROOT_RECHECK 即使显示为 ok（已授权）也允许点击重测
+        if ((!item.ok || item.action == PermissionChecker.ACTION_ROOT_RECHECK) &&
+                item.action != PermissionChecker.ACTION_NONE) {
             val ch = M3Ui.chevron(this, pal.onVariant)
             val clp = LinearLayout.LayoutParams(dp(16), dp(16))
             clp.marginStart = dp(10)
@@ -245,6 +247,24 @@ class PermissionActivity : Activity() {
                 }
                 PermissionChecker.ACTION_BATTERY -> startActivity(
                         Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                PermissionChecker.ACTION_ROOT_RECHECK -> {
+                    // 3.0.5: 清掉 root / hook 的负结果 -> 后台重新探测 -> 回 UI 线程重渲染。
+                    // 探测会 exec（可能弹授权框），绝不能在主线程做。
+                    RootShell.retryNow()
+                    EnvProbe.retryHookProbe()
+                    listBox.removeAllViews()
+                    progressRow.visibility = View.VISIBLE
+                    headTitle.text = Lang.t(this, "正在重新检测…", "Re-checking…")
+                    val act = this
+                    Thread {
+                        RootShell.isAvailable()
+                        EnvProbe.isFastPairHookActive(act)
+                        act.runOnUiThread {
+                            progressRow.visibility = View.GONE
+                            startCheck()
+                        }
+                    }.start()
+                }
                 else -> toast(it.detail)
             }
         } catch (e: Exception) {
