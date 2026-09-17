@@ -1,5 +1,5 @@
 name: 耳机实机测试反馈
-description: 报告某款耳机的 GATT 指纹与自适应结果
+description: 未识别或待验证的耳机，反馈 GATT 指纹与自适应结果
 title: "[实机测试] "
 labels: ["help wanted"]
 body:
@@ -8,6 +8,7 @@ body:
       value: |
         本项目按蓝牙 GATT 服务指纹判定兼容性，不看型号名。
         命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯）理论上即可接入。
+        若耳机已被识别、但某几项功能不正常，请改用「Bug 反馈（受支持耳机）」模板。
 
   - type: markdown
     attributes:
@@ -29,6 +30,15 @@ body:
       placeholder: BT8952F / QCC5151
     validations:
       required: false
+
+  - type: input
+    id: module_version
+    attributes:
+      label: 模块版本
+      description: 应用「关于」页显示的版本号
+      placeholder: alpha2.52 (287)
+    validations:
+      required: true
 
   - type: markdown
     attributes:

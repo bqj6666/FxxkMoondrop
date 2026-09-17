@@ -1,14 +1,16 @@
-name: Bug 反馈
-description: 连接耳机后功能异常、弹窗异常或崩溃等问题
+name: Bug 反馈（受支持耳机）
+description: 已受支持耳机（指纹命中 GAIA / 9ECA0000）出现弹窗、控制、电量等功能异常
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
+        本模板用于**已受支持的耳机**：日志中 GATT 指纹命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯），
+        模块能识别、但某几项功能不正常。
+        若耳机**从未被识别**（不弹窗、日志无指纹命中），请改用「耳机实机测试反馈」模板。
         提交前请确认：模块已在 LSPosed 中启用，作用域已勾选 `com.google.android.gms`。
         English is fine, fill in what you can.
-        缺少版本号、机型或日志的报告无法定位，可能会被直接关闭。
 
   - type: markdown
     attributes:
@@ -40,15 +42,6 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: headset
-    attributes:
-      label: 耳机型号 / 主控
-      description: 主控不确定可只写型号（高通 QCC = GAIA，中科蓝讯 BT89xx = 9ECA）
-      placeholder: 水月雨 梦回2 / QCC5151
-    validations:
-      required: true
-
   - type: dropdown
     id: scope
     attributes:
@@ -63,17 +56,53 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 二、问题描述
+        ## 二、耳机与支持状态
+
+  - type: input
+    id: headset
+    attributes:
+      label: 耳机型号
+      placeholder: 水月雨 梦回2
+    validations:
+      required: true
+
+  - type: input
+    id: chip
+    attributes:
+      label: 主控（不确定可留空）
+      description: 高通 QCC 走 GAIA，中科蓝讯 BT89xx 走 9ECA
+      placeholder: QCC5151
+    validations:
+      required: false
+
+  - type: dropdown
+    id: support_state
+    attributes:
+      label: 该耳机的支持情况
+      description: 用来区分「曾经正常、现在坏了」和「一直不完整」
+      options:
+        - 曾经完全正常，某个版本后失效（回归）
+        - 一直部分功能不可用
+        - 一直无法控制，但模块能识别
+        - 不确定算不算受支持
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 三、问题描述
 
   - type: dropdown
     id: category
     attributes:
       label: 问题类型
       options:
-        - 弹窗（不弹 / 重复弹 / 图标或排版异常）
-        - 控制功能（ANC、手势等设置无效）
+        - 配对弹窗（不弹 / 重复弹 / 图标或排版异常）
+        - 连接与控制
         - 电量显示
-        - 连接稳定性（断连、连上无反应）
+        - ANC / 降噪
+        - 手势或按键
         - 应用崩溃或闪退
         - 权限相关
         - 其他
@@ -102,7 +131,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 三、日志与确认
+        ## 四、日志与确认
 
   - type: textarea
     id: logs
@@ -117,6 +146,8 @@ body:
     attributes:
       label: 确认
       options:
+        - label: 我确认该耳机属于已受支持范围（日志有 GAIA 或 9ECA0000 指纹）
+          required: true
         - label: 我已搜索过现有 issue，确认不是重复
           required: true
         - label: 我已附上日志导出文件
