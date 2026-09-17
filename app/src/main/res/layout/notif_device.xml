@@ -136,5 +136,32 @@
                 android:layout_marginTop="3dp"
                 android:maxLines="1" />
         </LinearLayout>
+
+        <!-- 3.0.3: 第 5 槽位。ANC_V2 设备（布丁）宣告 5 档时，旧实现只有 4 个槽，
+             排在末尾的档位会被静默挤掉（按 ACTION_ORDER 实际丢的是抗风）。 -->
+        <LinearLayout
+            android:id="@+id/notif_btn4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <ImageView
+                android:id="@+id/notif_btn4_icon"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:padding="8dp"
+                android:background="@drawable/notif_btn_circle"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/notif_btn4_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:layout_marginTop="3dp"
+                android:maxLines="1" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

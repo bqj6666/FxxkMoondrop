@@ -65,15 +65,21 @@ object DeviceNotif {
      */
     private val ACTION_ORDER = intArrayOf(1, 0, 2, 4, 5, 3)
 
-    /** 自定义布局里的 4 个按钮槽位（最多同时展示 4 个档位）。 */
+    /**
+     * 自定义布局里的按钮槽位（3.0.3: 4 -> 5）。
+     *
+     * ANC_V2 设备（布丁）现在宣告 5 档 [关,降,透,抗,自适应]，只有 4 个槽时
+     * 末尾档位会被静默挤掉（按 ACTION_ORDER 实际丢掉的是抗风）—— 属于比
+     * 「点了没反应」更难发现的静默丢档，故一并补齐。
+     */
     private val SLOT = intArrayOf(
-        R.id.notif_btn0, R.id.notif_btn1, R.id.notif_btn2, R.id.notif_btn3)
+        R.id.notif_btn0, R.id.notif_btn1, R.id.notif_btn2, R.id.notif_btn3, R.id.notif_btn4)
     private val SLOT_ICON = intArrayOf(
         R.id.notif_btn0_icon, R.id.notif_btn1_icon,
-        R.id.notif_btn2_icon, R.id.notif_btn3_icon)
+        R.id.notif_btn2_icon, R.id.notif_btn3_icon, R.id.notif_btn4_icon)
     private val SLOT_TEXT = intArrayOf(
         R.id.notif_btn0_text, R.id.notif_btn1_text,
-        R.id.notif_btn2_text, R.id.notif_btn3_text)
+        R.id.notif_btn2_text, R.id.notif_btn3_text, R.id.notif_btn4_text)
 
     // ── 对外入口（调用方只给 Context，数据统一从 GaiaBleClient 取，避免多处传参走样） ──
 
@@ -262,6 +268,10 @@ object DeviceNotif {
         0 -> R.drawable.ic_anc_off
         1 -> R.drawable.ic_anc_on
         2 -> R.drawable.ic_anc_passthrough
+        3 -> R.drawable.ic_air
+        // 3.0.3: 自适应(4) 暂与降噪同源（仓库无 Material Symbols 的 noise_aware 矢量，
+        // 不自造 path 以免画出错形状）；资源到位后只改这一行。
+        4 -> R.drawable.ic_anc_on
         else -> R.drawable.ic_air
     }
 

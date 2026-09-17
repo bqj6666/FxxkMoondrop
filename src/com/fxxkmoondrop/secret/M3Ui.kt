@@ -429,6 +429,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 0 -> R.drawable.ic_anc_off
                 1 -> R.drawable.ic_anc_on
                 2 -> R.drawable.ic_anc_passthrough
+                3 -> R.drawable.ic_air
+                // 3.0.3: 自适应(4)。仓库暂无 Material Symbols 的 noise_aware 矢量，
+                // 复用降噪图标而非自造 path；资源到位后只改这一行。
+                4 -> R.drawable.ic_anc_on
                 else -> R.drawable.ic_air
             }
             val d = moduleDrawable(c, res) ?: return null

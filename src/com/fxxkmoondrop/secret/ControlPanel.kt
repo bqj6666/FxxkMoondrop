@@ -81,7 +81,9 @@ object ControlPanel {
         bg.setCornerRadius(dp(28).toFloat())
         row.background = bg
 
-        for (m in 0..3) {
+        // 3.0.3: 4 -> 5 列。自适应列初始 GONE，由 refreshAncCard 按设备能力
+        // （modes 含 4 才显示）决定可见性，能力未知时不会凭空出现。
+        for (m in 0..4) {
             val fm = m
             val col = LinearLayout(ctx)
             col.orientation = LinearLayout.VERTICAL
@@ -117,6 +119,8 @@ object ControlPanel {
         // 抗风列可见性沿用用户设置（与主界面一致）
         val showWind = ctx.getSharedPreferences("cfg", 0).getBoolean("show_wind", true)
         row.getChildAt(3)?.visibility = if (showWind) View.VISIBLE else View.GONE
+        // 3.0.3: 自适应列初始隐藏，等能力上报（modes 含 4）后由 refreshAncCard 打开
+        row.getChildAt(4)?.visibility = View.GONE
 
         val card = LinearLayout(ctx)
         card.orientation = LinearLayout.VERTICAL
@@ -337,7 +341,7 @@ object ControlPanel {
     fun refreshAncCard(card: LinearLayout, mode: Int, modes: IntArray = IntArray(0)) {
         val row = card.findViewWithTag<LinearLayout>("fxxk_anc_row") ?: return
         val ctx = card.context
-        val modeOn = mode in 0..3
+        val modeOn = mode in 0..4
         // 第 1 项（设备库分配）：只显示**本设备真正支持**的档位。
         // modes 为空 = 能力未知 -> 全部显示（按型号档案兜底），不误伤未知型号。
         val knownModes = modes.isNotEmpty()
