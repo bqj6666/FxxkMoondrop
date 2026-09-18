@@ -156,19 +156,41 @@ class PermissionActivity : Activity() {
     }
 
     private fun applyResults(items: List<PermissionChecker.Item>) {
-        val missing = PermissionChecker.countMissing(items)
-        if (missing == 0) {
-            headTitle.text = Lang.t(this, "所有必要权限均已就绪", "All required permissions ready")
-            headSub.text = Lang.t(this, "系统运行环境正常", "System environment OK")
+        // 结论只看必要项：可选项目缺失只意味着增强项不可用，不算「权限没配好」。
+        val missingReq = PermissionChecker.countMissingRequired(items)
+        val missingOpt = PermissionChecker.countMissing(items) - missingReq
+        if (missingReq == 0) {
+            headTitle.text = Lang.t(this, "必要权限均已就绪", "Required permissions ready")
+            headSub.text = if (missingOpt > 0)
+                Lang.tf("另有 %d 项可选权限未就绪，不影响使用", "%d optional item(s) pending, usage unaffected", missingOpt)
+            else
+                Lang.t(this, "系统运行环境正常", "System environment OK")
             headIcon.setImageResource(R.drawable.ic_check)
             headIcon.imageTintList = ColorStateList.valueOf(pal.green)
         } else {
-            headTitle.text = Lang.tf("发现 %d 项权限缺失", "%d missing permission(s)", missing)
+            headTitle.text = Lang.tf("发现 %d 项必要权限缺失", "%d required item(s) missing", missingReq)
             headSub.text = Lang.t(this, "点击缺失项可直接修复", "Tap missing items to fix")
             headIcon.setImageResource(R.drawable.ic_warning)
             headIcon.imageTintList = ColorStateList.valueOf(pal.primary)
         }
         listBox.removeAllViews()
+
+        // 分两组呈现：必要在前，可选在后；哪一组为空就不出标题。
+        addGroup(Lang.t(this, "必要权限", "Required"), items.filter { it.required })
+        addGroup(Lang.t(this, "可选权限", "Optional"), items.filter { !it.required })
+    }
+
+    /** 一组权限：小标题 + 每行一张卡片。 */
+    private fun addGroup(title: String, items: List<PermissionChecker.Item>) {
+        if (items.isEmpty()) return
+        val label = TextView(this)
+        label.text = title
+        label.textSize = 13f
+        label.typeface = android.graphics.Typeface.create("sans-serif-medium",
+                android.graphics.Typeface.NORMAL)
+        label.setTextColor(pal.primary)
+        label.setPadding(dp(6), dp(14), dp(6), dp(6))
+        listBox.addView(label, LinearLayout.LayoutParams(-1, -2))
 
         val rows = ArrayList<View>()
         for (it in items) rows.add(makePermRow(it))
