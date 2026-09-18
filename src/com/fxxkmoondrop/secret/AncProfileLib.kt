@@ -203,6 +203,72 @@ object AncProfileLib {
     fun windSwitchAvailable(ancMode: Int): Boolean =
             ancMode == UI_MODE_ANC || ancMode == UI_MODE_WIND
 
+    // ==================== 空间音频 / 头部追踪（官方 Spatializer 代理） ====================
+
+    /**
+     * 空间音频开关的勾选态。
+     *
+     * 系统侧（官方 Spatializer，也就是官方那个开关所用的同一套 API）判定优先；
+     * 系统侧不可判定（spatializer 不可用 / 设备未路由，[systemOn] = null）时退回耳机端 GAIA 状态，
+     * 这样开关不会因为系统偶尔不认设备就显示成关。
+     */
+    fun spatialChecked(systemOn: Boolean?, gaiaOn: Boolean): Boolean = systemOn ?: gaiaOn
+
+    /**
+     * 官方那两个开关 -> 我们耳机端的三档（0 = 关闭追踪，1 = 30°，2 = 全方位）。
+     *
+     * 空间音频关 = 关闭追踪；空间音频开而头部追踪关 = 30°；两个都开 = 全方位。
+     * 官方只有两态，所以三档里的「30°」就是它的「空间音频开、头部追踪关」这一态。
+     */
+    fun trackingModeFor(spatialOn: Boolean, headTrackingOn: Boolean): Int =
+            if (!spatialOn) 0 else if (headTrackingOn) 2 else 1
+
+    /**
+     * 降噪各档按钮的出场顺序（通知栏按钮与 App 主界面按钮共用这一份）。
+     *
+     * 降噪 / 关闭 / 通透 打头，自适应、直播、抗风随后 —— 对齐官方 GFPS Hearable Controls 通知。
+     * 只描述顺序，不描述可用性：哪些档位真的出现仍由设备能力与显示偏好决定。
+     */
+    val ANC_UI_ORDER: IntArray = intArrayOf(1, 0, 2, 4, 5, 3)
+
+    /** 三档回读成官方头部追踪那个开关的勾选态：只有「全方位」算开启。 */
+    fun headTrackingOn(trackingMode: Int): Boolean = trackingMode == 2
+
+    /**
+     * 面板 / 官方行该读到的追踪档位（-1 = 不适用）。
+     *
+     * 不变量：空间音频开着时不会是「关闭追踪」—— 除非用户手动关过。
+     * 所以空间音频开而耳机端报 0 档时读作 30°（那是补档途中的瞬态，不该闪一下「关闭」）。
+     */
+    fun displayTrackingMode(spatialOn: Boolean, gaiaTracking: Int, userClosedTracking: Boolean): Int =
+            when {
+                !spatialOn -> -1
+                gaiaTracking !in 0..2 -> -1
+                gaiaTracking == 0 && userClosedTracking -> 0
+                gaiaTracking == 0 -> trackingModeFor(spatialOn = true, headTrackingOn = false)
+                else -> gaiaTracking
+            }
+
+    /**
+     * 这次三档点击算不算「用户手动关掉追踪」。
+     *
+     * 只有「本来就在 30° / 全方位，用户自己切到关闭追踪」才算 —— 之后不再自动补档。
+     * 本来就已是关闭状态时再点一次关闭是无操作，不算表态，别把默认状态当成用户的选择。
+     */
+    fun isManualTrackingClose(pickedMode: Int, currentMode: Int): Boolean =
+            pickedMode == 0 && currentMode != 0
+
+    /**
+     * 打开空间音频后，耳机端报来的追踪模式是「关闭」时要补上的档位；null = 不动。
+     *
+     * 打开空间音频就该有一档追踪：此刻官方头部追踪开关必然是关的（耳机端就是 0 档），
+     * 对应我们的 30°。用户在软件内自己把追踪关掉过（[userClosedTracking]）则尊重他的选择，不补。
+     */
+    fun correctedTrackingMode(spatialOn: Boolean, gaiaTracking: Int, userClosedTracking: Boolean): Int? =
+            if (spatialOn && gaiaTracking == 0 && !userClosedTracking)
+                trackingModeFor(spatialOn = true, headTrackingOn = false)
+            else null
+
     /**
      * alpha2.32: 扩展设备控制（DC）能力档案。
      * 按型号记录空间音频/增益/LED 支持情况。

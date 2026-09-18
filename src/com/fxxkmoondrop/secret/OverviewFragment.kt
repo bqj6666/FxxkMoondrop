@@ -287,8 +287,12 @@ class OverviewFragment : Fragment() {
         ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
         // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
         ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
-        for (m in 0..4) {
-            val fm = m
+        // 出场顺序与通知栏按钮同源（[AncProfileLib.ANC_UI_ORDER]）：降噪 / 关闭 / 通透 打头，
+        // 自适应、抗风随后。数组仍按档位 id 索引，这里只改列的先后。
+        // 直播(5) 在主界面没有槽位，仍只在通知里出现。
+        for (modeId in AncProfileLib.ANC_UI_ORDER) {
+            if (modeId > 4) continue
+            val fm = modeId
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
@@ -313,7 +317,7 @@ class OverviewFragment : Fragment() {
                 ancMode = fm
                 updateAncStatus()
             }
-            ancBtns!![m] = holder
+            ancBtns!![fm] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
             // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
@@ -404,7 +408,7 @@ class OverviewFragment : Fragment() {
             holder.addView(icon, il)
             holder.tag = "dc_btn_spatial_" + tm
             holder.setOnClickListener {
-                DeviceControlBridge.setTrackingMode(tm)
+                DeviceControlBridge.setTrackingModeByUser(tm)
                 refreshDcHighlight()
             }
             val sz = dp(48)

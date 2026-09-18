@@ -726,9 +726,6 @@ class FastPairHookEntry {
             bar.tag = "fxxk_mode_bar"
             bar.orientation = android.widget.LinearLayout.HORIZONTAL
             bar.gravity = android.view.Gravity.CENTER
-            bar.addView(buildModeItem(act, MODE_OFF, if (zh) "关闭" else "Off"))
-            bar.addView(buildModeItem(act, MODE_ANC, if (zh) "降噪" else "ANC"))
-            bar.addView(buildModeItem(act, MODE_TRANS, if (zh) "透传" else "Transparency"))
             var showWind = true
             try {
                 val cur = act.applicationContext.contentResolver.query(
@@ -744,12 +741,22 @@ class FastPairHookEntry {
             } catch (t: Throwable) {
                 Log.d(TAG, "[FastPairHook] show_wind provider read fail: " + t)
             }
-            if (showWind) bar.addView(buildModeItem(act, MODE_WIND, if (zh) AncProfileLib.ANC_MODE_NAMES[3] else "Wind"))
-            // 3.0.3: 自适应档位只在设备真的支持时出现（sUiModes 来自 App 能力探测的 ui_modes，
-            // 布丁等 ANC_V2 设备含 4；只有 4 档能力的设备不会多出空按钮）。
-            if (sUiModes.contains(MODE_ADAPT)) {
-                bar.addView(buildModeItem(act, MODE_ADAPT,
-                        if (zh) AncProfileLib.ANC_MODE_NAMES_FULL[4] else "Adaptive"))
+            // 出场顺序与通知栏、App 主界面同源（[AncProfileLib.ANC_UI_ORDER]）：
+            // 降噪 / 关闭 / 透传 打头，自适应、抗风随后。弹窗没有直播档位，跳过。
+            // 只描述顺序：抗风仍受「显示抗风档」偏好门控，自适应仍只在设备真支持时出现
+            // （sUiModes 来自 App 能力探测的 ui_modes，布丁等 ANC_V2 设备含 4）。
+            for (modeId in AncProfileLib.ANC_UI_ORDER) {
+                val name = when (modeId) {
+                    MODE_OFF -> if (zh) "关闭" else "Off"
+                    MODE_ANC -> if (zh) "降噪" else "ANC"
+                    MODE_TRANS -> if (zh) "透传" else "Transparency"
+                    MODE_WIND -> if (zh) AncProfileLib.ANC_MODE_NAMES[3] else "Wind"
+                    MODE_ADAPT -> if (zh) AncProfileLib.ANC_MODE_NAMES_FULL[4] else "Adaptive"
+                    else -> continue
+                }
+                if (modeId == MODE_WIND && !showWind) continue
+                if (modeId == MODE_ADAPT && !sUiModes.contains(MODE_ADAPT)) continue
+                bar.addView(buildModeItem(act, modeId, name))
             }
             sBarUiModesSig = sUiModes.joinToString(",")
             val prof = resolveScreenProfile(act)

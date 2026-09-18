@@ -4,6 +4,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -171,4 +172,92 @@ class AncProfileLibTest {
         assertTrue(AncProfileLib.BASIC_UI_MODES.contains(AncProfileLib.UI_MODE_ANC))
         assertTrue(AncProfileLib.BASIC_UI_MODES.contains(AncProfileLib.UI_MODE_WIND))
     }
+
+    // ==================== 空间音频代理（官方 Spatializer 联动） ====================
+
+    /** 系统判定优先；系统不可判定（null）时退回耳机端 GAIA 状态，不能把开关显示成关。 */
+    @Test
+    fun spatialChecked_prefersSystemThenFallsBackToGaia() {
+        assertTrue(AncProfileLib.spatialChecked(systemOn = true, gaiaOn = false))
+        assertFalse(AncProfileLib.spatialChecked(systemOn = false, gaiaOn = true))
+        assertTrue(AncProfileLib.spatialChecked(systemOn = null, gaiaOn = true))
+        assertFalse(AncProfileLib.spatialChecked(systemOn = null, gaiaOn = false))
+    }
+
+    /** 三档回读：只有「全方位」算官方头部追踪开启。 */
+    @Test
+    fun headTrackingOn_onlyFullMode() {
+        assertFalse(AncProfileLib.headTrackingOn(0))
+        assertFalse(AncProfileLib.headTrackingOn(1))
+        assertTrue(AncProfileLib.headTrackingOn(2))
+    }
+
+    /** 通知栏与主界面共用的按钮顺序：降噪 / 关闭 / 通透 打头，且每个档位只出现一次。 */
+    @Test
+    fun ancUiOrder_startsWithAncOffTransparency() {
+        assertEquals(listOf(1, 0, 2), AncProfileLib.ANC_UI_ORDER.take(3).toList())
+        // 六档都要在表里，且不重复（漏一档会表现为「某档按钮静默消失」）
+        assertEquals((0..5).toList(), AncProfileLib.ANC_UI_ORDER.sorted().toList())
+        assertEquals(6, AncProfileLib.ANC_UI_ORDER.distinct().size)
+    }
+
+    /** 不变量：空间音频开着时读不到「关闭追踪」，除非用户手动关过。 */
+    @Test
+    fun displayTrackingMode_neverClosedWhileSpatialOn() {
+        // 空间音频开 + 耳机端报 0 档 = 补档途中的瞬态，读作 30°，不闪「关闭」
+        assertEquals(1, AncProfileLib.displayTrackingMode(
+                spatialOn = true, gaiaTracking = 0, userClosedTracking = false))
+        // 用户手动关过的，如实读作关闭
+        assertEquals(0, AncProfileLib.displayTrackingMode(
+                spatialOn = true, gaiaTracking = 0, userClosedTracking = true))
+        // 已有档位照读
+        assertEquals(2, AncProfileLib.displayTrackingMode(
+                spatialOn = true, gaiaTracking = 2, userClosedTracking = false))
+        // 空间音频关 / 档位未知：不适用
+        assertEquals(-1, AncProfileLib.displayTrackingMode(
+                spatialOn = false, gaiaTracking = 0, userClosedTracking = false))
+        assertEquals(-1, AncProfileLib.displayTrackingMode(
+                spatialOn = true, gaiaTracking = -1, userClosedTracking = false))
+    }
+
+    /** 只有「本来有档位、用户自己切到关闭」才算手动关；本来就关着再点关闭不算。 */
+    @Test
+    fun isManualTrackingClose_onlyWhenSwitchedFromNonZero() {
+        // 从 30° / 全方位切到关闭 = 用户手动关
+        assertTrue(AncProfileLib.isManualTrackingClose(pickedMode = 0, currentMode = 1))
+        assertTrue(AncProfileLib.isManualTrackingClose(pickedMode = 0, currentMode = 2))
+        // 本来就关着（或状态未知）时点关闭：不算用户表态
+        assertFalse(AncProfileLib.isManualTrackingClose(pickedMode = 0, currentMode = 0))
+        // 点非 0 档从来不算「关」
+        assertFalse(AncProfileLib.isManualTrackingClose(pickedMode = 1, currentMode = 2))
+        assertFalse(AncProfileLib.isManualTrackingClose(pickedMode = 2, currentMode = 1))
+    }
+
+    /** 打开空间音频时耳机端报「关闭追踪」要补档；用户手动关过则不动。 */
+    @Test
+    fun correctedTrackingMode_defaultsToThirtyDegrees() {
+        // 空间音频开着 + 耳机端 0 档 + 用户没手动关过 = 补 30°
+        assertEquals(1, AncProfileLib.correctedTrackingMode(
+                spatialOn = true, gaiaTracking = 0, userClosedTracking = false))
+        // 用户在软件内自己关掉的，尊重不动
+        assertNull(AncProfileLib.correctedTrackingMode(
+                spatialOn = true, gaiaTracking = 0, userClosedTracking = true))
+        // 空间音频没开，或耳机端本来就有档位：都不动
+        assertNull(AncProfileLib.correctedTrackingMode(
+                spatialOn = false, gaiaTracking = 0, userClosedTracking = false))
+        assertNull(AncProfileLib.correctedTrackingMode(
+                spatialOn = true, gaiaTracking = 1, userClosedTracking = false))
+        assertNull(AncProfileLib.correctedTrackingMode(
+                spatialOn = true, gaiaTracking = 2, userClosedTracking = false))
+    }
+
+    /** 官方两个开关 -> 我们三档：空间音频关 = 关追踪，开 + 头追关 = 30°，两个都开 = 全方位。 */
+    @Test
+    fun trackingModeFor_mapsOfficialSwitchesToThreeLevels() {
+        assertEquals(0, AncProfileLib.trackingModeFor(spatialOn = false, headTrackingOn = false))
+        assertEquals(0, AncProfileLib.trackingModeFor(spatialOn = false, headTrackingOn = true))
+        assertEquals(1, AncProfileLib.trackingModeFor(spatialOn = true, headTrackingOn = false))
+        assertEquals(2, AncProfileLib.trackingModeFor(spatialOn = true, headTrackingOn = true))
+    }
+
 }

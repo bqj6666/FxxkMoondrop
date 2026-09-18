@@ -253,6 +253,244 @@ class XposedEntry : XposedModule() {
         }
     }
 
+    /**
+     * 让官方详情页自己那两行「空间音频 / 头部追踪」显示出来。
+     *
+     * 官方 BluetoothDetailsSpatialAudioController 用系统 Spatializer 判定可用性：本机上
+     * getImmersiveAudioLevel()==0、isAvailableForDevice 为假，于是它把自己刚建好的行又移除，
+     * 界面上就只剩我们自绘的控件。这里只放开「判定」这一步 —— 行仍由官方组件渲染与维护，
+     * 不动系统能力、不改其它进程；勾选态与点击随后接到耳机端（GAIA）。
+     */
+    private fun hookOfficialSpatialRows(cl: ClassLoader) {
+        try {
+            val cls = Class.forName(
+                    "com.android.settings.bluetooth.BluetoothDetailsSpatialAudioController", true, cl)
+            val m = cls.getDeclaredMethod("isAvailable")
+            hook(m).intercept { chain ->
+                val cached = HookHelper.getObjectField(chain.thisObject, "mCachedDevice")
+                if (!AncProfileLib.isMoondrop(HookHelper.callMethod(cached, "getName") as? String)) {
+                    // 不是我们的耳机（含系统原生就支持空间音频的他牌耳机）：一切交还官方，
+                    // 否则会把人家本来能用的那两个开关一起弄没。
+                    officialSpatialController = null
+                    officialTakeoverAddr = null
+                    return@intercept chain.proceed()
+                }
+                // 是我们的耳机：官方行是否登场由我们说了算（本机系统侧永远判定不可用）。
+                officialSpatialController = chain.thisObject
+                officialTakeoverAddr = HookHelper.callMethod(cached, "getAddress") as? String
+                true
+            }
+            Log.d(TAG, "official spatial rows: isAvailable hooked")
+        } catch (th: Throwable) {
+            Log.d(TAG, "hook official spatial isAvailable failed: " + th)
+        }
+        try {
+            val sc = Class.forName("android.media.Spatializer", true, cl)
+            // AudioDeviceAttributes 是 @SystemApi，编译期不可见，按名字加载
+            val devCls = Class.forName("android.media.AudioDeviceAttributes", true, cl)
+            // 可用性：官方的两道门禁都放开，官方那两行才会被创建并保留。
+            val m1 = sc.getDeclaredMethod("isAvailableForDevice", devCls)
+            hook(m1).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[0])) return@intercept chain.proceed()
+                lastSpatialDevice = chain.args[0]
+                chain.proceed()
+                true
+            }
+            val m2 = sc.getDeclaredMethod("hasHeadTracker", devCls)
+            hook(m2).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[0])) return@intercept chain.proceed()
+                chain.proceed()
+                true
+            }
+            // 勾选态：官方读的是系统「已兼容设备」列表，本机永远是空的。
+            // 直接按耳机端（GAIA）的实际状态回给它 —— 官方那个开关就跟随耳机。
+            val m3 = sc.getDeclaredMethod("getCompatibleAudioDevices")
+            hook(m3).intercept { chain ->
+                // 无参方法只能认最近一次问过的设备；不是我们的耳机就交还官方那本账。
+                val dev = lastSpatialDevice ?: return@intercept chain.proceed()
+                if (!oursSpatialDevice(dev)) return@intercept chain.proceed()
+                val out = java.util.ArrayList<Any>()
+                if (spatialOnForOfficial()) out.add(dev)
+                out
+            }
+            // 点击：官方照旧调系统（本机这一步没有实际效果），我们同时把耳机端命令发出去：
+            // 空间音频开 = 30°（头部追踪未开），关 = 关闭追踪。
+            val m4 = sc.getDeclaredMethod("addCompatibleAudioDevice", devCls)
+            hook(m4).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[0])) return@intercept chain.proceed()
+                lastSpatialDevice = chain.args[0]
+                pushSpatialCommand(DeviceDetailsPanel.Command.SetSpatialEnabled(true))
+                // 打开空间音频就补一档（默认 30°）；用户手动关过追踪则不动，免得顶掉他的选择。
+                if (!userClosedTracking(settingsCtx)) {
+                    pushSpatialCommand(DeviceDetailsPanel.Command.SetTrackingMode(
+                            AncProfileLib.trackingModeFor(spatialOn = true, headTrackingOn = false)))
+                    lastDcState = lastDcState?.copy(spatialOn = true, spatialUiMode = 1)
+                } else {
+                    lastDcState = lastDcState?.copy(spatialOn = true)
+                }
+                chain.proceed()
+            }
+            val m5 = sc.getDeclaredMethod("removeCompatibleAudioDevice", devCls)
+            hook(m5).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[0])) return@intercept chain.proceed()
+                pushSpatialCommand(DeviceDetailsPanel.Command.SetSpatialEnabled(false))
+                pushSpatialCommand(DeviceDetailsPanel.Command.SetTrackingMode(
+                        AncProfileLib.trackingModeFor(spatialOn = false, headTrackingOn = false)))
+                lastDcState = lastDcState?.copy(spatialOn = false, spatialUiMode = 0)
+                chain.proceed()
+            }
+            // 官方头部追踪（开/关）接到我们的三档：开 = 全方位，关 = 30°（空间音频仍开着）。
+            val m6 = sc.getDeclaredMethod("isHeadTrackerEnabled", devCls)
+            hook(m6).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[0])) return@intercept chain.proceed()
+                trackingOnForOfficial()
+            }
+            val m7 = sc.getDeclaredMethod("setHeadTrackerEnabled", java.lang.Boolean.TYPE, devCls)
+            hook(m7).intercept { chain ->
+                if (!oursSpatialDevice(chain.args[1])) return@intercept chain.proceed()
+                val on = chain.args[0] as? Boolean ?: false
+                val spatialOn = spatialOnForOfficial()
+                pushSpatialCommand(DeviceDetailsPanel.Command.SetTrackingMode(
+                        AncProfileLib.trackingModeFor(spatialOn, on)))
+                lastDcState = lastDcState?.copy(
+                        spatialUiMode = AncProfileLib.trackingModeFor(spatialOn, on))
+                chain.proceed()
+            }
+            Log.d(TAG, "official spatial rows: Spatializer state/click hooked")
+        } catch (th: Throwable) {
+            Log.d(TAG, "hook Spatializer availability failed: " + th)
+        }
+    }
+
+
+    /**
+     * 官方那两行的露面 / 可点与否由耳机端（GAIA）说了算：断开或未就绪时它们不该出现。
+     *
+     * 官方 controller 自己会按系统能力刷新这两行，所以这里拦在「读」的时候，
+     * 官方怎么设都会被我们按耳机端状态覆盖掉，不会出现两边打架的情况。
+     */
+    private fun hookOfficialRowGating(cl: ClassLoader) {
+        try {
+            val pCls = Class.forName("androidx.preference.Preference", true, cl)
+            for (name in arrayOf("isVisible", "isEnabled")) {
+                val m = pCls.getDeclaredMethod(name)
+                hook(m).intercept { chain ->
+                    val key = HookHelper.callMethod(chain.thisObject, "getKey") as? String
+                    if (officialTakeoverAddr != null &&
+                            (key == "spatial_audio" || key == "head_tracking")) {
+                        officialRowUsable(key)
+                    } else {
+                        // 别台设备（他牌耳机）的两行原样交还官方，我们不插手。
+                        chain.proceed()
+                    }
+                }
+            }
+            Log.d(TAG, "official spatial rows: gating hooked")
+        } catch (th: Throwable) {
+            Log.d(TAG, "hook official row gating failed: " + th)
+        }
+    }
+
+    /** 官方那两行认出来的系统音频设备（用于把耳机端状态当成官方勾选态回给官方）。 */
+    @Volatile private var lastSpatialDevice: Any? = null
+
+    /**
+     * 当前详情页在看的设备地址；非 null 才说明「这台是我们的耳机、这两行归我们管」。
+     *
+     * 详情页每被问一次 BluetoothDetailsSpatialAudioController.isAvailable 就重设一次，
+     * 所以他牌耳机的页面一打开，接管立刻失效、一切按官方原样走。
+     */
+    @Volatile private var officialTakeoverAddr: String? = null
+
+    /**
+     * 这个系统音频设备是不是我们正在接管的那台耳机。
+     *
+     * 官方是用「设备地址」构造这个对象的（android.media.AudioDeviceAttributes 三参构造只存地址，
+     * 名字那栏是空串），所以按地址比对；拿不到地址就当作不是，宁可交还官方也不误伤。
+     */
+    private fun oursSpatialDevice(dev: Any?): Boolean {
+        if (dev == null) return false
+        val take = officialTakeoverAddr ?: return false
+        return try {
+            (HookHelper.callMethod(dev, "getAddress") as? String)
+                    ?.equals(take, ignoreCase = true) == true
+        } catch (th: Throwable) {
+            false
+        }
+    }
+
+    /** 最近一次读到的耳机端状态（官方行点击后要按它决定档位，所以缓存下来）。 */
+    @Volatile private var lastDcState: ControlPanel.State? = null
+
+    /**
+     * 用户在软件内手动把追踪模式关过吗（跨进程读 App 那份 cfg，写法同 [langZh]）。
+     *
+     * 手动关过就不再自动补档，否则官方开关一开空间音频就会把用户选的「关闭追踪」顶掉。
+     */
+    private fun userClosedTracking(ctx: Context?): Boolean {
+        return try {
+            val cur = ctx?.contentResolver?.query(android.net.Uri.parse(
+                    "content://com.fxxkmoondrop.secret.prefs/track_user_off"),
+                    null, null, null, null)
+            var v = 0
+            if (cur != null) {
+                try { if (cur.moveToFirst()) v = cur.getInt(cur.getColumnIndexOrThrow("_value")) }
+                finally { cur.close() }
+            }
+            v == 1
+        } catch (t: Throwable) {
+            false
+        }
+    }
+
+    /** Settings 侧最近的 Context（Spatializer 的 hook 里要往 Moondrop App 发命令）。 */
+    @Volatile private var settingsCtx: Context? = null
+
+    /** 官方那两行的 controller（refresh 一下就能同步勾选态与追踪行显隐）。 */
+    @Volatile private var officialSpatialController: Any? = null
+
+    /** 官方开关该显示的勾选态：系统侧可判定就听官方的，否则按耳机端实际状态。 */
+    private fun spatialOnForOfficial(): Boolean {
+        val st = lastDcState ?: return false
+        return AncProfileLib.spatialChecked(null, st.spatialOn)
+    }
+
+    /** 官方头部追踪该显示的勾选态：只有「全方位」档算开启。 */
+    private fun trackingOnForOfficial(): Boolean {
+        val st = lastDcState ?: return false
+        return AncProfileLib.headTrackingOn(st.spatialUiMode)
+    }
+
+    /**
+     * 官方那两行能不能露面 / 能不能点：耳机端（GAIA）就绪才行。
+     *
+     * 耳机断开或 GAIA 还没认到我们耳机时，点了也只会发出一条没人接的命令，
+     * 所以直接不显示、也不可点；就绪后它们才出现。
+     */
+    private fun officialRowUsable(key: String?): Boolean {
+        val st = lastDcState ?: return false
+        if (!st.gaiaReady || !st.connected) return false
+        return if (key == "head_tracking") st.spatialOn else true
+    }
+
+    /** 让官方 controller 重读一次状态，勾选态与追踪行的显隐就跟着我们喂的状态走。 */
+    private fun refreshOfficialRows() {
+        val ctrl = officialSpatialController ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try { HookHelper.callMethod(ctrl, "refresh") }
+            catch (th: Throwable) { Log.d(TAG, "official rows refresh failed: " + th) }
+        }
+    }
+
+    /** 官方行上的操作转成耳机端命令（复用面板同一条通道）。 */
+    private fun pushSpatialCommand(cmd: DeviceDetailsPanel.Command) {
+        val ctx = settingsCtx
+                ?: (HookHelper.callMethod(lastDetailFragment, "getContext") as? Context)
+                ?: return
+        try { sendDeviceCommand(ctx, cmd) } catch (th: Throwable) { Log.d(TAG, "push cmd failed: " + th) }
+    }
+
+
     /** alpha2.38.10+: Settings 进程跨进程只读语言偏好（与 FastPairHookEntry.langZh 同源逻辑）。 */
     private fun langZh(ctx: Context): Boolean {
         return try {
@@ -347,13 +585,15 @@ class XposedEntry : XposedModule() {
                                         override fun onChange(selfChange: Boolean) {
                                             try {
                                                 val st = fetchDcState(ctx, deviceName)
+                                                refreshOfficialRows()
                                                 if (st != null) {
                                                     // 官方重排会挪行、旧行被回收，同一页可能残留多份面板：
                                                     // 闭包里那份可能已脱离视图树，必须从当前页面的窗口根遍历刷全。
                                                     val pageRoot = (HookHelper.callMethod(
                                                             lastDetailFragment, "getView") as? android.view.View)
                                                             ?.rootView ?: itemView.rootView
-                                                    DeviceDetailsPanel.refreshAll(pageRoot, st)
+                                                    DeviceDetailsPanel.refreshAll(
+                                                            pageRoot, st)
                                                 }
                                                 // 连接/就绪状态变了：切片与官方加载行跟着切换
                                                 applyControlSliceState(cl, ctx, lastDetailFragment)
@@ -437,6 +677,47 @@ class XposedEntry : XposedModule() {
             } catch (th: Throwable) {
                 Log.d(TAG, "updatePreferenceOrder hook failed: $th")
             }
+            // 官方那两行就是我们的开关本体：点完让官方 controller 重读一次状态（它会来问我们
+            // 耳机端的实际状态），官方那个开关的勾选态与头部追踪行才会立刻跟上。
+            try {
+                val spCls = Class.forName(
+                        "com.android.settings.bluetooth.BluetoothDetailsSpatialAudioController", false, cl)
+                val clickM = spCls.declaredMethods.firstOrNull { it.name == "onPreferenceClick" }
+                if (clickM != null) {
+                    hook(clickM).intercept { chain ->
+                        val key = HookHelper.callMethod(chain.args[0], "getKey") as? String
+                        // 他牌耳机（系统原生就支持空间音频的那些）的点击原样交还官方，
+                        // 否则会被我们下面那句当成「没就绪」直接吞掉，开关点了没反应。
+                        if (officialTakeoverAddr == null) return@intercept chain.proceed()
+                        if (!officialRowUsable(key)) return@intercept false
+                        val r = chain.proceed()
+                        try {
+                            val frag = lastDetailFragment
+                            if (frag != null) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    try {
+                                        // 官方自己那套系统读写在本机没有效果，勾选态由我们喂，
+                                        // 所以点完让它重读一次，行的状态立刻对齐耳机端。
+                                        officialSpatialController = chain.thisObject
+                                        refreshOfficialRows()
+                                        val ctx = HookHelper.callMethod(frag, "getContext") as? Context
+                                        val st = if (ctx != null) fetchDcState(ctx, detailDeviceName(frag)) else null
+                                        if (ctx != null && st != null) {
+                                            val pageRoot = (HookHelper.callMethod(frag, "getView")
+                                                    as? android.view.View)?.rootView
+                                            DeviceDetailsPanel.refreshAll(pageRoot, st)
+                                        }
+                                    } catch (th: Throwable) { Log.d(TAG, "official spatial refresh failed: $th") }
+                                }
+                            }
+                        } catch (th: Throwable) { Log.d(TAG, "official spatial click sync failed: $th") }
+                        r
+                    }
+                    Log.d(TAG, "hookDeviceDetailsPanel: official spatial audio click hooked")
+                }
+            } catch (th: Throwable) { Log.d(TAG, "official spatial hook failed: $th") }
+            hookOfficialSpatialRows(cl)
+            hookOfficialRowGating(cl)
             Log.d(TAG, "hookDeviceDetailsPanel: BluetoothDeviceDetailsFragment hooked")
         } catch (th: Throwable) {
             Log.d(TAG, "hookDeviceDetailsPanel failed: $th")
@@ -455,6 +736,11 @@ class XposedEntry : XposedModule() {
         // 「耳机控制」切片行：官方没给它设 URI，本 ROM 也没设，内容为空时会渲染成空行。
         // 这里用设备自带元数据里的切片地址挂上官方控制器，挂得上才有内容、才放它出来。
         val ctx = HookHelper.callMethod(thisObj, "getContext") as? Context
+        if (ctx != null) {
+            settingsCtx = ctx
+            fetchDcState(ctx, detailDeviceName(thisObj))
+            refreshOfficialRows()
+        }
         val sliceUri = controlSliceUri(cl, ctx, detailDevice(thisObj))
         val screenObj = HookHelper.callMethod(thisObj, "getPreferenceScreen")
         if (sliceUri != null) attachControlSlice(cl, ctx, screenObj, sliceUri)
@@ -896,7 +1182,7 @@ class XposedEntry : XposedModule() {
                 }
             }
             val profile = AncProfileLib.resolveDc(deviceName)
-            return ControlPanel.State(
+            val st = ControlPanel.State(
                 connected = connected == 1,
                 gaiaReady = gaia == 1,
                 modes = modes,
@@ -910,6 +1196,8 @@ class XposedEntry : XposedModule() {
                 hasGain = profile.hasGain,
                 hasLed = profile.hasLed
             )
+            lastDcState = st
+            return st
         } catch (th: Throwable) {
             Log.e(TAG, "fetchDcState error", th)
             return null

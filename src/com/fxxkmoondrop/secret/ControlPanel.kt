@@ -47,6 +47,8 @@ object ControlPanel {
         val ancMode: Int,
         val spatialOn: Boolean,
         val spatialUiMode: Int,
+        /** 系统侧（官方 Spatializer，官方那个开关同一套 API）空间音频状态：-1 未知 / 0 关 / 1 开。官方判定优先。 */
+        /** 系统侧头部追踪状态：-1 未知 / 0 关 / 1 开。官方没有头部追踪能力时也是 -1。 */
         val gainLevel: Int,
         val ledOn: Boolean,
         val hasSpatial: Boolean,
@@ -170,7 +172,7 @@ object ControlPanel {
         try { sw.isChecked = checked } finally { syncing.remove(sw) }
     }
 
-    /** 构建功能控制面板卡片（空间音频 / 追踪 / 增益 / 指示灯）。返回根 LinearLayout。 */
+    /** 构建功能控制面板卡片（增益 / 指示灯；空间音频与头部追踪由官方详情页自己那两行承担）。 */
     fun buildDcCard(
         ctx: Context,
         pal: ThemeUtil.Palette,
@@ -198,72 +200,6 @@ object ControlPanel {
         bg.setCornerRadius(dp(28).toFloat())
         card.background = bg
 
-        // 空间音频行：与抗风共用同一个开关行构件，样式一致。
-        val spatialRow = buildSwitchRow(ctx, pal, "dc_spatial_row", "dc_spatial_switch",
-                Lang.t(ctx, "空间音频", "Spatial Audio"))
-        // alpha2.53: 直接复用设置 App 原版开关控件。
-        //
-        // 踩过的两个坑：
-        //  1) 直接 new MaterialSwitch(ctx) 会崩 —— Settings 的活动主题不是 Theme.AppCompat，
-        //     构造时抛 IllegalArgumentException，整个面板注入失败。
-        //  2) 退回 android.widget.Switch 不再崩，但那是 AOSP 旧样式，与设置页其余开关不一致。
-        // Settings 自己的做法是 inflate layout/preference_widget_switch_compat，该布局里的
-        // MaterialSwitch 带 android:theme="@style/Theme.Material3.DynamicColors.DayNight" 覆盖，
-        // 所以能正常构造。此处照搬同一路径 —— 拿到的就是设置页原版开关。
-        spatialRow.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
-                ?.setOnCheckedChangeListener { v, isChecked ->
-                    if (syncing.containsKey(v)) return@setOnCheckedChangeListener
-                    callbacks.setSpatialEnabled(isChecked)
-                }
-        card.addView(spatialRow, LinearLayout.LayoutParams(-1, -2))
-
-        // 追踪子模式行
-        card.addView(spacer(ctx, dp(6)))
-        val trackingRow = LinearLayout(ctx)
-        trackingRow.orientation = LinearLayout.HORIZONTAL
-        trackingRow.gravity = Gravity.CENTER_VERTICAL
-        trackingRow.tag = "dc_tracking_row"
-        val tLabel = TextView(ctx)
-        tLabel.text = Lang.t(ctx, "追踪模式", "Tracking Mode")
-        tLabel.textSize = 11f
-        tLabel.setTextColor(onContainerC)
-        trackingRow.addView(tLabel, LinearLayout.LayoutParams(-2, -2))
-        trackingRow.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-        for (tm in 0..2) {
-            val col = LinearLayout(ctx)
-            col.orientation = LinearLayout.VERTICAL
-            col.gravity = Gravity.CENTER
-            val holder = FrameLayout(ctx)
-            val b = View(ctx)
-            b.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerCol)
-            b.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(b, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(ctx)
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(ctx, 0, tm, dp(22), onContainerC))
-            val il = FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
-            holder.tag = "dc_btn_spatial_" + tm
-            holder.setOnClickListener { callbacks.setTrackingMode(tm) }
-            val sz = dp(48)
-            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
-            val lbl = TextView(ctx)
-            lbl.text = AncProfileLib.trackingLabels(ctx)[tm]
-            lbl.textSize = 10f
-            lbl.gravity = Gravity.CENTER
-            lbl.isSingleLine = true
-            lbl.setTextColor(onContainerC)
-            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
-            val lp = LinearLayout.LayoutParams(-2, -2)
-            lp.setMargins(dp(4), 0, dp(4), 0)
-            trackingRow.addView(col, lp)
-        }
-        card.addView(trackingRow, LinearLayout.LayoutParams(-1, -2))
 
         // 增益行
         card.addView(spacer(ctx, dp(8)))
@@ -370,31 +306,19 @@ object ControlPanel {
     fun refreshDcCard(card: LinearLayout, state: State, profile: AncProfileLib.DcProfile) {
         val ctx = card.context
         val dp = { px: Int -> (px * ctx.resources.displayMetrics.density).toInt() }
-        val spatialRow = card.findViewWithTag<LinearLayout>("dc_spatial_row")
-        val trackingRow = card.findViewWithTag<LinearLayout>("dc_tracking_row")
         val gainRow = card.findViewWithTag<LinearLayout>("dc_gain_row")
         val ledRow = card.findViewWithTag<LinearLayout>("dc_led_row")
 
         // 设备详情页：未连接也显示功能卡（按型号档案），未连接时按钮置灰；主界面仍为“未连接隐藏”。
-        spatialRow?.visibility = if (profile.hasSpatial) View.VISIBLE else View.GONE
-        trackingRow?.visibility = if (profile.hasSpatial) View.VISIBLE else View.GONE
+        // 空间音频与头部追踪这两行已经交回官方详情页自己渲染（见 XposedEntry.hookOfficialSpatialRows），
+        // 卡片里只留抗风 / 增益 / 指示灯。
         gainRow?.visibility = if (profile.hasGain) View.VISIBLE else View.GONE
         ledRow?.visibility = if (profile.hasLed) View.VISIBLE else View.GONE
 
         // 抗风那一行也在这个卡里：它可见时整卡就得在（例如只支持抗风、不支持空间音频的机型）。
         val windVisible = card.findViewWithTag<LinearLayout>(ROW_WIND)?.visibility == View.VISIBLE
-        val anyVisible = profile.hasSpatial || profile.hasGain || profile.hasLed || windVisible
+        val anyVisible = profile.hasGain || profile.hasLed || windVisible
         card.visibility = if (anyVisible) View.VISIBLE else View.GONE
-
-        val spSwitch = card.findViewWithTag<android.widget.CompoundButton>("dc_spatial_switch")
-        spSwitch?.let { sw ->
-            // 第 2 项：未就绪（GAIA 未完成服务发现）时完全禁用，避免点了没反应
-            sw.isEnabled = state.gaiaReady
-            sw.isClickable = state.gaiaReady
-            sw.isFocusable = state.gaiaReady
-            sw.alpha = if (state.gaiaReady) 1f else 0.4f
-            setCheckedSilently(sw, state.spatialOn)
-        }
 
         // alpha2.39.1: 禁用态用暗中性灰（dark 下 onVariant 偏浅会发白），不发白
         val grey = ThemeUtil.dyn(ctx, "system_neutral1_80",
@@ -405,8 +329,6 @@ object ControlPanel {
         val containerCal = ThemeUtil.dyn(ctx, "system_accent1_800",
             if (ThemeUtil.isDark(ctx)) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
 
-        val spatialOn = state.spatialOn
-        val sMode = state.spatialUiMode
         val gLevel = state.gainLevel
         val ledOn = state.ledOn
         for (i in 0 until card.childCount) {
@@ -426,15 +348,13 @@ object ControlPanel {
                     val feature = parts[0]
                     val idx = parts[1].toInt()
                     val active = when (feature) {
-                        "spatial" -> spatialOn && idx == sMode
                         "gain" -> idx == gLevel
                         "led" -> idx == if (ledOn) 0 else 1
                         else -> false
                     }
                     val iconColor = if (active) 0xFFFFFFFF.toInt() else onContainerOf(ctx)
-                    val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
-                    val spatialDisabled = feature == "spatial" && !spatialOn
-                    if (!state.gaiaReady || spatialDisabled) {
+                    val featType = when (feature) { "gain" -> 1; "led" -> 2; else -> 0 }
+                    if (!state.gaiaReady) {
                         holder.isEnabled = false
                         holder.alpha = 0.4f
                         if (bgV != null) {

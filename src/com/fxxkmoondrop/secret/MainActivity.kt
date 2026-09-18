@@ -65,6 +65,15 @@ class MainActivity : FragmentActivity() {
 
         if (savedInstanceState == null) showTab(curTab)
 
+        // 3.1.0: 首次启动展示使用引导。只在全新启动时判一次（savedInstanceState == null，
+        // 旋转 / 重建不会重弹）；引导里「跳过」「开始使用」和左上返回都记为已读，
+        // 之后不再自动弹，设置页最底部随时可重看。
+        if (savedInstanceState == null &&
+                !getSharedPreferences("cfg", Context.MODE_PRIVATE)
+                        .getBoolean(OnboardingActivity.KEY_DONE, false)) {
+            try { startActivity(Intent(this, OnboardingActivity::class.java)) } catch (_: Exception) { }
+        }
+
         // 3.0.5: 保活默认常开（不再有开关、不再需要 Root）。
         // 无 root 路径 = 开机自启 + 30s 看门狗 + 系统电池优化白名单弹窗（只主动问一次）；
         // 有 root 时 KeepAlive 内部再静默做一次 deviceidle/appops 增强。

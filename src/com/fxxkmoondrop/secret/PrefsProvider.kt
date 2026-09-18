@@ -52,6 +52,9 @@ class PrefsProvider : ContentProvider() {
             // 用户显式关掉才停用对应功能），供 hook 侧跨进程判定。
             key == "show_wind" || key.startsWith("feat_") ->
                 if (sp.getBoolean(key, true)) 1 else 0
+            // 用户在软件内手动把追踪模式设为「关闭追踪」的偏好（默认没关过）：
+            // 设备详情页据此不再自动补档，尊重用户的选择。
+            key == "track_user_off" -> if (sp.getBoolean(key, false)) 1 else 0
             else -> return null
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))

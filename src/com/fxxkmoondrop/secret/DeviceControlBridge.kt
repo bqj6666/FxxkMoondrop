@@ -14,6 +14,9 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     private const val TAG = "DeviceControlBridge"
 
+    /** 用户在软件内手动把追踪模式设为「关闭追踪」的偏好键。 */
+    private const val KEY_USER_TRACKING_OFF = "track_user_off"
+
 
     @Volatile private var spatialState = -1
     @Volatile private var headTracking = -1
@@ -74,7 +77,11 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     }
 
     fun isSpatialOn(): Boolean = spatialState == 1
-    fun spatialUiMode(): Int = if (spatialState == 1 && headTracking in 0..2) headTracking else -1
+    /** 面板 / 官方行读到的档位：空间音频开着就不会读到「关闭」，除非用户手动关过。 */
+    fun spatialUiMode(): Int = AncProfileLib.displayTrackingMode(
+            spatialOn = spatialState == 1,
+            gaiaTracking = headTracking,
+            userClosedTracking = userClosedTrackingPref())
     fun getGainLevel(): Int = gainLevel
     fun getLedState(): Int = ledState
 
@@ -90,6 +97,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     override fun onHeadTrackingResult(state: Int) {
         headTracking = state
+        fixTrackingModeIfClosed()
         notifyStateChanged()
     }
 
@@ -135,6 +143,46 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
         notifyStateChanged()
         GaiaBleClient.getInstance().setSpatial(if (enabled) 1 else 0)
     }
+
+    /**
+     * 用户自己在软件界面点的三档。
+     *
+     * 「本来在 30° / 全方位、用户自己切到关闭追踪」= 手动关，记下来之后不再自动补档；
+     * 用户点回 30° / 全方位说明他要追踪，把记录清掉。
+     */
+    @JvmStatic
+    fun setTrackingModeByUser(mode: Int) {
+        if (mode != 0) {
+            cfg()?.edit()?.putBoolean(KEY_USER_TRACKING_OFF, false)?.apply()
+        } else if (AncProfileLib.isManualTrackingClose(pickedMode = mode, currentMode = spatialUiMode())) {
+            cfg()?.edit()?.putBoolean(KEY_USER_TRACKING_OFF, true)?.apply()
+        }
+        setTrackingMode(mode)
+    }
+
+    /**
+     * 打开空间音频时耳机端报来「关闭追踪」的话，补上应有的档位（默认 30°）。
+     *
+     * 只在空间音频开着、且用户没在软件内手动关过追踪时才补；否则保持耳机端报来的值。
+     */
+    private fun fixTrackingModeIfClosed() {
+        val fix = AncProfileLib.correctedTrackingMode(
+                spatialOn = spatialState == 1,
+                gaiaTracking = headTracking,
+                userClosedTracking = userClosedTrackingPref()) ?: return
+        Log.d(TAG, "tracking mode auto-fixed to " + fix)
+        headTracking = fix
+        GaiaBleClient.getInstance().setHeadTracking(fix)
+    }
+
+    /** 用户手动关过追踪吗（偏好在 cfg 里，与增益映射同一份）。 */
+    private fun userClosedTrackingPref(): Boolean =
+            cfg()?.getBoolean(KEY_USER_TRACKING_OFF, false) ?: false
+
+    /** 用户偏好在 cfg 里，与增益映射同一份。 */
+    private fun cfg() = try {
+        GaiaBleClient.getInstance().getContext()?.getSharedPreferences("cfg", 0)
+    } catch (_: Exception) { null }
 
     @JvmStatic
     fun setTrackingMode(mode: Int) {
