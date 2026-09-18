@@ -586,6 +586,18 @@ class SettingsFragment : Fragment() {
         simBox.addView(spacer(dp(10)))
         // alpha2.38: 模拟断开按钮已移除（不再有断开弹窗，30s 自动恢复即可）
         box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(14)))
+
+        // ── 帮助：使用引导入口（3.1.0）—— 放在全页最底部，
+        //    想重看功能概览、权限申请与各项开关时不必卸载重装 ──
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("帮助", "Help")))
+        val rowOnboard = makeNavRow(R.drawable.ic_info,
+                Lang.t("使用引导", "Getting started"),
+                Lang.t("重新查看功能概览、权限申请与各项开关",
+                        "Replay the feature tour, permission requests and switches")) {
+            startActivity(Intent(requireContext(), OnboardingActivity::class.java))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOnboard))
 
         sv.addView(box, FrameLayout.LayoutParams(-1, -2))
         root.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))

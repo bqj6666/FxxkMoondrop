@@ -59,11 +59,8 @@ object DeviceNotif {
     /** 上一次真正发出去的内容指纹：一样就不重发，避免把用户展开的通知打回折叠态。 */
     @Volatile private var lastSig: String? = null
 
-    /**
-     * 按钮展示顺序（对齐官方 GFPS Hearable Controls 通知）：
-     * 降噪 / 关闭 / 通透 打头，自适应、直播、抗风随后。
-     */
-    private val ACTION_ORDER = intArrayOf(1, 0, 2, 4, 5, 3)
+    /** 按钮展示顺序：与 App 主界面同源（见 [AncProfileLib.ANC_UI_ORDER]）。 */
+    private val ACTION_ORDER = AncProfileLib.ANC_UI_ORDER
 
     /**
      * 自定义布局里的按钮槽位（3.0.3: 4 -> 5）。
