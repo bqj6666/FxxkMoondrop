@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：3.0.5（versionCode 305） ｜ 更新日期：2026-09-17
+> 版本：3.2.0（versionCode 320） ｜ 更新日期：2026-09-18
 
 ## 构建环境
 
@@ -84,14 +84,15 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.0.5` |
-| versionCode | 单调递增整数 | `300` |
+| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.0` |
+| versionCode | 单调递增整数 | `320` |
 
-发版时同步更新四处：
+发版时同步更新五处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`
 2. `CHANGELOG.md` — 顶部追加新条目
 3. `README.md` — 顶部版本号 + 版本历史列表
 4. `app/src/main/resources/META-INF/xposed/module.prop` — `version`（LSPosed 管理器展示用，须与 `versionName` 一致）
+5. `app/src/main/AndroidManifest.xml` — 文本 manifest 里的 `android:versionCode` / `android:versionName`（AGP 合并时会用 build.gradle.kts 的值覆盖，但仓库内不应残留旧版本号）
 
 提交信息格式：`alpha{版本}: {简要描述}`
 
