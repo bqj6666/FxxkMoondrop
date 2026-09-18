@@ -37,9 +37,9 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 
 ## Screenshots
 
-| Overview | Settings | About | Fast Pair Popup | Device notification |
-|---|---|---|---|---|
-| ![Home](screenshots/home.png) | ![Settings](screenshots/settings.png) | ![About](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![Device notification](screenshots/notif.png) |
+| Overview | Settings | About | Fast Pair Popup | Device notification | Device details |
+|---|---|---|---|---|---|
+| ![Home](screenshots/home.png) | ![Settings](screenshots/settings.png) | ![About](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![Device notification](screenshots/notif.png) | ![Device details](screenshots/detail.png) |
 
 ## Tech Stack
 
@@ -229,6 +229,17 @@ The project maintains several development docs in the repo root; read as needed:
 - **alpha2.13**: Kotlin migration 28/28 complete (pure Kotlin source); fixed Settings / About page title and status bar overlap; fixed page loss after AMOLED-triggered recreate; Gradle + AGP project done; clean full build verified.
 - **alpha2.12**: M3 three-page Fragment architecture (Home / Settings / About).
 - **alpha2.0 and earlier**: Single Activity + old build chain (historical versions not in this repo).
+
+<a id="support"></a>
+
+## Support
+
+If this project helped you, feel free to scan the code below to buy me a coffee —
+your support is the biggest motivation for updates.
+
+<p align="center">
+  <img src="screenshots/reward.png" alt="Tip QR code" width="280">
+</p>
 
 ## Disclaimer
 

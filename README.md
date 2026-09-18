@@ -39,9 +39,9 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 
 ## 软件截图
 
-| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 | 设备通知 |
-|---|---|---|---|---|
-| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![设备通知](screenshots/notif.png) |
+| 主页概览 | 设置 | 关于 | Fast Pair 弹窗 | 设备通知 | 设备详情 |
+|---|---|---|---|---|---|
+| ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![设备通知](screenshots/notif.png) | ![设备详情](screenshots/detail.png) |
 
 ## 技术栈
 
@@ -230,6 +230,16 @@ FxxkMoondrop-repo/
 - **alpha2.13**：Kotlin 迁移 28/28 完成（纯 Kotlin 源码）；修复设置 / 关于页标题与状态栏重叠；修复切换 AMOLED 触发 recreate 后页面丢失；Gradle + AGP 工程化完成；clean 全量构建验证通过
 - **alpha2.12**：M3 三页 Fragment 架构（主页 / 设置 / 关于）
 - **alpha2.0 及以前**：单体 Activity + 旧打包链（历史版本不在本仓库）
+
+<a id="support"></a>
+
+## 赞赏 / Support
+
+如果这个项目帮到了你，欢迎扫码打赏 —— 你的支持是我更新的最大动力。
+
+<p align="center">
+  <img src="screenshots/reward.png" alt="赞赏码" width="280">
+</p>
 
 ## 免责声明
 
