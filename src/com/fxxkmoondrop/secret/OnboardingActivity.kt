@@ -321,8 +321,8 @@ class OnboardingActivity : Activity() {
         permBox = LinearLayout(this)
         permBox.orientation = LinearLayout.VERTICAL
         return buildPage(Lang.t(this, "权限申请", "Permissions"),
-                Lang.t(this, "以下权限为对应功能正常运行所必需，缺失时点击相应条目完成授权。",
-                        "These permissions are required for the matching features; tap a pending item to grant it."),
+                Lang.t(this, "以下为功能运行所需的权限与环境检查项，缺失时点击相应条目完成授权；必要项缺失会直接影响使用，可选项仅影响增强功能。",
+                        "Permissions and environment checks the app relies on. Tap a pending item to grant it; missing required items directly affect usage, optional ones only affect enhancements."),
                 R.drawable.ic_shield, permBox)
     }
 
@@ -348,19 +348,37 @@ class OnboardingActivity : Activity() {
                 permLoading = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 permBox.removeAllViews()
-                val rows = ArrayList<View>()
-                for (it in items) rows.add(permRow(it))
-                if (rows.isNotEmpty()) {
-                    permBox.addView(M3Ui.groupCard(act, pal, *rows.toTypedArray()))
-                }
+                // 必要在前、可选在后，各成一组；组内为空则不出标题。
+                addPermGroup(act, Lang.t(act, "必要权限", "Required"), items.filter { it.required })
+                addPermGroup(act, Lang.t(act, "可选权限", "Optional"), items.filter { !it.required })
                 // 就绪时不在这里下结论：整体状态由末页「欢迎使用」统一呈现。
-                val miss = PermissionChecker.countMissing(items)
-                if (miss > 0) {
-                    permBox.addView(hint(Lang.tf("尚有 %d 项未就绪，点击上方条目可前往授权。",
-                            "%d item(s) pending — tap a row above to grant.", miss)))
+                val missReq = PermissionChecker.countMissingRequired(items)
+                if (missReq > 0) {
+                    permBox.addView(hint(Lang.tf("尚有 %d 项必要权限未就绪，点击上方条目可前往授权。",
+                            "%d required item(s) pending — tap a row above to grant.", missReq)))
                 }
             }
         }.start()
+    }
+
+    /** 一组权限：组标题 + 每行一张卡片。 */
+    private fun addPermGroup(act: Activity, title: String, items: List<PermissionChecker.Item>) {
+        if (items.isEmpty()) return
+        permBox.addView(groupLabel(title))
+        val rows = ArrayList<View>()
+        for (it in items) rows.add(permRow(it))
+        permBox.addView(M3Ui.groupCard(act, pal, *rows.toTypedArray()))
+    }
+
+    /** 分组标题。 */
+    private fun groupLabel(text: String): TextView {
+        val t = TextView(this)
+        t.text = text
+        t.textSize = 13f
+        t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        t.setTextColor(pal.primary)
+        t.setPadding(dp(6), dp(10), dp(6), dp(4))
+        return t
     }
 
     private fun permRow(it: PermissionChecker.Item): View {
@@ -378,19 +396,25 @@ class OnboardingActivity : Activity() {
         return M3Ui.listRow(this, pal, 0, it.name, it.detail, trailing, Runnable { fixPerm(it) })
     }
 
-    /** 就绪徽标：绿色圆底 + 白色勾。 */
+    /**
+     * 就绪徽标：绿色圆底 + 白色勾。
+     *
+     * 尺寸必须落在**内层**圆形上：M3Ui.listRow 会给尾随视图套上它自己的 LayoutParams，
+     * 外层再设 layoutParams 会被覆盖，结果被压成图标本身那点大小。
+     */
     private fun readyBadge(): View {
-        val wrap = FrameLayout(this)
+        val outer = LinearLayout(this)
+        val circle = FrameLayout(this)
         val bg = GradientDrawable()
         bg.shape = GradientDrawable.OVAL
         bg.setColor(pal.green)
-        wrap.background = bg
+        circle.background = bg
         val ic = ImageView(this)
         ic.setImageResource(R.drawable.ic_check)
         ic.imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
-        wrap.addView(ic, FrameLayout.LayoutParams(dp(14), dp(14), Gravity.CENTER))
-        wrap.layoutParams = LinearLayout.LayoutParams(dp(24), dp(24))
-        return wrap
+        circle.addView(ic, FrameLayout.LayoutParams(dp(17), dp(17), Gravity.CENTER))
+        outer.addView(circle, LinearLayout.LayoutParams(dp(30), dp(30)))
+        return outer
     }
 
     /** 缺失项跳转修复：与权限检测页同一套动作（运行时权限 / 电池白名单 / root 重探）。 */
@@ -655,14 +679,23 @@ class OnboardingActivity : Activity() {
                 welcomeLoading = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 welcomeBox.removeAllViews()
-                val miss = PermissionChecker.countMissing(items)
+                val missReq = PermissionChecker.countMissingRequired(items)
+                val missOpt = PermissionChecker.countMissing(items) - missReq
+                val reqTotal = items.count { it.required }
+                val optTotal = items.size - reqTotal
                 val rows = arrayOf(
-                        summaryRow(Lang.t(act, "权限", "Permissions"), miss == 0,
-                                if (miss == 0)
-                                    Lang.tf("已全部就绪（共 %d 项）", "All %d granted", items.size)
+                        summaryRow(Lang.t(act, "必要权限", "Required permissions"), missReq == 0,
+                                if (missReq == 0)
+                                    Lang.tf("已全部就绪（%d 项）", "All %d granted", reqTotal)
                                 else
                                     Lang.tf("尚有 %d 项未就绪，可在上一页处理",
-                                            "%d pending — handle them on the previous page", miss)),
+                                            "%d pending — handle them on the previous page", missReq)),
+                        summaryRow(Lang.t(act, "可选权限", "Optional permissions"), missOpt == 0,
+                                if (missOpt == 0)
+                                    Lang.tf("已全部就绪（%d 项）", "All %d granted", optTotal)
+                                else
+                                    Lang.tf("%d 项未就绪，仅影响后台留存与系统集成",
+                                            "%d pending — affects background retention and system integration only", missOpt)),
                         summaryRow(Lang.t(act, "FastPairHook 模块", "FastPairHook module"), hookOk,
                                 if (hookOk)
                                     Lang.t(act, "已激活，系统集成功能可用", "Active, system integration available")

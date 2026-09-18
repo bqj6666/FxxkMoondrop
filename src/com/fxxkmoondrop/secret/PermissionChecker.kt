@@ -35,7 +35,7 @@ class PermissionChecker {
             list.add(Item(Lang.t(ctx, "蓝牙权限", "Bluetooth permission"),
                     btOk,
                     if (btOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，无法扫描 / 连接耳机", "Not granted, cannot scan / connect earbuds"),
-                    ACTION_RUNTIME, 1))
+                    ACTION_RUNTIME, 1, true))
 
             // 2. 通知权限（Android 13+ 运行时）
             val notifOk = Build.VERSION.SDK_INT < 33 ||
@@ -44,7 +44,7 @@ class PermissionChecker {
             list.add(Item(Lang.t(ctx, "通知权限", "Notification permission"),
                     notifOk,
                     if (notifOk) Lang.t(ctx, "已授予", "Granted") else Lang.t(ctx, "未授予，耳机弹窗通知将无法显示", "Not granted, earbuds popup notifications won\'t show"),
-                    ACTION_RUNTIME, 2))
+                    ACTION_RUNTIME, 2, true))
 
             // 3. 电池优化白名单（建议项）
             // 说明：原本还有一项「悬浮窗权限」，但本模块从不创建悬浮窗 ——
@@ -61,7 +61,7 @@ class PermissionChecker {
                     battOk,
                     if (battOk) Lang.t(ctx, "已加入", "Exempted") else Lang.t(ctx, "未加入，点按一键申请（否则后台可能被系统冻结）",
                             "Not exempted, tap to request (otherwise background may be frozen)"),
-                    ACTION_BATTERY, 0))
+                    ACTION_BATTERY, 0, false))
 
             // 3.5 Root 权限（3.0.5 新增，带显式重试入口）
             //
@@ -81,7 +81,7 @@ class PermissionChecker {
                                 "未检测到 root 入口。若设备已 root：请先在 Root 管理器中把本应用加入授权列表，再点击此项重新检测",
                                 "No root entry detected. If rooted: allow this app in your root manager first, then tap here to re-check")
                     },
-                    ACTION_ROOT_RECHECK, 0))
+                    ACTION_ROOT_RECHECK, 0, false))
 
             // FastPairHook 项与 GAIA 项共用的实测结果。
             // 3.0.5-hotfix: 本函数本来就要实测 hook，且两个调用方都在子线程，所以直接取实测值 ——
@@ -94,7 +94,7 @@ class PermissionChecker {
                     hookActive,
                     if (hookActive) Lang.t(ctx, "已激活（GMS 扫描桥接正常）", "Active (GMS scan bridging OK)")
                     else Lang.t(ctx, "未激活；纯净环境将自动使用内置自扫", "Not active; clean env will use built-in scan"),
-                    ACTION_NONE, 0))
+                    ACTION_NONE, 0, false))
 
             // 6. GAIA 直连链路（动态真实状态，不恒 true）
             val gaiaOk: Boolean
@@ -109,25 +109,46 @@ class PermissionChecker {
                 gaiaOk = false
                 gaiaDetail = Lang.t(ctx, "检测到 Root 但模块未激活；请启用 FastPairHook 或使用纯净环境", "Root detected but module not active; enable FastPairHook or use clean env")
             }
-            list.add(Item(Lang.t(ctx, "GAIA 直连", "GAIA direct link"), gaiaOk, gaiaDetail, ACTION_NONE, 0))
+            list.add(Item(Lang.t(ctx, "GAIA 直连", "GAIA direct link"), gaiaOk, gaiaDetail, ACTION_NONE, 0, true))
 
             return list
         }
 
-        /** 缺失项数量 */
+        /** 缺失项数量（含可选） */
         @JvmStatic
         fun countMissing(items: List<Item>): Int {
             var n = 0
             for (it in items) if (!it.ok) n++
             return n
         }
+
+        /**
+         * 缺失的必要项数量。
+         *
+         * 「能不能用」只看必要项：可选项目缺失只意味着增强项不可用，
+         * 不该被当成「权限没配好」而拦人。
+         */
+        @JvmStatic
+        fun countMissingRequired(items: List<Item>): Int {
+            var n = 0
+            for (it in items) if (it.required && !it.ok) n++
+            return n
+        }
     }
 
+    /**
+     * 一条权限 / 环境检查项。
+     *
+     * [required] 区分两类，界面按此分组展示：
+     *   必要 —— 缺了对应核心功能就完全不可用（蓝牙权限、通知权限、GAIA 直连）；
+     *   可选 —— 只影响后台留存或系统集成等增强项（电池白名单、Root、FastPairHook 模块）。
+     */
     class Item(
         @JvmField val name: String,
         @JvmField val ok: Boolean,
         @JvmField val detail: String,
         @JvmField val action: Int,       // 缺失时的修复动作
-        @JvmField val requestCode: Int   // 运行时权限请求码
+        @JvmField val requestCode: Int,  // 运行时权限请求码
+        @JvmField val required: Boolean  // 必要权限 / 可选权限
     )
 }
