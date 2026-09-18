@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：3.0.5（versionCode 305） ｜ 更新日期：2026-09-17
+> 版本：3.2.0（versionCode 320） ｜ 更新日期：2026-09-18
 
 ## 系统总览
 
@@ -72,7 +72,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | GMS Hook（LSPosed） | 不注入；设置页「官方集成」开关置灰 |
 | 弹窗图标自定义（由 GMS 进程内 `readIconBytes()` 读取） | 置灰并说明 |
 | `su` 拉起官方 App（`MoondropBooter`） | 直接跳过，不重试、不刷日志 |
-| Root 强力保活 | 开关置灰，且**保留用户原有设置值** |
+| 保活（开机自启 + 看门狗 + 电池优化白名单） | **默认常开且无需 Root**；已 Root 时静默追加 `deviceidle` / `appops` 增强，失败不影响使用 |
 | 启动时的 Fast Pair Hook 探测 | 跳过（原本要 ping 等满 4 秒超时），直接走内置 BLE 自扫 |
 
 保活链在无 Root 下依然完整：`BootReceiver` 开机自启 + `AliveReceiver` AlarmManager 30s 循环；通知按钮被点击时也会顺带 `startService`（幂等），进程被回收后点一下通知即可恢复 GAIA 连接。
@@ -102,6 +102,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | **GaiaPacketHandler** | `GaiaPacketHandler.kt` | 219 | GAIA V3 回包解析路由 |
 | **PrefsProvider** | `PrefsProvider.kt` | 53 | 跨进程 ContentProvider；SharedPreferences("cfg") 读写 |
 | **OverviewFragment** | `OverviewFragment.kt` | 1789 | 主页 Fragment；英雄卡 + 状态面板 + ANC 三按钮 + 权限检测 |
+| **OnboardingActivity** | `OnboardingActivity.kt` | 833 | 首启使用引导（7 页横滑分页）：关于 / 权限申请 / 连接管理 / 系统集成 / 耳机控制 / 适配与诊断 / 欢迎使用；页内开关与设置页共用同一份偏好与副作用，末页汇总必要权限、可选权限与模块状态 |
 | **M3Ui** | `M3Ui.kt` | 412 | Material 3 UI 组件工厂 |
 | **DeviceNotif** | `DeviceNotif.kt` | 342 | 设备常驻通知（电量 + 降噪控制合并为一条）；自定义 RemoteViews 大图标档位按钮、M3 动态取色、内容指纹去重（避免重发把用户展开的通知打回折叠态）；折叠/展开两份视图以适应折叠态约 48dp 的高度上限 |
 | **NotifActionReceiver** | `NotifActionReceiver.kt` | 33 | 通知档位按钮落地：先幂等拉起服务，再调用 `AncBridge.setAncMode`；无 Root 模式下靠这一步恢复被回收的进程 |
@@ -187,6 +188,22 @@ Settings 进程 hookDeviceDetailsPanel(ClassLoader)
 面板 View 挂载时注册 ContentObserver 监听 content://com.fxxkmoondrop.secret.prefs/dc_cmd
 → 模块端状态变化 notifyChange → 重新 fetchDcState() 并刷新面板；卸载时注销
 ```
+
+
+### 4.1 空间音频 / 头部跟踪改用官方两行
+
+系统详情页本来就有「空间音频」与「头部跟踪」两个官方开关，但官方 controller（`BluetoothDetailsSpatialAudioController`）
+用系统 `Spatializer` 判定可用性：本机 `getImmersiveAudioLevel()==0`、`isAvailableForDevice` 恒为假，于是它把自己刚建好的两行又移除。
+
+模块只放开「判定」这一步，行仍由官方组件渲染与维护：
+
+- `isAvailable()` 直接返回 true（**仅在 `AncProfileLib.isMoondrop(设备名)` 为真时**）；
+- `Spatializer` 的 `isAvailableForDevice` / `hasHeadTracker` 放开；`getCompatibleAudioDevices` 按耳机端 GAIA 状态回喂；
+- `add/removeCompatibleAudioDevice` 与 `setHeadTrackerEnabled` 转发成 GAIA 命令；`isHeadTrackerEnabled` 回喂三档换算结果；
+- `Preference.isVisible/isEnabled` 对 `spatial_audio` / `head_tracking` 两个 key 按 GAIA 就绪状态门控（未就绪不显示、不可点）。
+
+以上 hook 全部按**设备地址**判定归属：非本模块支持的耳机（含系统原生支持空间音频者）一律 `chain.proceed()` 交还官方，
+不接管、不改写，避免误伤。
 
 ### 5. Google 官方耳机控制面板桥接（Hearable Controls）
 
