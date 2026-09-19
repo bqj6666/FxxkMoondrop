@@ -6,6 +6,17 @@ body:
   - type: markdown
     attributes:
       value: |
+        **只接受最新版本的反馈。** 请先到 [Releases 页](https://github.com/bqj6666/FxxkMoondrop/releases/latest) 更新到最新版，
+        确认应用「关于」页显示的即为最新版本号，然后在最新版上复现问题并重新导出日志。
+        使用旧版本的反馈会被直接关闭，请勿重复提交。
+
+        **Only reports on the latest version are accepted.** Update to the latest release from the
+        [Releases page](https://github.com/bqj6666/FxxkMoondrop/releases/latest) first, confirm the version shown on the
+        About page is that latest one, then reproduce the problem and export a fresh log.
+        Reports on older versions will be closed without further review.
+  - type: markdown
+    attributes:
+      value: |
         本模板用于**已受支持的耳机**：日志中 GATT 指纹命中 `GAIA`（高通 QCC）或 `9ECA0000`（中科蓝讯），模块能识别、但某几项功能不正常。
         若耳机**从未被识别**（不弹窗、日志无指纹命中），请改用「耳机实机测试反馈」模板。
         若问题与耳机连接无关（界面、设置、权限、崩溃等），请改用「Bug 反馈（应用本身）」模板。
@@ -27,7 +38,7 @@ body:
     attributes:
       label: 模块版本 / Module version
       description: 应用「关于」页显示的版本号 / Version shown on the About page
-      placeholder: alpha2.52 (287)
+      placeholder: （见应用「关于」页）/ from the About page
     validations:
       required: true
 
@@ -156,4 +167,6 @@ body:
         - label: 我已搜索过现有 issue，确认不是重复 / I searched existing issues and this is not a duplicate
           required: true
         - label: 我已附上日志导出文件 / I attached the exported log
+          required: true
+        - label: 我确认已更新到最新发布版本，且问题可在最新版上复现 / I confirm I updated to the latest release and the problem reproduces on it
           required: true
