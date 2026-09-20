@@ -5,9 +5,9 @@
 ![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)
 
-> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.3** (versionCode 323) | License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.4** (versionCode 324) | License: **GPL-3.0** (see [LICENSE](LICENSE))
 
-> [![Latest release](https://img.shields.io/badge/release-3.2.3-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
+> [![Latest release](https://img.shields.io/badge/release-3.2.4-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -182,6 +182,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **3.2.4**: The Hearable Controls path (including the volume panel) is now "no functional interference and no log output" for other earbuds - the audit confirmed every forward and inject path is gated on the target address, and the two unfiltered observation logs were narrowed to the target device, which also fixes other devices' MAC addresses leaking into logs.
 - **3.2.3**: Documentation fix - clarified that the volume panel and the prompt-tone/vibration panel are enabled through GMS Hearable Controls by this module and have their taps taken over (same path as the official ANC panel, likewise scoped to the target device only).
 - **3.2.2**: The popup "Settings" button now opens the details page of the earbuds the card actually belongs to (with multiple Moondrop sets paired it used to jump to the first one). Added a "zero interference with other devices" gate table to the docs listing the ownership criterion of every hook and injection point.
 - **3.2.1**: **The popup no longer interferes with other Fast Pair earbuds.** Google's native card for genuinely Fast Pair earbuds (Pixel Buds / Sony / Nothing) uses the *same* `HalfSheetActivity` as this module's self-drawn popup, and the module previously acted on it by class name alone - overwriting the icon and battery text, injecting ANC buttons, and even **swallowing the native "Connect" button**. It now matches popup ownership first (the self-drawn popup registers its launch time and then claims the instance; cards that are not ours are left untouched) and re-checks the card device name. **Multi-device fixes**: when the GAIA link is idle but still holds a stale device address, connect the earbuds detected this round (it used to always reconnect the old address, so switching earbuds never worked); disconnecting one set now only tears down the link that belongs to it (it used to kill the other one too); and the processing order for multiple connected sets is now deterministic.

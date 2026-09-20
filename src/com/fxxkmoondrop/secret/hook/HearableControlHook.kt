@@ -297,6 +297,8 @@ object HearableControlHook {
                                 cacheManager = cache
                                 hookGate(cache.javaClass)
                             }
+                            // 实例捕获本身与设备无关（官方管理器按地址传参，实例是共用的），
+                            // 这里不打印地址，避免把非目标设备的构造也写进日志。
                             Log.d(TAG, "官方 ANC 模块实例已捕获 (cache="
                                     + (cache?.javaClass?.name ?: "<null>") + ")")
                         }
@@ -437,7 +439,10 @@ object HearableControlHook {
                             }
                         }
                         val now = System.currentTimeMillis()
-                        if (ev == CODE_NOTIFY_ANC_STATE && now - lastMgrLogMs > 1500) {
+                        // 同样只对目标设备记录：这里的日志会带 addr 与报文内容，
+                        // 不加过滤就会把其他耳机的 MAC 与报文明文写进日志包。
+                        if (ev == CODE_NOTIFY_ANC_STATE && isOursAddr(addr)
+                                && now - lastMgrLogMs > 1500) {
                             lastMgrLogMs = now
                             Log.d(TAG, "管理器出口 " + m.name + " ev=" + ev
                                     + " addr=" + addr + " payload="
@@ -490,8 +495,11 @@ object HearableControlHook {
                 val payload = chain.args.getOrNull(2) as? ByteArray
                 val dev = chain.args.getOrNull(0) as? BluetoothDevice
                 // 探针：我们自己的注入也走这个方法，命中即证明 hook 真的挂上了。
-                Log.d(TAG, "意图入口命中 ev=" + ev + " self="
-                        + (payload != null && isSelfInject(payload)))
+                // 只对目标设备打印 —— 其他耳机的面板点击不该在我们的日志里留痕。
+                if (isOursAddr(dev?.address)) {
+                    Log.d(TAG, "意图入口命中 ev=" + ev + " self="
+                            + (payload != null && isSelfInject(payload)))
+                }
                 if (ev == CODE_NOTIFY_ANC_STATE && payload != null && !isSelfInject(payload)) {
                     forwardEntryIntent(dev?.address, payload)
                 }
@@ -957,6 +965,17 @@ object HearableControlHook {
     private var aliasName: String? = null
 
     private fun aliasesSnapshot(): List<String> = synchronized(aliasLock) { addrAliases.toList() }
+
+    /**
+     * 该地址是否属于本模块的目标设备。
+     *
+     * 用于把只会打印日志的观测点也收敛到目标设备上 —— 否则其他耳机
+     * （Pixel Buds / Sony 等真正走 Fast Pair 的型号）每次操作都会在 GMS 日志里
+     * 留下我们打的行，既刷屏、又把别的耳机 MAC 写进用户会提交的日志包里。
+     * 转发与注入路径本来就都以别名集为门禁，这里只是把「零介入」贯彻到日志层。
+     */
+    private fun isOursAddr(addr: String?): Boolean =
+        addr != null && aliasesSnapshot().contains(addr.trim().uppercase())
 
     /** 登记一个呈现地址；返回是否为新别名。别名只对本次连接会话有意义。 */
     private fun addAlias(a: String): Boolean {
