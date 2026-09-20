@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：3.2.2（versionCode 322） ｜ 更新日期：2026-09-18
+> 版本：3.2.3（versionCode 323） ｜ 更新日期：2026-09-18
 
 ## 系统总览
 
@@ -141,7 +141,7 @@ XposedEntry (META-INF/xposed/java_init.list)
 | Fast Pair 弹窗 `Activity.onResume` / `View.performClick` | Intent 标记 `EXTRA_OUR_SHEET`（弹窗渲染在 GMS 另一进程，静态字段跨不了进程；这是唯一可靠判据） |
 | 弹窗渲染 `dtes.f` / `dthi.O` / `dthi.q` | 卡片数据里的设备名（`DeviceMatcher.isMoondrop`） |
 | 弹窗图标 / 电量 / 降噪按钮 / 设置键注入 | 均只在 `onResume` 归属判定通过后被调用 |
-| Hearable Controls（官方 ANC 面板、音量 / 声音面板） | `aliasesSnapshot()` 目标地址别名集 |
+| Hearable Controls（官方 ANC 面板；**音量面板 / 提示音和振动面板**也是由此链路启用并接管，点击经意图入口转 GAIA） | `aliasesSnapshot()` 目标地址别名集 |
 | Fast Pair 缓存门禁 `cache.A(String)` | 同上，只对目标地址返回 true |
 | 蓝牙详情页面板注入 | Preference key 专属（该 key 只在 `isMoondrop` 的设备页被添加） |
 | 详情页行可见性 / profile 列表 | `AncProfileLib.isMoondrop(deviceName)` |
@@ -149,7 +149,7 @@ XposedEntry (META-INF/xposed/java_init.list)
 | A2DP 状态监听 / 弹窗触发 | `DeviceMatcher.isMoondrop(name)` |
 | 水月雨官方 App 逆向参考 Hook | 只作用于 `com.moondroplab.moondrop.moondrop_app` 自身进程 |
 
-注：系统音量面板未被 Hook。
+注：**音量面板 / 提示音和振动面板不是独立的 Hook 点** —— 它们是 GMS 的 Hearable Controls 面板由本模块（`feat_official_panel` 开关）启用后交给官方渲染的，档位点击落在 `dvzo` 意图入口，由本模块接住转成 GAIA。因此它与其他耳机的关系同样是「我们的耳机才接管」：别名集不含目标地址时，`forwardEntryIntent` 与 `forwardOfficialSend` 都会直接返回，官方原有行为不变。
 
 ## 关键数据流
 

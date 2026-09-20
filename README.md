@@ -7,9 +7,9 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.2**（versionCode 322） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.3**（versionCode 323） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
-> [![最新正式版](https://img.shields.io/badge/release-3.2.2-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
+> [![最新正式版](https://img.shields.io/badge/release-3.2.3-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -184,6 +184,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **3.2.3**：文档修正 —— 写清「音量面板 / 提示音和振动面板」由本模块经 GMS 的 Hearable Controls 启用并接管点击（与官方 ANC 面板同一条链路，同样只对目标设备生效）。
 - **3.2.2**：弹窗「设置」键改为按当前卡片对应的耳机跳转（一台手机配过多副水月雨时，此前会跳到第一副的详情页）。文档新增「非目标设备零介入」门禁总表，逐条列出全部 Hook 与注入点的归属判据。
 - **3.2.1**：**弹窗不再误伤其他 Fast Pair 耳机**。Google 给 Pixel Buds / Sony / Nothing 这类真正支持 Fast Pair 的耳机弹的原生卡片，用的是与模块自绘弹窗**同一个** `HalfSheetActivity`，此前只认类名就动手，会在别人的卡片上覆盖图标与电量、塞进降噪按钮，甚至**吞掉人家的「连接」按钮**。现在加了弹窗归属判定（自绘弹窗先登记启动时刻再认领实例，非本模块的卡片一律不介入），并按卡片设备名二次校验。**多设备修复**：GAIA 链路空闲但仍残留上一次的设备地址时，改为连接本次检测到的耳机（此前永远重连旧地址，换耳机时新的连不上）；断开某一副时只断我们正连的那一副（此前一副断开会把另一副一起掐掉）；同时连多副时的处理顺序改为确定序。
 - **3.2.0**：**空间音频与头部跟踪改用系统蓝牙详情页里官方自带的那两行开关**（原自绘控件删除）—— 官方 controller 在本机恒判不可用并自行移除那两行，模块放开判定后交还官方渲染，勾选态与点击接到耳机端；仅对本模块支持的耳机接管，他牌耳机原样交还官方（按设备地址判定，不再误伤系统原生支持空间音频的耳机）。修复**打开空间音频后追踪档位停在「关闭」**：确立「空间音频开着时不会是关闭追踪」的不变量，读到 0 档自动补为 30°，用户手动关过则不再补。**降噪按钮顺序在主界面 / 通知栏 / Google 弹窗三处统一**为「降噪 / 关闭 / 通透 / 自适应 / 直播 / 抗风」。新增**使用引导**（7 页横滑，首启自动展示、设置页最底部可重看）。权限检测与引导权限页按**必要 / 可选**分组，结论只看必要项。
