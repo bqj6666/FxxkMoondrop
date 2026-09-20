@@ -885,6 +885,31 @@ class FastPairHookEntry {
     /** alpha2.37: 在确定按钮旁注入"设置"入口 —— 动态定位 central_btn 同行对齐 */
     /** alpha2.38: 在确定按钮旁注入"设置"入口 —— 克隆 central_btn 插入同一父容器，共享布局流与动态取色 */
     /** alpha2.38.3: 设置按钮 —— overlay 到 central_btn 正上方，完全克隆宽高/minHeight/minWidth，上下平行对齐 */
+    /**
+     * 解析**当前弹窗这张卡片**对应的耳机地址。
+     *
+     * 优先按弹窗自己的设备名去已配对列表里匹配 —— 一台手机上可能配过多副水月雨，
+     * 若只取「第一个水月雨」，弹窗在第二副上时设置键会跳到第一副的详情页。
+     * 匹配不到再退回 [resolveMoondropAddress] 的宽松逻辑。
+     */
+    private fun resolveSheetDeviceAddress(act: android.app.Activity): String? {
+        try {
+            val name = sLastDeviceName
+            if (!name.isNullOrEmpty()) {
+                val devs = android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.bondedDevices
+                if (devs != null) {
+                    for (d in devs) {
+                        if (d.name == name && !d.address.isNullOrEmpty()) {
+                            Log.d(TAG, "[FastPairHook] sheet device addr by name: " + d.address + " (" + name + ")")
+                            return d.address
+                        }
+                    }
+                }
+            }
+        } catch (_: Throwable) { }
+        return resolveMoondropAddress(act)
+    }
+
     /** 动态解析当前 Moondrop 耳机的蓝牙地址（不硬编码）；找不到返回 null。 */
     private fun resolveMoondropAddress(act: android.app.Activity): String? {
         try {
@@ -958,7 +983,7 @@ class FastPairHookEntry {
 
             btn.setOnClickListener {
                 try {
-                    val devAddr = resolveMoondropAddress(act)
+                    val devAddr = resolveSheetDeviceAddress(act)
                     if (devAddr != null) {
                         val argB = android.os.Bundle()
                         argB.putString("device_address", devAddr)

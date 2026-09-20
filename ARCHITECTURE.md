@@ -1,6 +1,6 @@
 # FxxkMoondrop 架构文档
 
-> 版本：3.2.1（versionCode 321） ｜ 更新日期：2026-09-18
+> 版本：3.2.2（versionCode 322） ｜ 更新日期：2026-09-18
 
 ## 系统总览
 
@@ -129,6 +129,27 @@ XposedEntry (META-INF/xposed/java_init.list)
 ├── onPackageReady("com.android.bluetooth") → hookBluetooth() A2DP 状态监听
 └── onPackageReady("com.moondroplab...")     → hookMoondrop() 逆向参考
 ```
+
+## 非目标设备零介入（门禁总表）
+
+本模块的**全部** Hook 与注入点都以「这是不是我们支持的耳机」为前置条件，判定不通过就原样 `proceed()`，
+官方逻辑一行不受影响。这样 Google Fast Pair、系统蓝牙详情页、空间音频等原生能力对**其他耳机**
+（Pixel Buds / Sony / Nothing 等真正支持 Fast Pair 的型号）保持百分之百的原生体验。
+
+| Hook / 注入点 | 归属判据 |
+|---|---|
+| Fast Pair 弹窗 `Activity.onResume` / `View.performClick` | Intent 标记 `EXTRA_OUR_SHEET`（弹窗渲染在 GMS 另一进程，静态字段跨不了进程；这是唯一可靠判据） |
+| 弹窗渲染 `dtes.f` / `dthi.O` / `dthi.q` | 卡片数据里的设备名（`DeviceMatcher.isMoondrop`） |
+| 弹窗图标 / 电量 / 降噪按钮 / 设置键注入 | 均只在 `onResume` 归属判定通过后被调用 |
+| Hearable Controls（官方 ANC 面板、音量 / 声音面板） | `aliasesSnapshot()` 目标地址别名集 |
+| Fast Pair 缓存门禁 `cache.A(String)` | 同上，只对目标地址返回 true |
+| 蓝牙详情页面板注入 | Preference key 专属（该 key 只在 `isMoondrop` 的设备页被添加） |
+| 详情页行可见性 / profile 列表 | `AncProfileLib.isMoondrop(deviceName)` |
+| 官方空间音频 / 头部追踪两行 | `officialTakeoverAddr`（仅在本模块耳机页被赋值）；系统 `Spatializer` 的 7 个方法各自校验 `oursSpatialDevice(dev)` 地址 |
+| A2DP 状态监听 / 弹窗触发 | `DeviceMatcher.isMoondrop(name)` |
+| 水月雨官方 App 逆向参考 Hook | 只作用于 `com.moondroplab.moondrop.moondrop_app` 自身进程 |
+
+注：系统音量面板未被 Hook。
 
 ## 关键数据流
 
