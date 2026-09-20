@@ -103,6 +103,10 @@ class HeadsetReceiver : BroadcastReceiver() {
 
         if (connected && DeviceMatcher.isMoondrop(name)) {
             PopupGate.tryShowConnectedDeferred(c, address, name)
+            // 3.2.5: 系统广播已经把「耳机连上了」送到本进程，直接唤醒服务做一次增量轮询。
+            // 此前连接只靠 5 秒轮询周期发现；GMS 那条 am broadcast 链需要 root，一旦不可用
+            // 就只能干等整个轮询周期，用户感知就是「连上半天不出电量」。
+            wakeDetectService(c)
         } else if (disconnected) {
             if (DeviceMatcher.isMoondrop(name)) {
                 // alpha1.40: 系统层断开（ACL/A2DP/HFP）立即清 HeadsetGate MAC 缓存，
@@ -111,6 +115,30 @@ class HeadsetReceiver : BroadcastReceiver() {
                 // 断开标记保留在 PopupGate 里防重复弹窗（连接时会自动清除）
                 PopupGate.tryShowDisconnected(c, address, name)
             }
+        }
+    }
+
+    /** 最近一次唤醒服务的时间戳：连接过程中 ACL / A2DP / HFP 会连发几个广播，
+     *  1 秒内只唤醒一次即可（pollConnected 本身幂等，这里只是省掉重复开销）。 */
+    @Volatile private var sLastWakeMs = 0L
+
+    /**
+     * 立即唤醒检测服务做一次增量轮询（复用既有的 BT_EVENT 通道，不新增机制）。
+     *
+     * 服务没在跑时后台 startService 会受限，所以整段 try 住 —— 这种情况本来就有
+     * 轮询兜底，不影响功能。
+     */
+    private fun wakeDetectService(c: Context) {
+        val now = System.currentTimeMillis()
+        if (now - sLastWakeMs < 1000L) return
+        sLastWakeMs = now
+        try {
+            c.startService(Intent(c, HeadsetDetectService::class.java)
+                    .setAction(BootReceiver.ACTION_BT_EVENT)
+                    .putExtra("evt", "connected"))
+            Log.d(TAG, "wake detect service (connected event)")
+        } catch (t: Throwable) {
+            Log.d(TAG, "wake detect service failed: " + t)
         }
     }
 
