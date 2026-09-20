@@ -312,7 +312,9 @@ class HeadsetDetectService : Service() {
                 } catch (_: Exception) { }
             }
 
-            val now = HashSet<String>()
+            // 3.2.1: 顺序确定化 —— 原本是 HashSet，同时连多副时「谁先被处理」不可预期，
+            // 进而决定 GAIA 连到哪一副。改用有序集合 + 排序遍历，行为可复现。
+            val now = LinkedHashSet<String>()
             for (d in all) {
                 val n = d.name ?: continue
                 if (DeviceMatcher.isMoondrop(n)) {
@@ -328,7 +330,7 @@ class HeadsetDetectService : Service() {
 
             // v3.16/v3.17: 检测到 Moondrop 连接时，静默拉起 GAIA 通讯服务
             var hasMoondrop = false
-            for (key in now) {
+            for (key in now.sorted()) {
                 val idx = key.indexOf('|')
                 val addr = key.substring(0, idx)
                 val nm = key.substring(idx + 1)
@@ -355,8 +357,16 @@ class HeadsetDetectService : Service() {
                     gaia.setCallback(gaiaCallback)
                     gaia.connect(this, gaiaAddr)
                 } else if (!gaia.isConnected()) {
+                    // 3.2.1: 链路空闲但仍残留上一次的 deviceAddress —— 此前这里连的是那个
+                    // **旧地址**，于是「先连 A 再换 B」时永远在重连 A，B 一辈子连不上。
+                    // 现在连本次检测到的目标 gaiaAddr；若与残留地址不同，先清掉残留再连。
+                    val stale = gaia.deviceAddress
+                    if (stale != null && !stale.equals(gaiaAddr, ignoreCase = true)) {
+                        AppLog.i(TAG, "gaia idle but stale addr " + stale + " -> switch to " + gaiaAddr)
+                        gaia.disconnect()
+                    }
                     gaia.setCallback(gaiaCallback)
-                    gaia.connect(this, gaia.deviceAddress)
+                    gaia.connect(this, gaiaAddr)
                 }
             }
 
@@ -368,8 +378,19 @@ class HeadsetDetectService : Service() {
                     val nm = key.substring(idx + 1)
                     PopupGate.tryShowDisconnected(this, addr, nm)
                     AppLog.w(TAG, "headset disconnected: " + nm + " " + addr)
-                    // alpha1.0: 断开 GAIA 直连
-                    GaiaBleClient.getInstance().disconnect()
+                    // 3.2.1: 只有断开的就是我们正连的那一副时才断 GAIA ——
+                    // 原本这里无条件 disconnect()，A 断开会把还连着的 B 一起掐掉。
+                    val gaiaNow = GaiaBleClient.getInstance()
+                    val cur = gaiaNow.deviceAddress
+                    val isOurLink = gaiaNow.isConnected() && cur != null &&
+                            cur.length >= 12 && addr.length >= 12 &&
+                            cur.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)
+                    if (isOurLink) {
+                        gaiaNow.disconnect()
+                        AppLog.i(TAG, "gaia disconnected (its device left): " + addr)
+                    } else {
+                        AppLog.i(TAG, "skip gaia disconnect (link is " + cur + ", left is " + addr + ")")
+                    }
                     BatteryStore.clearGaia(addr)
                 }
             }

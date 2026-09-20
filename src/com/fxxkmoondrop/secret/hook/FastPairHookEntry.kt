@@ -103,7 +103,7 @@ class FastPairHookEntry {
             module.hook(m).intercept { chain ->
                 try {
                     val dtok = HookHelper.getObjectField(chain.thisObject, "c")
-                    if (dtok != null) {
+                    if (dtok != null && shouldTouchSheet(dtok)) {
                         val name = sDataProvider?.getDeviceName()
                         if (!name.isNullOrEmpty()) {
                             HookHelper.setObjectField(dtok, "l", name)
@@ -130,6 +130,9 @@ class FastPairHookEntry {
                 chain.proceed()
                 try {
                     val iv = chain.args[0] as? ImageView ?: return@intercept HookGuard.nullSafe(chain)
+                    if (!shouldTouchSheet(chain.args.getOrNull(1))) {
+                        return@intercept HookGuard.nullSafe(chain)
+                    }
                     val bmp = loadOrDrawIcon() ?: return@intercept HookGuard.nullSafe(chain)
                     iv.setImageBitmap(bmp)
                     Log.d(TAG, "[FastPairHook] (dthi.O) icon injected")
@@ -152,6 +155,9 @@ class FastPairHookEntry {
                 chain.proceed()
                 try {
                     val iv = chain.args[0] as? ImageView ?: return@intercept HookGuard.nullSafe(chain)
+                    if (!shouldTouchSheet(chain.args.getOrNull(1))) {
+                        return@intercept HookGuard.nullSafe(chain)
+                    }
                     val bmp = loadOrDrawIcon() ?: return@intercept HookGuard.nullSafe(chain)
                     iv.setImageBitmap(bmp)
                     Log.d(TAG, "[FastPairHook] (dthi.q) icon injected")
@@ -177,7 +183,18 @@ class FastPairHookEntry {
                         return@intercept HookGuard.nullSafe(chain)
                     }
                     Log.d(TAG, "[FastPairHook] HalfSheet MATCH onResume: " + cname)
-                    sHalfSheetActivity = act
+                    // 3.2.1: 归属判定 —— 只介入「本模块自己拉起的」弹窗。
+                    // Google 给真正支持 Fast Pair 的耳机（Pixel Buds / Sony 等）弹的原生卡片
+                    // 用的是同一个 HalfSheetActivity；此前只判类名就把别人的卡片当成自己的，
+                    // 会覆盖图标 / 电量、塞入降噪按钮，甚至短路人家的「连接」按钮。
+                    if (!isOurSheetActivity(act)) {
+                        Log.d(TAG, "[FastPairHook] HalfSheet 非本模块弹窗，不介入: " + cname)
+                        return@intercept HookGuard.nullSafe(chain)
+                    }
+                    if (act !== sHalfSheetActivity) {
+                        sHalfSheetActivity = act
+                        Log.d(TAG, "[FastPairHook] HalfSheet 已认领为本模块弹窗: " + cname)
+                    }
                                 // 从 Intent 同步模拟电量（渲染进程与触发进程静态字段不共享）
                                 try {
                                     val it = act.intent
@@ -259,6 +276,20 @@ class FastPairHookEntry {
                         Log.d(TAG, "[FastPairHook] central_btn id resolved: " + sCentralBtnId)
                     }
                     if (sCentralBtnId != 0 && v.id == sCentralBtnId) {
+                        // 3.2.1: 归属判定 —— 别吞掉 Google 原生卡片的「连接」按钮。
+                        // 只有点击的视图确实长在本模块弹窗的窗口里才接管；否则原样放行，
+                        // 让 Sony / Pixel Buds 这些真正支持 Fast Pair 的耳机走官方配对流程。
+                        val sheetAct = sHalfSheetActivity
+                        if (sheetAct == null || sheetAct.isFinishing ||
+                                !isOurSheetActivity(sheetAct)) {
+                            Log.d(TAG, "[FastPairHook] central_btn 非本模块弹窗，放行原生点击")
+                            return@intercept chain.proceed()
+                        }
+                        val decor = try { sheetAct.window?.decorView } catch (_: Throwable) { null }
+                        if (decor == null || v.rootView !== decor) {
+                            Log.d(TAG, "[FastPairHook] central_btn 不在本模块弹窗窗口内，放行原生点击")
+                            return@intercept chain.proceed()
+                        }
                         Log.d(TAG, "[FastPairHook] central_btn click intercepted -> fake connect")
                         showConnectingUi()
                         startFakeConnectSequence()
@@ -297,6 +328,46 @@ class FastPairHookEntry {
                 if (retries > 0) schedulePlace(handler, view, decor, refId, retries - 1, delayMs, place)
             } catch (_: Throwable) { }
         }, delayMs)
+    }
+
+    /**
+     * 弹窗是否属于本模块。
+     *
+     * **主判据走 Intent 标记**：弹窗渲染发生在 GMS 的**另一个进程**里（触发进程 startActivity、
+     * 渲染进程跑 onResume），静态字段跨不了进程 —— 电量 extra 正是因此才经 Intent 传递，
+     * 归属标志同理。自绘弹窗由本模块自己构造 Intent 并打上 [EXTRA_OUR_SHEET]；
+     * Google 给真正支持 Fast Pair 的耳机（Pixel Buds / Sony 等）弹的原生卡片没有该标记。
+     *
+     * 实例相等与启动时间窗只作同进程场景的兜底，跨进程时它们天然为假、不会误放行。
+     */
+    private fun isOurSheetActivity(a: android.app.Activity?): Boolean {
+        if (a == null) return false
+        try {
+            if (a.intent?.getBooleanExtra(EXTRA_OUR_SHEET, false) == true) return true
+        } catch (_: Throwable) { }
+        if (a === sHalfSheetActivity && !a.isFinishing) return true
+        val t = sOurSheetLaunchAt
+        return t > 0 && System.currentTimeMillis() - t < OUR_SHEET_WINDOW_MS
+    }
+
+    /**
+     * 渲染回调（`dtes.f` / `dthi.O` / `dthi.q`）的归属判定：只认**卡片里的设备名**。
+     *
+     * 这几个回调发生在 onResume 之前，且在渲染进程里拿不到触发进程的静态字段，
+     * 所以用卡片数据里的设备名作判据：名字是本模块支持的耳机才动手，
+     * 其余（Sony / Pixel Buds / Nothing 等）一律不碰。
+     */
+    private fun shouldTouchSheet(dtok: Any?): Boolean {
+        val n = try { HookHelper.getObjectField(dtok, "l") as? String } catch (_: Throwable) { null }
+        if (n.isNullOrEmpty()) {
+            Log.d(TAG, "[FastPairHook] 弹窗设备名缺失，跳过注入")
+            return false
+        }
+        if (!DeviceMatcher.isMoondrop(n)) {
+            Log.d(TAG, "[FastPairHook] 弹窗设备名非本模块支持，跳过注入: " + n)
+            return false
+        }
+        return true
     }
 
     private fun injectIconOverlay(act: android.app.Activity) {
@@ -1660,7 +1731,11 @@ class FastPairHookEntry {
         intent.putExtra(EXTRA_BATTERY_LEFT, sBatteryLeft)   // 电量经 Intent 传给渲染进程
         intent.putExtra(EXTRA_BATTERY_RIGHT, sBatteryRight)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // 3.2.1: 打上归属标记 —— 弹窗渲染在 GMS 的另一个进程里，静态字段跨不了进程，
+        // 只能靠这个 Intent extra 让渲染进程认出「这是本模块自己拉起的弹窗」。
+        intent.putExtra(EXTRA_OUR_SHEET, true)
         Log.d(TAG, "[FastPairHook] starting HalfSheetActivity...")
+        sOurSheetLaunchAt = System.currentTimeMillis()   // 同进程场景的兜底窗口
         ctx.startActivity(intent)
         sLastShowMs = System.currentTimeMillis()
         Log.d(TAG, "[FastPairHook] startActivity called")
@@ -1923,9 +1998,26 @@ class FastPairHookEntry {
             Log.d(TAG, "[FastPairHook] data provider set: " + (provider != null))
         }
 
-        /*** 当前 HalfSheet Activity 引用（用于接管连接回报） */
+        /*** 当前 HalfSheet Activity 引用 —— **仅在本模块自己拉起的弹窗上赋值**。
+         *  3.2.1 起这是「我们的弹窗」的唯一权威标志：Google 给真正支持 Fast Pair 的耳机
+         *  （Pixel Buds / Sony / Nothing 等）弹的原生卡片用的是同一个 HalfSheetActivity，
+         *  只有在归属判定通过后才会写这个字段，其余读取点因此天然不碰别人的卡片。 */
         @JvmField @Volatile
         var sHalfSheetActivity: android.app.Activity? = null
+
+        /** 本模块最近一次 startActivity 拉起自己弹窗的时刻（0=没有待认领的弹窗）。
+         *  用于把 onResume / 渲染回调上的 HalfSheet 认领为我们自己的那个。 */
+        @JvmField @Volatile
+        var sOurSheetLaunchAt = 0L
+
+        /** 自己弹窗的「认领窗口」：仅同进程场景的兜底判据（跨进程时静态字段不可见，
+         *  那时靠 [EXTRA_OUR_SHEET]）。取 8s 是让它在正常路径上几乎不生效，
+         *  避免 Google 原生卡片恰好在此窗口内出现时被误认领。 */
+        const val OUR_SHEET_WINDOW_MS = 8000L
+
+        /** 弹窗归属标记：自绘弹窗的 Intent 带此 extra=true，Google 原生卡片没有。
+         *  渲染回调与 onResume 都靠它区分「是不是本模块拉起的弹窗」。 */
+        const val EXTRA_OUR_SHEET = "fxxk_our_sheet"
         /** alpha1.14fix2: ACL 自动弹窗延迟——等 GAIA 连接+电量就绪，ACL 仅作兜底 */
         const val ACL_POSTSHOW_DELAY_MS = 2000L // alpha2.26.3: 2s 即弹（GAIA 后台并行连接）
         /** 弹窗重复保护：距上次显示不足该时长则跳过兜底弹窗 */
