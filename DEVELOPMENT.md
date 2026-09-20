@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：3.2.5（versionCode 325） ｜ 更新日期：2026-09-18
+> 版本：3.2.6（versionCode 326） ｜ 更新日期：2026-09-18
 
 ## 构建环境
 
@@ -84,8 +84,8 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.5` |
-| versionCode | 单调递增整数 | `325` |
+| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.6` |
+| versionCode | 单调递增整数 | `326` |
 
 发版时同步更新五处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`

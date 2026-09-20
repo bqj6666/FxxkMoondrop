@@ -7,9 +7,9 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.5**（versionCode 325） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.6**（versionCode 326） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
-> [![最新正式版](https://img.shields.io/badge/release-3.2.5-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
+> [![最新正式版](https://img.shields.io/badge/release-3.2.6-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -184,6 +184,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **3.2.6**：修掉「首选候选是失效 LE 地址时原地打转」—— 断开码为 0（正常断开）时此前不推进候选，于是耳机换过 LE 地址后（蓝牙重启、重新配对）会一直重连同一个失效地址、永远连不上。现在「本次会话还没连上过」时也会推进候选，可自愈。
 - **3.2.5**：**连接提速** —— 耳机连接广播到达时立刻开始连 GAIA，不再干等 5 秒轮询周期（系统广播本来就免费送到进程里，此前只拿它弹窗、不拿它触发连接；GMS 那条唤醒链需要 root，断了就只能白等）。实测 GAIA 就绪约 2.3 秒，连接稳定。
 - **3.2.4**：Hearable Controls 链路（含音量面板）对其他耳机「功能零介入 + 日志零输出」——核查确认转发与注入全部以目标地址为门禁，并把两处未过滤的观测日志也收敛到目标设备，顺带修掉「日志会打印其他设备 MAC」的隐私问题。
 - **3.2.3**：文档修正 —— 写清「音量面板 / 提示音和振动面板」由本模块经 GMS 的 Hearable Controls 启用并接管点击（与官方 ANC 面板同一条链路，同样只对目标设备生效）。

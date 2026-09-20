@@ -148,6 +148,16 @@ class GaiaBleClient private constructor() {
     @Volatile private var candidateIdx = 0
     @Volatile private var attemptCount = 0
     @Volatile private var everConnected = false
+
+    /**
+     * 缓存 LE 地址连续尝试次数。
+     *
+     * 用来淘汰「已经不成立」的缓存地址：耳机换过 LE 地址（蓝牙重启、重新配对）后，
+     * 旧地址会被一直当作首选候选反复重连，而底层对失效地址的失败常常表现为
+     * `status=0`（正常断开码）或不回调 —— 既不走异常断开分支、也不累计 attemptCount，
+     * 于是永远换不到有效候选。这里按「尝试次数」独立计数，足够多次就判定该地址失效。
+     */
+    @Volatile private var cachedLeTries = 0
     private val scanHits = CopyOnWriteArrayList<ScanResult>()
     @Volatile private var forceDirectConnect = false
     @Volatile private var lastConnectedAddr: String? = null
@@ -445,8 +455,28 @@ class GaiaBleClient private constructor() {
                         }
                     }
                 } else {
+                    // 3.2.6: 缓存的 LE 地址反复尝试仍连不上 -> 判为失效并淘汰，不再优先使用。
+                    // 必须用独立计数：失效地址的失败常常是 status=0 或不回调，
+                    // 既进不了异常断开分支、也不累计 attemptCount（那条路在正常断开时被跳过）。
+                    if (canUseCachedLe && !connected) {
+                        cachedLeTries++
+                        if (cachedLeTries >= GaiaConstants.CACHED_LE_MAX_TRIES) {
+                            val bad = cachedLeAddress!!.uppercase()
+                            invalidLeAddrs.add(bad)
+                            clearCachedLe()
+                            cachedLeTries = 0
+                            Log.w(GaiaConstants.TAG, "cached LE addr unusable after "
+                                    + GaiaConstants.CACHED_LE_MAX_TRIES + " tries -> dropped: " + bad)
+                            AppLog.w(GaiaConstants.TAG,
+                                    "protocol: cached LE addr unusable, dropped: " + bad)
+                        }
+                    }
                     var start = candidateIdx
-                    if (canUseCachedLe) {
+                    // 3.2.6: 只有「本轮还没尝试过」时才把缓存 LE 地址提到首位。
+                    // 否则每次轮询都重排一次、把 start 打回 0 —— 于是候选推进的结果被反复覆盖，
+                    // 一旦缓存的 LE 地址失效（耳机换过地址：蓝牙重启 / 重新配对），
+                    // 就永远停在它上面打转（日志：反复 connectGatt(同一地址) (cand 0/N)）。
+                    if (canUseCachedLe && attemptCount == 0) {
                         val le = cachedLeAddress!!.uppercase()
                         val reordered = LinkedHashSet<String>()
                         reordered.add(le)
@@ -1311,7 +1341,12 @@ class GaiaBleClient private constructor() {
                 Log.d(GaiaConstants.TAG, "gatt disconnected status=" + status)
                 AppLog.w(GaiaConstants.TAG, "GATT disconnected status=" + status + " addr=" + deviceAddress)
                 connected = false
-                if (status != BluetoothGatt.GATT_SUCCESS) {
+                // 3.2.6: status=0（对端/本地正常断开）在「本次会话还没连上过」时也要走候选推进。
+                // 原先只有异常断开才处理，于是当首选候选是一个**已失效的 LE 地址**时：
+                // 连不上 -> 断开回调 status=0 -> 原地不处理 -> 下轮轮询又拿同一个地址去连，
+                // 永远换不到下一个候选（日志表现为反复 "connectGatt(auto) <同一地址> (cand 0/N)"）。
+                // 耳机换过 LE 地址（重连/重配对）后这就是死循环；把这种情况纳入推进即可自愈。
+                if (status != BluetoothGatt.GATT_SUCCESS || !everConnected) {
                     attemptCount++
                     Log.d(GaiaConstants.TAG, "unexpected disconnect, attemptCount=" + attemptCount +
                             " candidates=" + (candidates?.size ?: 0) + " idx=" + candidateIdx)
@@ -1458,6 +1493,7 @@ class GaiaBleClient private constructor() {
                 val okAddr = deviceAddress
                 if (okAddr != null) {
                     everConnected = true
+                    cachedLeTries = 0   // 3.2.6: 连上了就说明当前地址有效，重新计数
                     // alpha2.41.9: 服务已确认（GAIA 或 9ECA）-> 此时才允许写持久缓存
                     leAddrVerified = true
                     cacheVerifiedLeAddr(okAddr)

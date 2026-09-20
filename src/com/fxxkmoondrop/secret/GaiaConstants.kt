@@ -10,6 +10,14 @@ object GaiaConstants {
     const val TAG = "GaiaBleClient"
     const val PKG_GMS = "com.google.android.gms"
     const val GATT_PENDING_TIMEOUT_MS = 12000L
+
+    /**
+     * 缓存 LE 地址的最大连续尝试次数。
+     *
+     * 超过即判定该地址不再成立（耳机换过 LE 地址）并淘汰，改为尝试其它候选或重新发现。
+     * 取 3 是因为轮询周期 5 秒 —— 约 15 秒仍连不上就不再值得继续在它上面耗。
+     */
+    const val CACHED_LE_MAX_TRIES = 3
     const val SCAN_DURATION_MS = 8000L
 
     // GATT Service / Characteristic UUIDs
