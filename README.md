@@ -7,9 +7,9 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.6**（versionCode 326） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.7**（versionCode 327） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
-> [![最新正式版](https://img.shields.io/badge/release-3.2.6-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
+> [![最新正式版](https://img.shields.io/badge/release-3.2.7-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -97,6 +97,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | 支持 | 梦回1979 / Golden Ages | 与梦回2同平台同款主控（GAIA） | 芯片理论支持 |
 | 理论上支持 | 猫饼 NEKOCAKE | BT8922E（9ECA） | 芯片理论支持 |
 | 支持 | 太空漫游2 / Space Travel 2 | BT8932F（9ECA） | 实机验证通过（ANC 设备码 1=关/2=降/3=抗风/4=透传；增益 设备码 0=高/1=中/2=低 已入库） |
+| 支持 | U.C.T.S（MD-OWS-014，开放式） | 高通 QCC（GAIA） | 实机验证通过（issue #9：识别成功、控制正常、左右耳电量正常、弹窗正常；**硬件本身无降噪**，故降噪能力不可用） |
 | 理论上支持 | 音乐胶囊 PILL | BT8932F（9ECA） | 芯片理论支持 |
 | 理论上支持 | 超声波 ULTRASONIC | BT8952F（9ECA） | 芯片理论支持 |
 | 应当支持 | 知更鸟 Robin | BT8952F（9ECA） | 芯片理论支持 |
@@ -184,6 +185,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **3.2.7**：主界面降噪区块改为**按设备能力显隐** —— 硬件本身没有降噪的型号（如 U.C.T.S / MD-OWS-014）不再挂着一排点了没反应的降噪按钮；未连接或能力未探明时仍是"显示但置灰"，不闪、不误判。弹窗与通知栏原本就按能力处理，这次把主界面补齐到同一规则。
 - **3.2.6**：修掉「首选候选是失效 LE 地址时原地打转」—— 断开码为 0（正常断开）时此前不推进候选，于是耳机换过 LE 地址后（蓝牙重启、重新配对）会一直重连同一个失效地址、永远连不上。现在「本次会话还没连上过」时也会推进候选，可自愈。
 - **3.2.5**：**连接提速** —— 耳机连接广播到达时立刻开始连 GAIA，不再干等 5 秒轮询周期（系统广播本来就免费送到进程里，此前只拿它弹窗、不拿它触发连接；GMS 那条唤醒链需要 root，断了就只能白等）。实测 GAIA 就绪约 2.3 秒，连接稳定。
 - **3.2.4**：Hearable Controls 链路（含音量面板）对其他耳机「功能零介入 + 日志零输出」——核查确认转发与注入全部以目标地址为门禁，并把两处未过滤的观测日志也收敛到目标设备，顺带修掉「日志会打印其他设备 MAC」的隐私问题。

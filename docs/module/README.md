@@ -2,7 +2,7 @@
 
 Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议**直连耳机，读取左右耳电量、控制降噪。
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.6**（versionCode 326） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.7**（versionCode 327） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 > **本仓库是 LSPosed 模块索引 / 发布页，不含源码。** 完整源码、构建方式、Issue 与最新版本请前往源码仓库：
 >
@@ -42,7 +42,7 @@ Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动
 
 > 兼容性判定基于**蓝牙传输层与服务指纹**，不依赖型号名。因此只要主控为**高通 QCC** 或**中科蓝讯（Bluetrum）**，理论上即可接入。
 
-- **已实测**：梦回2 / Golden Ages 2（GAIA）、太空漫游2 / Space Travel 2（9ECA）
+- **已实测**：梦回2 / Golden Ages 2（GAIA）、太空漫游2 / Space Travel 2（9ECA）、U.C.T.S（MD-OWS-014，GAIA；硬件无降噪）
 - **理论上支持**：爱丽丝 / 火花 / 旅行者 / 梦回1979 / 猫饼 / 音乐胶囊 / 超声波 / 知更鸟 / 布丁（GAIA V4）
 - **未知**：太空漫游（一代）/ 猫咖 / 方糖 / 太空漫游2 ULTRA / 羽翼 EDGE 等，待实机验证
 

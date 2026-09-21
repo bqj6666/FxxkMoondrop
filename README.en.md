@@ -5,9 +5,9 @@
 ![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)
 
-> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.6** (versionCode 326) | License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.7** (versionCode 327) | License: **GPL-3.0** (see [LICENSE](LICENSE))
 
-> [![Latest release](https://img.shields.io/badge/release-3.2.6-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
+> [![Latest release](https://img.shields.io/badge/release-3.2.7-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -95,6 +95,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 | Theoretically supported | 梦回1979 / Golden Ages | Same platform & SoC as GA2 (GAIA) | Chip-level support |
 | Theoretically supported | 猫饼 NEKOCAKE | BT8922E (9ECA) | Chip-level support |
 | Tested | 太空漫游2 / Space Travel 2 | BT8932F (9ECA) | Verified on real device (ANC device codes 1=OFF/2=ANC/3=Wind/4=Transparency; gain codes 0=High/1=Mid/2=Low stored) |
+| Tested | U.C.T.S (MD-OWS-014, open-ear) | Qualcomm QCC (GAIA) | Verified on a real device (issue #9: recognized, controls work, L/R battery correct, popup works; **the hardware itself has no ANC**, so noise cancellation is unavailable by design) |
 | Theoretically supported | 音乐胶囊 PILL | BT8932F (9ECA) | Chip-level support |
 | Theoretically supported | 超声波 ULTRASONIC | BT8952F (9ECA) | Chip-level support |
 | Theoretically supported | 知更鸟 Robin | BT8952F (9ECA) | Chip-level support |
@@ -182,6 +183,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **3.2.7**: The main screen's noise-control block is now **gated on device capability** - models whose hardware has no ANC at all (such as the U.C.T.S / MD-OWS-014) no longer show a row of buttons that do nothing when tapped. While disconnected or before capability is known it still shows greyed out, so it neither flickers nor misjudges. The popup and the notification already followed this rule; the main screen now matches them.
 - **3.2.6**: Fixed getting stuck on a stale LE address - when the disconnect status is 0 (a normal disconnect) the candidate list was not advanced, so after the earbuds changed their LE address (Bluetooth restart / re-pairing) the app kept retrying the same dead address forever. Candidates are now advanced whenever this session has not connected yet, so it recovers on its own.
 - **3.2.5**: **Faster connection** - the service now starts connecting to GAIA the moment the earbuds-connection broadcast arrives, instead of waiting out the 5-second poll (the system broadcast was already being delivered to the process; it was only used to show the popup, not to start the connection - and the GMS wake-up path needs root, so without it you simply waited). Measured: GAIA ready in about 2.3s, connection stable.
 - **3.2.4**: The Hearable Controls path (including the volume panel) is now "no functional interference and no log output" for other earbuds - the audit confirmed every forward and inject path is gated on the target address, and the two unfiltered observation logs were narrowed to the target device, which also fixes other devices' MAC addresses leaking into logs.

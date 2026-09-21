@@ -1439,11 +1439,22 @@ class OverviewFragment : Fragment() {
         var st3 = moonProcState
         if (st3 == null) st3 = Lang.t("未知", "Unknown")
         val ancEnabled = realConnected && st3.contains("✅")
+        // 3.2.7: 设备已连接且能力探测**明确判定无 ANC**（probe.status()==2）时，
+        // 整个降噪区块（标题 + 按钮行）隐藏。此前是无条件显示，于是像 U.C.T.S(MD-OWS-014)
+        // 这种硬件本身就没有降噪的型号，主界面会挂着一排点了没反应的降噪按钮（issue #9）。
+        // 弹窗与通知本来就按能力处理（status==2 隐藏 mode bar / supportedUiModes 为空则无按钮），
+        // 这里只是把主界面补齐到同一条规则上。
+        // 未连接、或能力尚未探明（status==0）时维持既有行为：显示但置灰 —— 避免连接期间闪烁。
+        val showAncBlock = !realConnected || try {
+            GaiaBleClient.getInstance().ancCapabilityStatus() != 2
+        } catch (_: Throwable) {
+            true
+        }
         ancTitle?.let {
-            it.visibility = View.VISIBLE
+            it.visibility = if (showAncBlock) View.VISIBLE else View.GONE
             it.alpha = if (ancEnabled) 1f else 0.45f
         }
-        ancBtnRow?.let { it.visibility = View.VISIBLE }
+        ancBtnRow?.let { it.visibility = if (showAncBlock) View.VISIBLE else View.GONE }
         // 3.0.5: 自适应(4) 列只在设备能力确证支持时出现；能力未知/不支持一律隐藏。
         // 只门控这一档：其余 0..3 维持既有行为，不改动现有设备的表现。
         ancAdaptCol?.let { col ->
