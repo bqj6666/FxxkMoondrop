@@ -32,7 +32,8 @@ class DeviceMatcher {
             "goldenages",
             "水月雨",
             "robin",
-            "知更鸟"
+            "知更鸟",
+            "wf-1000xm5",
         )
 
         private const val PREF_LEARNED = "learned_device_names"
