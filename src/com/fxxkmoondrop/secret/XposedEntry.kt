@@ -209,7 +209,7 @@ class XposedEntry : XposedModule() {
                     chain.proceed()
                     try {
                         val thisObj = chain.thisObject
-                        if (AncProfileLib.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
+                        if (DeviceMatcher.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
                     } catch (th: Throwable) { Log.e(TAG, "detail extras onStart error", th) }
                     null
                 }
@@ -221,7 +221,7 @@ class XposedEntry : XposedModule() {
                     chain.proceed()
                     try {
                         val thisObj = chain.thisObject
-                        if (AncProfileLib.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
+                        if (DeviceMatcher.isMoondrop(detailDeviceName(thisObj))) showOfficialExtras(cl, thisObj)
                     } catch (th: Throwable) { Log.e(TAG, "detail extras onResume error", th) }
                     null
                 }
@@ -1013,9 +1013,17 @@ class XposedEntry : XposedModule() {
             val bt = Class.forName("com.android.settingslib.bluetooth.BluetoothUtils", true, cl)
             val raw = HookHelper.callStaticMethod(bt, "getFastPairCustomizedField", device,
                     "HEARABLE_CONTROL_SLICE_WITH_WIDTH") as? String
-            if (raw.isNullOrEmpty()) return null
+            // 元数据缺失时（如 Sony 等未走 Fast Pair 流程接入的设备）自拼官方切片地址。
+            // 格式取自 GA2 的真实元数据：content://.../hearable_control?address=<URL 编码 MAC>&view_width=
+            val base = if (raw.isNullOrEmpty()) {
+                if (!DeviceMatcher.isMoondrop(HookHelper.callMethod(device, "getName") as? String)) return null
+                val addr = HookHelper.callMethod(device, "getAddress") as? String
+                if (addr.isNullOrEmpty()) return null
+                "content://com.google.android.gms.nearby.fastpair/hearable_control?address=" +
+                        java.net.URLEncoder.encode(addr, "UTF-8") + "&view_width="
+            } else raw
             val w = ctx.resources.displayMetrics.widthPixels
-            android.net.Uri.parse(raw.replace("view_width=", "view_width=$w"))
+            android.net.Uri.parse(base.replace("view_width=", "view_width=$w"))
         } catch (th: Throwable) {
             Log.d(TAG, "controlSliceUri failed: $th")
             null
