@@ -336,7 +336,7 @@ class OnboardingActivity : Activity() {
         if (!::permBox.isInitialized || permLoading) return
         permLoading = true
         permBox.removeAllViews()
-        permBox.addView(hint(Lang.t(this, "正在检查…", "Checking…")))
+        permBox.addView(M3Ui.loadingRow(this, pal, Lang.t(this, "正在检查…", "Checking…")))
         val act = this
         Thread {
             val items = try {
@@ -662,7 +662,7 @@ class OnboardingActivity : Activity() {
         if (!::welcomeBox.isInitialized || welcomeLoading) return
         welcomeLoading = true
         welcomeBox.removeAllViews()
-        welcomeBox.addView(hint(Lang.t(this, "正在检查…", "Checking…")))
+        welcomeBox.addView(M3Ui.loadingRow(this, pal, Lang.t(this, "正在检查…", "Checking…")))
         val act = this
         Thread {
             val items = try {

@@ -640,7 +640,38 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     .start()
         }
 
-        /** M3 Filled 按钮：官方 MaterialButton（primary 底 onPrimary 字，高 48dp / 圆角 24dp / labelLarge 14sp） */
+        /**
+         * M3 官方加载行：LoadingIndicator + 文字（material 1.14 新增组件）。
+         * 用于真正耗时的后台任务占位（root 探测、模块 PING、日志打包等）——
+         * 取代原先只有一行「正在检查…」文字、没有任何进度反馈的写法。
+         */
+        @JvmStatic
+        fun loadingRow(c: Context, pal: ThemeUtil.Palette, text: String): LinearLayout {
+            val row = LinearLayout(c)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER
+            val ind = com.google.android.material.loadingindicator.LoadingIndicator(c)
+            ind.indicatorSize = dp(c, 20)
+            ind.setIndicatorColor(pal.primary)
+            row.addView(ind, LinearLayout.LayoutParams(dp(c, 24), dp(c, 24)))
+            row.addView(View(c), LinearLayout.LayoutParams(dp(c, 10), 1))
+            val t = TextView(c)
+            t.text = text
+            t.textSize = 13f
+            t.setTextColor(pal.onVariant)
+            row.addView(t, LinearLayout.LayoutParams(-2, -2))
+            return row
+        }
+
+        /**
+         * M3 Filled 按钮：官方 MaterialButton，尺寸/形状/内边距全部交给主题里的
+         * Widget.Material3Expressive.Button（material 1.14 起生效）。
+         *
+         * 不再手写 padding / 圆角：expressive 用 materialSizeOverlay 决定尺寸档
+         * （当前 Small：视觉 40dp + insetTop/Bottom 各 4dp = 48dp 触摸区），并用
+         * m3expressive_button_shape_state_list 做按下形变；手写这些值会把它覆盖掉。
+         * 另注：MaterialButton 不实现 minHeight，写 View.setMinimumHeight 是空操作。
+         */
         @JvmStatic
         fun filledButton(act: Activity, pal: ThemeUtil.Palette, text: String,
                          l: View.OnClickListener): TextView {
@@ -649,10 +680,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             b.textSize = 14f
             b.setTextColor(pal.onPrimary)
             b.backgroundTintList = ColorStateList.valueOf(pal.primary)
-            b.setCornerRadius(dp(act, 24))
             b.gravity = Gravity.CENTER
-            b.minHeight = dp(act, 48)
-            b.setPadding(dp(act, 24), dp(act, 12), dp(act, 24), dp(act, 12))
             b.setOnClickListener(l)
             return b
         }

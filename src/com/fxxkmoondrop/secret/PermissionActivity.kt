@@ -98,14 +98,8 @@ class PermissionActivity : Activity() {
         root.addView(headCard, LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(8)))
 
-        // ── 检查中提示 ──
-        progressRow = LinearLayout(this)
-        progressRow.gravity = Gravity.CENTER_HORIZONTAL
-        val prog = TextView(this)
-        prog.text = Lang.t(this, "正在检查…", "Checking…")
-        prog.textSize = 13f
-        prog.setTextColor(pal.onVariant)
-        progressRow.addView(prog, LinearLayout.LayoutParams(-2, -2))
+        // ── 检查中提示：官方 LoadingIndicator（检查含 root 探测与模块 PING，确实耗时）──
+        progressRow = M3Ui.loadingRow(this, pal, Lang.t(this, "正在检查…", "Checking…"))
         root.addView(progressRow, LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(8)))
 

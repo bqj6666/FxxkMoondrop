@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- alpha2.0: 官方 Material 3 主题（DayNight 深浅色自适应；NoActionBar 与各页 requestWindowFeature 一致）
      3.3.0: 补齐 M3 语义色 token，与 ThemeUtil.Palette 同源。
+     3.3.1: 主题基类切换到 M3 Expressive（material 1.14.0）——按钮形状分级、
+     弹簧动效、开关/对话框等组件全部走 expressive 规范；颜色仍由下方 token 覆盖。
      未显式着色的官方组件（MaterialAlertDialog 等）此前回落到 baseline 紫 #6750A4，与动态色打架。 -->
 <resources>
-    <style name="Theme.FxxkMoondrop" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.FxxkMoondrop" parent="Theme.Material3Expressive.DayNight.NoActionBar">
         <item name="colorPrimary">@color/m3_primary</item>
         <item name="colorOnPrimary">@color/m3_on_primary</item>
         <item name="colorPrimaryContainer">@color/m3_primary_container</item>
