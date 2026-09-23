@@ -262,7 +262,9 @@ class OnboardingActivity : Activity() {
         s.textSize = 16f
         s.setTextColor(pal.onVariant)
         s.gravity = Gravity.CENTER
-        s.setLineSpacing(dp(4).toFloat(), 1f)
+        // M3 typescale bodyLarge = 16sp/24sp（行高比 1.5）。此前是 16sp+4dp ≈ 20sp，
+        // 明显紧于规范；引导页副标题是成段文字，按规范行高读起来才不挤。
+        s.setLineSpacing(0f, 1.5f)
         col.addView(s, LinearLayout.LayoutParams(-1, -2))
 
         if (body != null) {

@@ -191,14 +191,19 @@ object DeviceNotif {
 
         // 颜色统一走 M3 动态取色（与 App 内面板同一套 token，见 ControlPanel.refreshDcCard）
         val dark = ThemeUtil.isDark(c)
+        // 与 ThemeUtil.Palette 的 M3 角色取值保持一致：
+        //  - onContainer 此前 fallback 误写成 container 的值（深色下 onContainer==container，
+        //    按钮文字与底色同色，实为不可读）；onPrimary 也没按主题分支。
         val primary = ThemeUtil.dyn(c, "system_accent1_400",
             if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
-        val container = ThemeUtil.dyn(c, "system_accent1_800",
-            if (dark) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
-        val onContainer = ThemeUtil.dyn(c, "system_accent1_50",
-            if (dark) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
-        val onPrimary = 0xFFFFFFFF.toInt()
-        val fg = if (dark) 0xFFFFFFFF.toInt() else 0xFF1D1B20.toInt()
+        val container = if (dark) ThemeUtil.dyn(c, "system_accent1_800", 0xFF4F378B.toInt())
+        else ThemeUtil.dyn(c, "system_accent1_50", 0xFFE8DEF8.toInt())
+        val onContainer = if (dark) ThemeUtil.dyn(c, "system_accent1_50", 0xFFEADDFF.toInt())
+        else ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
+        val onPrimary = if (dark) ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
+        else 0xFFFFFFFF.toInt()
+        val fg = if (dark) ThemeUtil.dyn(c, "system_neutral1_0", 0xFFE6E0E9.toInt())
+        else ThemeUtil.dyn(c, "system_neutral1_900", 0xFF1C1B1F.toInt())
 
         rv.setTextColor(R.id.notif_title, fg)
         rv.setTextColor(R.id.notif_text, fg)

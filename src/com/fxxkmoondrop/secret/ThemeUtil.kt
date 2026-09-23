@@ -177,9 +177,12 @@ class ThemeUtil {
             cardStroke = 0
             // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
             divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())
+            // 注：Android 的 tonal palette 只提供 tone 0/10/50/100/200…/1000，没有 90。
+            // 原先写 system_neutral1_90 会 getIdentifier 失败 → 永远走 fallback，
+            // 等于浅色下这格从未跟随壁纸。改用最接近的有效 tone 100。
             surfaceContainerHighest = if (on) 0xFF262626.toInt()
             else if (dark) dyn(c, "system_neutral1_700", 0xFF36343B.toInt())
-            else dyn(c, "system_neutral1_90", 0xFFE6E0E9.toInt())
+            else dyn(c, "system_neutral1_100", 0xFFE6E0E9.toInt())
 
             primary = prim
             onPrimary = onPrim

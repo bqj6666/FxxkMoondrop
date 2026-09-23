@@ -947,8 +947,8 @@ class OverviewFragment : Fragment() {
         card.scaleX = 0.96f
         card.scaleY = 0.96f
         card.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                .setDuration(300)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.4f))
+                .setDuration(Motion.MEDIUM2)
+                .setInterpolator(Motion.enter())
                 .start()
     }
 
@@ -1542,11 +1542,15 @@ class OverviewFragment : Fragment() {
                     if (row.isLaidOut) {
                         row.alpha = 0f
                         row.translationY = dp(8).toFloat()
-                        row.animate().alpha(1f).translationY(0f).setDuration(250).start()
+                        row.animate().alpha(1f).translationY(0f)
+                                .setDuration(Motion.MEDIUM1)
+                                .setInterpolator(Motion.enter()).start()
                     }
                 } else {
                     if (row.isLaidOut) {
-                        row.animate().alpha(0f).translationY(dp(8).toFloat()).setDuration(200)
+                        row.animate().alpha(0f).translationY(dp(8).toFloat())
+                                .setDuration(Motion.SHORT4)
+                                .setInterpolator(Motion.exit())
                                 .withEndAction { if (!battRowShown) row.visibility = View.GONE }
                                 .start()
                     } else {

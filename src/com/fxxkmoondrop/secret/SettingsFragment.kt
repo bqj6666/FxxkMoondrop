@@ -202,7 +202,9 @@ class SettingsFragment : Fragment() {
             if (seedAnim != null) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (seedAnim.parent != null) {
-                        seedAnim.animate().alpha(1f).translationY(0f).setDuration(250).start()
+                        seedAnim.animate().alpha(1f).translationY(0f)
+                                .setDuration(Motion.MEDIUM1)
+                                .setInterpolator(Motion.enter()).start()
                     }
                 }, 120)
             }
@@ -774,7 +776,9 @@ class SettingsFragment : Fragment() {
             val sr = seedRow
             if (key == "dynamic_color" && checked && sr != null && sr.parent != null) {
                 // 开启动态取色 -> 先播种子颜色行消失动画，再重建（Material fade+slide）
-                sr.animate().alpha(0f).translationY(dp(8).toFloat()).setDuration(200).start()
+                sr.animate().alpha(0f).translationY(dp(8).toFloat())
+                        .setDuration(Motion.SHORT4)
+                        .setInterpolator(Motion.exit()).start()
                 scheduleRebuild(550L)
             } else {
                 // 等 MaterialSwitch 动画播完再重建（立即 recreate 会吞掉开关动画）

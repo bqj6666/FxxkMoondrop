@@ -321,8 +321,11 @@ object ControlPanel {
         card.visibility = if (anyVisible) View.VISIBLE else View.GONE
 
         // alpha2.39.1: 禁用态用暗中性灰（dark 下 onVariant 偏浅会发白），不发白
-        val grey = ThemeUtil.dyn(ctx, "system_neutral1_80",
-            if (ThemeUtil.isDark(ctx)) 0xFF2A2A2E.toInt() else 0xFFE0E0E0.toInt())
+        // system_neutral1_80 不是有效 tone（Android 只有 0/10/50/…/1000），原先恒走 fallback。
+        // 且禁用灰在两个主题下方向相反：深色要偏暗、浅色要偏亮，必须分主题取不同 tone。
+        val darkCp = ThemeUtil.isDark(ctx)
+        val grey = if (darkCp) ThemeUtil.dyn(ctx, "system_neutral1_800", 0xFF2A2A2E.toInt())
+        else ThemeUtil.dyn(ctx, "system_neutral1_100", 0xFFE0E0E0.toInt())
         val primary = ThemeUtil.dyn(ctx, "system_accent1_400",
             if (ThemeUtil.isDark(ctx)) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
         // 与 buildDcCard 初始底色一致：深色用 system_accent1_800（深紫），避免发白

@@ -609,7 +609,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 item.setOnClickListener {
                     // M3 退场：缩回 0.9 + 淡出，120ms 后再真正 dismiss
                     menu.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-                            .setDuration(120L)
+                            .setDuration(Motion.SHORT3)
+                            .setInterpolator(Motion.exit())
                             .withEndAction {
                                 try { pop.dismiss() } catch (_: Throwable) { }
                             }
@@ -645,9 +646,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
             menu.animate()
                     .alpha(1f).scaleX(1f).scaleY(1f)
-                    .setDuration(140L)
-                    .setInterpolator(android.view.animation.PathInterpolator(
-                            0.05f, 0.7f, 0.1f, 1f))
+                    .setDuration(Motion.SHORT3)
+                    .setInterpolator(Motion.enter())
                     .start()
         }
 
@@ -804,4 +804,36 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             return row
         }
     }
+}
+
+/**
+ * M3 Motion 规范 token（m3.material.io/styles/motion）。
+ *
+ * 时长取 duration token、缓动取 easing token，不要在调用点写裸数字 ——
+ * 否则同一个 App 里会散出 90/120/140/180/250/300 各种不成体系的时长，动效手感无法统一。
+ *
+ * 用法约定：**进场用 [enter]（decelerate），退场用 [exit]（accelerate）**。
+ * M3 的观感依据是「进场从容停下、退场果断离开」，两者曲线方向相反，混用会显得迟钝。
+ */
+object Motion {
+    /** 小元件状态切换（开关、指示器形变） */
+    const val SHORT2 = 100L
+    /** 菜单/浮层进出、chip 选择 */
+    const val SHORT3 = 150L
+    /** 列表行、小型卡片进出 */
+    const val SHORT4 = 200L
+    /** 面板展开、行组显隐 */
+    const val MEDIUM1 = 250L
+    /** 大容器、页面级过渡 */
+    const val MEDIUM2 = 300L
+
+    /** emphasized-decelerate：进场曲线 */
+    private val EMPH_DECEL = android.view.animation.PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
+    /** emphasized-accelerate：退场曲线 */
+    private val EMPH_ACCEL = android.view.animation.PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
+
+    /** 进场缓动（配 SHORT3/SHORT4/MEDIUM1/MEDIUM2） */
+    @JvmStatic fun enter(): android.view.animation.Interpolator = EMPH_DECEL
+    /** 退场缓动 */
+    @JvmStatic fun exit(): android.view.animation.Interpolator = EMPH_ACCEL
 }
