@@ -26,6 +26,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import java.io.BufferedReader
 import java.io.File
@@ -788,45 +789,28 @@ class SettingsFragment : Fragment() {
     }
 
 
-    /** Material 风格确认弹窗（深浅色自适应，pal 色板），ok 回调在主线程。 */
+    /**
+     * 3.3.0: 改用 M3 官方 MaterialAlertDialogBuilder。
+     * 标题/正文/按钮排版与无障碍语义全部交给官方组件（此前是自绘 Dialog + 手搓按钮行），
+     * 颜色取自主题 M3 token（见 res/values 与 res/values-night 下的 colors.xml），与 ThemeUtil.Palette 同源。
+     * ok 回调在主线程。
+     */
     private fun showMaterialConfirm(t: String, m: String, okText: String, onOk: Runnable) {
-        val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
-        box.addView(M3Ui.dialogTitle(requireContext(), t, pal.onSurface),
-                LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(10)))
-        val msg = TextView(requireContext())
-        msg.text = m
-        msg.textSize = 14f
-        msg.setTextColor(pal.onVariant)
-        msg.setLineSpacing(dp(3).toFloat(), 1.3f)
-        box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(20)))
-        val btnRow = LinearLayout(requireContext())
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), pal.onVariant) { d.dismiss() })
-        btnRow.addView(spacer(dp(10)))
-        btnRow.addView(makeMaterialTextButton(okText, pal.primary) { d.dismiss(); onOk.run() })
-        box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.show()
+        MaterialAlertDialogBuilder(requireContext())
+                .setTitle(t)
+                .setMessage(m)
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .setPositiveButton(okText) { _, _ -> onOk.run() }
+                .show()
     }
 
+    /** 3.3.0: M3 官方 MaterialAlertDialogBuilder（同 showMaterialConfirm）。 */
     private fun showSimpleDialog(t: String, m: String) {
-        val (d, box) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
-        box.addView(M3Ui.dialogTitle(requireContext(), t, pal.onSurface),
-                LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(10)))
-        val msg = TextView(requireContext())
-        msg.text = m
-        msg.textSize = 14f
-        msg.setTextColor(pal.onVariant)
-        msg.setLineSpacing(dp(3).toFloat(), 1.3f)
-        box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(20)))
-        val btnRow = LinearLayout(requireContext())
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton(Lang.t("知道了", "Got it"), pal.primary) { d.dismiss() })
-        box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.show()
+        MaterialAlertDialogBuilder(requireContext())
+                .setTitle(t)
+                .setMessage(m)
+                .setPositiveButton(Lang.t("知道了", "Got it"), null)
+                .show()
     }
 
     // ── 弹窗图标（与 alpha1.34 行为一致）──

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 莫奈动态色；资源名与 ThemeUtil.dyn() 完全一致（实测 tone 0=最亮 / 1000=最暗）。 -->
+<resources>
+    <color name="m3_primary">@android:color/system_accent1_400</color>
+    <color name="m3_on_primary">#FFFFFFFF</color>
+    <color name="m3_primary_container">@android:color/system_accent1_50</color>
+    <color name="m3_on_primary_container">@android:color/system_accent1_900</color>
+    <color name="m3_secondary_container">@android:color/system_accent1_50</color>
+    <color name="m3_on_secondary_container">@android:color/system_accent1_900</color>
+    <color name="m3_surface">@android:color/system_neutral1_10</color>
+    <color name="m3_surface_container">#FFFFFFFF</color>
+    <color name="m3_surface_container_high">@android:color/system_neutral1_50</color>
+    <!-- ThemeUtil 用 system_neutral1_90（框架无此 tone，恒回落）→ 写实测回落值，与 App 内色板一致 -->
+    <color name="m3_surface_container_highest">#FFE6E0E9</color>
+    <color name="m3_surface_variant">@android:color/system_neutral1_100</color>
+    <color name="m3_on_surface">@android:color/system_neutral1_900</color>
+    <color name="m3_on_surface_variant">#FF49454F</color>
+    <color name="m3_outline">#FF79747E</color>
+    <color name="m3_outline_variant">#FFCAC4D0</color>
+</resources>

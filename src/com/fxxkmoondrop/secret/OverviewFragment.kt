@@ -34,6 +34,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.os.SystemClock
 import java.io.BufferedReader
 import java.io.File
@@ -1769,24 +1770,13 @@ class OverviewFragment : Fragment() {
         return b
     }
 
+    /** 3.3.0: M3 官方 MaterialAlertDialogBuilder（标题/正文/按钮交给官方组件）。 */
     private fun showSimpleDialog(t: String, m: String) {
-        val (d, box) = M3Ui.materialDialog(requireContext(), primaryColor, cardSurfaceColor)
-        box.addView(M3Ui.dialogTitle(requireContext(), t, onSurfaceColor),
-                LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(10)))
-        val msg = TextView(requireContext())
-        msg.text = m
-        msg.textSize = 14f
-        msg.setTextColor(onVariantColor)
-        msg.setLineSpacing(dp(2).toFloat(), 1.25f)
-        box.addView(msg, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(20)))
-        val btnRow = LinearLayout(requireContext())
-        btnRow.orientation = LinearLayout.HORIZONTAL
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeSmallButton(Lang.t("知道了", "Got it"), true) { d.dismiss() })
-        box.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        d.show()
+        MaterialAlertDialogBuilder(requireContext())
+                .setTitle(t)
+                .setMessage(m)
+                .setPositiveButton(Lang.t("知道了", "Got it"), null)
+                .show()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

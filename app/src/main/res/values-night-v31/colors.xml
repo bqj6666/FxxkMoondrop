@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 莫奈动态色（深色）；资源名与 ThemeUtil.dyn() 完全一致。 -->
+<resources>
+    <color name="m3_primary">@android:color/system_accent1_400</color>
+    <color name="m3_on_primary">@android:color/system_accent1_900</color>
+    <color name="m3_primary_container">@android:color/system_accent1_800</color>
+    <color name="m3_on_primary_container">@android:color/system_accent1_50</color>
+    <color name="m3_secondary_container">@android:color/system_accent1_800</color>
+    <color name="m3_on_secondary_container">@android:color/system_accent1_50</color>
+    <color name="m3_surface">@android:color/system_neutral1_900</color>
+    <color name="m3_surface_container">@android:color/system_neutral1_800</color>
+    <color name="m3_surface_container_high">@android:color/system_neutral1_700</color>
+    <color name="m3_surface_container_highest">@android:color/system_neutral1_700</color>
+    <color name="m3_surface_variant">@android:color/system_neutral1_700</color>
+    <color name="m3_on_surface">@android:color/system_neutral1_0</color>
+    <color name="m3_on_surface_variant">#FFCAC4D0</color>
+    <color name="m3_outline">#FF938F99</color>
+    <color name="m3_outline_variant">#FF49454F</color>
+</resources>

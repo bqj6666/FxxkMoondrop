@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- alpha2.0: 官方 Material 3 主题（DayNight 深浅色自适应；NoActionBar 与各页 requestWindowFeature 一致） -->
+<!-- alpha2.0: 官方 Material 3 主题（DayNight 深浅色自适应；NoActionBar 与各页 requestWindowFeature 一致）
+     3.3.0: 补齐 M3 语义色 token，与 ThemeUtil.Palette 同源。
+     未显式着色的官方组件（MaterialAlertDialog 等）此前回落到 baseline 紫 #6750A4，与动态色打架。 -->
 <resources>
-    <style name="Theme.FxxkMoondrop" parent="Theme.Material3.DayNight.NoActionBar" />
+    <style name="Theme.FxxkMoondrop" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/m3_primary</item>
+        <item name="colorOnPrimary">@color/m3_on_primary</item>
+        <item name="colorPrimaryContainer">@color/m3_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/m3_on_primary_container</item>
+        <item name="colorSecondaryContainer">@color/m3_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/m3_on_secondary_container</item>
+        <item name="colorSurface">@color/m3_surface</item>
+        <item name="colorOnSurface">@color/m3_on_surface</item>
+        <item name="colorSurfaceContainer">@color/m3_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/m3_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/m3_surface_container_highest</item>
+        <item name="colorSurfaceVariant">@color/m3_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/m3_on_surface_variant</item>
+        <item name="colorOutline">@color/m3_outline</item>
+        <item name="colorOutlineVariant">@color/m3_outline_variant</item>
+        <item name="android:colorBackground">@color/m3_surface</item>
+        <item name="android:colorBackgroundFloating">@color/m3_surface_container_high</item>
+    </style>
 </resources>

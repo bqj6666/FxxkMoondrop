@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M3 语义色 token：与 ThemeUtil.Palette 取值一一对应，供未显式着色的官方组件取用，避免回落 baseline 紫。 -->
+<resources>
+    <color name="m3_primary">#FF6750A4</color>
+    <color name="m3_on_primary">#FFFFFFFF</color>
+    <color name="m3_primary_container">#FFE8DEF8</color>
+    <color name="m3_on_primary_container">#FF21005D</color>
+    <color name="m3_secondary_container">#FFE8DEF8</color>
+    <color name="m3_on_secondary_container">#FF1D192B</color>
+    <color name="m3_surface">#FFFBF8FF</color>
+    <color name="m3_surface_container">#FFFFFFFF</color>
+    <color name="m3_surface_container_high">#FFF7F2FA</color>
+    <color name="m3_surface_container_highest">#FFE6E0E9</color>
+    <color name="m3_surface_variant">#FFE7E0EC</color>
+    <color name="m3_on_surface">#FF1C1B1F</color>
+    <color name="m3_on_surface_variant">#FF49454F</color>
+    <color name="m3_outline">#FF79747E</color>
+    <color name="m3_outline_variant">#FFCAC4D0</color>
+</resources>

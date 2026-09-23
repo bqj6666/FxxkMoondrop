@@ -482,11 +482,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             b.gravity = Gravity.CENTER
             b.isSingleLine = true
-            b.minimumHeight = dp(c, 40)
-            b.setPadding(dp(c, 16), dp(c, 10), dp(c, 16), dp(c, 10))
+            b.minimumHeight = dp(c, 48)
+            b.setPadding(dp(c, 16), dp(c, 12), dp(c, 16), dp(c, 12))
             b.setTextColor(pal.primary)
             val mask = GradientDrawable()
-            mask.cornerRadius = dp(c, 20).toFloat()
+            mask.cornerRadius = dp(c, 24).toFloat()
             b.background = android.graphics.drawable.RippleDrawable(
                     ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000),
                     null, mask)
@@ -496,7 +496,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /**
          * M3 分段控件（Segmented Button）：主题模式 / 语言等单选。
-         * 规范：高 40dp、圆角 20dp、labelLarge 14sp；
+         * 规范：高 48dp（M3 最小可点尺寸）、圆角 24dp、labelLarge 14sp；
          * 选中 = secondaryContainer/onSecondaryContainer，未选中 = 透明底 + 1dp outline 描边。
          * 原实现两处各写一份（主题模式、语言），样式与规范不符，统一收敛到这里。
          */
@@ -640,39 +640,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     .start()
         }
 
-        @JvmStatic
-        fun segRow(act: Activity, pal: ThemeUtil.Palette, items: Array<String>,
-                   selected: Int, onPick: (Int) -> Unit): LinearLayout {
-            val row = LinearLayout(act)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER
-            for (i in items.indices) {
-                val on = i == selected
-                val t = TextView(act)
-                t.text = items[i]
-                t.textSize = 14f
-                t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                t.gravity = Gravity.CENTER
-                t.minimumHeight = dp(act, 40)
-                t.isSingleLine = true
-                val g = GradientDrawable()
-                g.cornerRadius = dp(act, 20).toFloat()
-                g.setColor(if (on) pal.container else 0x00000000)
-                if (!on) g.setStroke(hairline(act),
-                        (pal.outline and 0x00FFFFFF) or 0x33000000.toInt())
-                t.background = g
-                t.setTextColor(if (on) pal.onContainer else pal.onSurface)
-                t.setOnClickListener { onPick(i) }
-                row.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
-                if (i < items.size - 1) {
-                    val gap = View(act)
-                    row.addView(gap, LinearLayout.LayoutParams(dp(act, 8), 1))
-                }
-            }
-            return row
-        }
-
-        /** M3 Filled 按钮：官方 MaterialButton（primary 底 onPrimary 字，高 40dp / 圆角 20dp / labelLarge 14sp） */
+        /** M3 Filled 按钮：官方 MaterialButton（primary 底 onPrimary 字，高 48dp / 圆角 24dp / labelLarge 14sp） */
         @JvmStatic
         fun filledButton(act: Activity, pal: ThemeUtil.Palette, text: String,
                          l: View.OnClickListener): TextView {
@@ -681,10 +649,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             b.textSize = 14f
             b.setTextColor(pal.onPrimary)
             b.backgroundTintList = ColorStateList.valueOf(pal.primary)
-            b.setCornerRadius(dp(act, 20))
+            b.setCornerRadius(dp(act, 24))
             b.gravity = Gravity.CENTER
-            b.minHeight = dp(act, 40)
-            b.setPadding(dp(act, 24), dp(act, 8), dp(act, 24), dp(act, 8))
+            b.minHeight = dp(act, 48)
+            b.setPadding(dp(act, 24), dp(act, 12), dp(act, 24), dp(act, 12))
             b.setOnClickListener(l)
             return b
         }
