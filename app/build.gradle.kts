@@ -49,9 +49,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // Kotlin 2.3+ 起 kotlinOptions.jvmTarget 由警告升级为错误，须用 compilerOptions DSL。
+    // 位置必须在顶层 kotlin {}（不能放在 android {} 内），见 kotl.in/u1r8ln
 
     lint {
         checkReleaseBuilds = false
@@ -118,7 +117,7 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     // Kotlin（与旧链 libs/ 版本一致）
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.21")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Xposed API：仅编译期（运行时由 LSPosed 提供）
@@ -171,5 +170,11 @@ val postEdf by tasks.registering(Exec::class) {
 }
 tasks.configureEach {
     if (name == "assembleRelease") {
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }

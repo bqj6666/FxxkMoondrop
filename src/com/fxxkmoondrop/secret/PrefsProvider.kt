@@ -58,7 +58,7 @@ class PrefsProvider : ContentProvider() {
             else -> return null
         }
         val c = MatrixCursor(arrayOf("_key", "_value"))
-        c.addRow(arrayOf(key, value))
+        c.addRow(arrayOf<Any>(key, value))
         return c
     }
 
@@ -108,23 +108,23 @@ class PrefsProvider : ContentProvider() {
             }
         } catch (th: Throwable) { Log.e("PrefsProvider", "dc_cmd err", th) }
         val c = MatrixCursor(arrayOf("_key", "_value"))
-        c.addRow(arrayOf("anc", AncBridge.getCurrentMode()))
-        c.addRow(arrayOf("spatial", if (DeviceControlBridge.isSpatialOn()) 1 else 0))
-        c.addRow(arrayOf("headTracking", DeviceControlBridge.spatialUiMode()))
-        c.addRow(arrayOf("gain", DeviceControlBridge.getGainLevel()))
-        c.addRow(arrayOf("led", DeviceControlBridge.getLedState()))
-        c.addRow(arrayOf("connected", if (g.isConnected()) 1 else 0))
+        c.addRow(arrayOf<Any>("anc", AncBridge.getCurrentMode()))
+        c.addRow(arrayOf<Any>("spatial", if (DeviceControlBridge.isSpatialOn()) 1 else 0))
+        c.addRow(arrayOf<Any>("headTracking", DeviceControlBridge.spatialUiMode()))
+        c.addRow(arrayOf<Any>("gain", DeviceControlBridge.getGainLevel()))
+        c.addRow(arrayOf<Any>("led", DeviceControlBridge.getLedState()))
+        c.addRow(arrayOf<Any>("connected", if (g.isConnected()) 1 else 0))
         // 第 2 项：GAIA 就绪（服务发现完成，命令真的发得出去）。面板可交互判据用它。
-        c.addRow(arrayOf("gaia", if (g.isGaiaReady()) 1 else 0))
+        c.addRow(arrayOf<Any>("gaia", if (g.isGaiaReady()) 1 else 0))
         // 第 1 项：本设备实际支持的 UI 档位（能力探测驱动，数据驱动多设备适配）。
         // 以逗号分隔；空串 = 能力未知，UI 侧退化为「按型号档案」显示。
-        c.addRow(arrayOf("modes", g.supportedUiModes().joinToString(",")))
+        c.addRow(arrayOf<Any>("modes", g.supportedUiModes().joinToString(",")))
         // 抗风档的显示偏好：由模块进程读自己的 cfg，Settings 进程直接读不到那份私有偏好，
         // 所以走这条通道带过去，免得详情页把用户「隐藏抗风」的选择忽略掉。
         val windOn = try {
             context?.getSharedPreferences("cfg", Context.MODE_PRIVATE)?.getBoolean("show_wind", true) ?: true
         } catch (_: Throwable) { true }
-        c.addRow(arrayOf("showWind", if (windOn) 1 else 0))
+        c.addRow(arrayOf<Any>("showWind", if (windOn) 1 else 0))
         return c
     }
 
