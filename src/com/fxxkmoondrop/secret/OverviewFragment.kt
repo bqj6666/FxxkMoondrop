@@ -696,7 +696,9 @@ class OverviewFragment : Fragment() {
                         "led" -> idx == if (ledOn) 0 else 1
                         else -> false
                     }
-                    val iconColor = if (active) 0xFFFFFFFF.toInt() else onContainerColor
+                    // 选中态底色是 primary；深色主题下 primary 本身是浅色，硬编码白前景对比度不足。
+                    // M3 规定 primary 上的内容用 onPrimary（深色主题 = 深色）。
+                    val iconColor = if (active) onPrimaryColor else onContainerColor
                     val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
                     val spatialDisabled = feature == "spatial" && !spatialOn
                     if (!connected || spatialDisabled) {
@@ -716,7 +718,7 @@ class OverviewFragment : Fragment() {
                             val g = GradientDrawable()
                             g.shape = GradientDrawable.OVAL
                             g.setColor(if (active) primaryColor else containerColor)
-                            if (active) g.setStroke(dp(2), 0xFFFFFFFF.toInt())
+                            if (active) g.setStroke(dp(2), onPrimaryColor)
                             bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
                         }
                         iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), iconColor))
@@ -1300,7 +1302,8 @@ class OverviewFragment : Fragment() {
     /** alpha1.20: 主界面模式按钮图标（与 Google 弹窗同款绘制：电源/波浪/耳朵），颜色动态 */
     private fun buildMainModeIcon(mode: Int, px: Int, color: Int): android.graphics.drawable.Drawable? {
         // alpha2.52: 统一走 M3Ui 的 Material Symbols 矢量图标（主界面 / GMS 弹窗 / hook 面板同源）
-        val cacheKey = mode * 2 + (if (color == 0xFFFFFFFF.toInt()) 1 else 0)
+        // 选中态前景是 onPrimary（深色主题下不是白色），缓存键必须跟着改，否则深色下永不命中
+        val cacheKey = mode * 2 + (if (color == onPrimaryColor) 1 else 0)
         val cache = ancIconCache
         if (cache != null && cacheKey < cache.size) {
             cache[cacheKey]?.let { return it }
@@ -1478,13 +1481,13 @@ class OverviewFragment : Fragment() {
                     val g = GradientDrawable()
                     g.shape = GradientDrawable.OVAL
                     g.setColor(if (sel) primaryColor else containerColor)
-                    if (sel) g.setStroke(dp(2), 0xFFFFFFFF.toInt()) // alpha1.20: 选中白描边
+                    if (sel) g.setStroke(dp(2), onPrimaryColor) // M3: primary 底上的描边用 onPrimary
                     bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
                 }
                 val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
                 if (iv != null) {
                     iv.setImageDrawable(buildMainModeIcon(i, dp(26),
-                            if (sel) 0xFFFFFFFF.toInt() else onContainerColor))
+                            if (sel) onPrimaryColor else onContainerColor))
                 }
                 ancLabels?.get(i)?.let {
                     it.setTextColor(if (sel) primaryColor else onContainerColor)

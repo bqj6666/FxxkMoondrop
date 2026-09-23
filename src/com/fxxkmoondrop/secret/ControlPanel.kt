@@ -355,7 +355,8 @@ object ControlPanel {
                         "led" -> idx == if (ledOn) 0 else 1
                         else -> false
                     }
-                    val iconColor = if (active) 0xFFFFFFFF.toInt() else onContainerOf(ctx)
+                    // 同主界面：选中态底色是 primary，前景必须用 onPrimary 才满足对比度
+                    val iconColor = if (active) onPrimaryOf(ctx) else onContainerOf(ctx)
                     val featType = when (feature) { "gain" -> 1; "led" -> 2; else -> 0 }
                     if (!state.gaiaReady) {
                         holder.isEnabled = false
@@ -374,7 +375,7 @@ object ControlPanel {
                             val g = GradientDrawable()
                             g.shape = GradientDrawable.OVAL
                             g.setColor(if (active) primary else containerCal)
-                            if (active) g.setStroke(dp(2), 0xFFFFFFFF.toInt())
+                            if (active) g.setStroke(dp(2), onPrimaryOf(ctx))
                             bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
                         }
                         iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), iconColor))
@@ -436,6 +437,11 @@ object ControlPanel {
 
     private fun onContainerOf(ctx: Context): Int = ThemeUtil.dyn(ctx, "system_accent1_50",
         if (ThemeUtil.isDark(ctx)) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
+
+    /** 与 ThemeUtil.Palette.onPrimary 同源：primary 上的前景色（深色主题=深色，浅色主题=白）。 */
+    private fun onPrimaryOf(ctx: Context): Int =
+        if (ThemeUtil.isDark(ctx)) ThemeUtil.dyn(ctx, "system_accent1_900", 0xFF21005D.toInt())
+        else 0xFFFFFFFF.toInt()
 
     private fun dp(ctx: Context, px: Int): Int = (px * ctx.resources.displayMetrics.density).toInt()
 

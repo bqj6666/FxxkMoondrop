@@ -413,7 +413,9 @@ class OnboardingActivity : Activity() {
         circle.background = bg
         val ic = ImageView(this)
         ic.setImageResource(R.drawable.ic_check)
-        ic.imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
+        // pal.green 深色主题下是浅绿(#8FD89B)，配白勾对比度仅 ~1.8:1；改为按主题取对比色。
+        ic.imageTintList = ColorStateList.valueOf(
+                if (pal.dark) 0xFF1C1B1F.toInt() else 0xFFFFFFFF.toInt())
         circle.addView(ic, FrameLayout.LayoutParams(dp(17), dp(17), Gravity.CENTER))
         outer.addView(circle, LinearLayout.LayoutParams(dp(30), dp(30)))
         return outer
