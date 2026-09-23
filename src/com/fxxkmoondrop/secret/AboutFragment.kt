@@ -60,13 +60,13 @@ class AboutFragment : Fragment() {
         box.background = M3Ui.cardBg(requireContext(), pal, 20)
         val t1 = TextView(requireContext())
         t1.text = lead
-        t1.textSize = 15f
+        t1.textSize = 16f
         t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t1.setTextColor(pal.onSurface)
         box.addView(t1, LinearLayout.LayoutParams(-2, -2))
         val t2 = TextView(requireContext())
         t2.text = body
-        t2.textSize = 13f
+        t2.textSize = 14f
         t2.setTextColor(pal.onVariant)
         t2.setLineSpacing(dp(2).toFloat(), 1.25f)
         t2.setPadding(0, dp(8), 0, 0)

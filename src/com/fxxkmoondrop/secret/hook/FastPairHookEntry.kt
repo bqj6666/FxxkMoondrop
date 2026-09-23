@@ -587,7 +587,7 @@ class FastPairHookEntry {
                     tv = android.widget.TextView(act)
                     tv.tag = "fxxk_batt_tv"
                     tv.gravity = android.view.Gravity.CENTER
-                    tv.textSize = 15f
+                    tv.textSize = 14f
                     tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                     val lp = android.widget.FrameLayout.LayoutParams(
                             android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,

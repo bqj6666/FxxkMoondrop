@@ -1,1 +1,15 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8zM12,6c-3.31,0 -6,2.69 -6,6s2.69,6 6,6c1.66,0 3.14,-0.69 4.22,-1.78l-1.42,-1.43C14.06,15.52 13.09,16 12,16c-2.21,0 -4,-1.79 -4,-4s1.79,-4 4,-4c1.09,0 2.06,0.48 2.8,1.21l1.42,-1.43C15.14,6.69 13.66,6 12,6z"/></vector>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols（Rounded, weight 400, fill 0）官方字形。
+     来源：google/material-design-icons · symbols/web/copyright/materialsymbolsrounded/copyright_24px.svg
+     960 网格；SVG viewBox 为 "0 -960 960 960"，用 group translateY=960 归位。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Zm-80 160h160q17 0 28.5-11.5T600-360v-40q0-17-11.5-28.5T560-440q-17 0-28.5 11.5T520-400h-80v-160h80q0 17 11.5 28.5T560-520q17 0 28.5-11.5T600-560v-40q0-17-11.5-28.5T560-640H400q-17 0-28.5 11.5T360-600v240q0 17 11.5 28.5T400-320Z" />
+    </group>
+</vector>

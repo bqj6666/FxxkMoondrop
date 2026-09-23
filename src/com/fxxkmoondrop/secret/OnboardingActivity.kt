@@ -259,7 +259,7 @@ class OnboardingActivity : Activity() {
 
         val s = TextView(this)
         s.text = sub
-        s.textSize = 15f
+        s.textSize = 16f
         s.setTextColor(pal.onVariant)
         s.gravity = Gravity.CENTER
         s.setLineSpacing(dp(4).toFloat(), 1f)
@@ -374,7 +374,7 @@ class OnboardingActivity : Activity() {
     private fun groupLabel(text: String): TextView {
         val t = TextView(this)
         t.text = text
-        t.textSize = 13f
+        t.textSize = 14f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(pal.primary)
         t.setPadding(dp(6), dp(10), dp(6), dp(4))
@@ -802,7 +802,7 @@ class OnboardingActivity : Activity() {
     private fun hint(text: String): TextView {
         val t = TextView(this)
         t.text = text
-        t.textSize = 13f
+        t.textSize = 14f
         t.setTextColor(pal.onVariant)
         t.setLineSpacing(dp(4).toFloat(), 1f)
         t.setPadding(dp(4), dp(4), dp(4), dp(10))

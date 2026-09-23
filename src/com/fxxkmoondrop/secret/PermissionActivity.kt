@@ -179,7 +179,7 @@ class PermissionActivity : Activity() {
         if (items.isEmpty()) return
         val label = TextView(this)
         label.text = title
-        label.textSize = 13f
+        label.textSize = 14f
         label.typeface = android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL)
         label.setTextColor(pal.primary)

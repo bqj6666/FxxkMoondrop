@@ -232,7 +232,7 @@ class SettingsFragment : Fragment() {
                 Lang.t("收集设备信息与运行日志，导出 ZIP（含隐私声明）", "Collect device info and logs, export ZIP (incl. privacy notice)"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) { showLogDialog() }
         val iconState = TextView(requireContext())
-        iconState.textSize = 13f
+        iconState.textSize = 14f
         iconState.setTextColor(pal.primary)
         iconState.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         // alpha2.53: 检查是异步的（读私有目录），等待期间显示圆形加载指示，避免行上先空一截再突然出字
@@ -496,7 +496,7 @@ class SettingsFragment : Fragment() {
         for (i in trackLabels.indices) {
             val et = EditText(requireContext())
             et.setText(getSP().getString("track_label_" + i, trackLabels[i]))
-            et.textSize = 15f
+            et.textSize = 16f
             et.setSingleLine(true)
             et.setPadding(dp(8), dp(4), dp(8), dp(4))
             val etBg = GradientDrawable()
@@ -662,7 +662,7 @@ class SettingsFragment : Fragment() {
     private fun makeSubLabel(text: String): TextView {
         val t = TextView(requireContext())
         t.text = text
-        t.textSize = 13f
+        t.textSize = 14f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(pal.onSurface)
         t.setPadding(dp(4), dp(8), dp(4), dp(2))
@@ -833,68 +833,55 @@ class SettingsFragment : Fragment() {
             androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri -> if (uri != null) saveIconFromUri(uri) }
 
+    /**
+     * 3.3.1: 改用 M3 官方 MaterialAlertDialogBuilder + M3Ui.listRow。
+     *
+     * 此前是自绘外壳（M3Ui.materialDialog + GradientDrawable 圆角行 + 手搓按钮行），
+     * 与已改官方组件的其它弹窗风格不统一：标题排版、按钮顺序、圆角、无障碍语义都要自己维护。
+     * 现在标题/按钮交给官方 AlertDialog，行内容用 M3 列表项规范（56dp / 16dp 内边距 /
+     * 24dp 图标 / 16sp-14sp 双行文字 / 尾随 chevron）。
+     */
     private fun showIconDialog(custom: Boolean) {
-        val accent = pal.primary
-        val (dlg, card) = M3Ui.materialDialog(requireContext(), accent, pal.card)
-        card.addView(M3Ui.dialogTitle(requireContext(),
-                Lang.t("弹窗图标（当前：", "Popup icon (current: ") + (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + "）", accent),
-                LinearLayout.LayoutParams(-1, -2))
-        card.addView(spacer(dp(10)))
+        val act = requireActivity()
+        val ctx = requireContext()
+        var dlg: androidx.appcompat.app.AlertDialog? = null
 
-        val items = if (custom) arrayOf(Lang.t("从相册选择", "Choose from gallery"), Lang.t("恢复默认图标", "Restore default icon")) else arrayOf(Lang.t("从相册选择", "Choose from gallery"))
-        val subs = if (custom) arrayOf(
-                Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"),
-                Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"))
-        else arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"))
-        for (i in items.indices) {
-            val which = i
-            val row = LinearLayout(requireContext())
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(12), dp(12), dp(12), dp(12))
-            val rowBg = GradientDrawable()
-            rowBg.setColor(if (pal.dark) 0x14FFFFFF else 0x0A000000)
-            rowBg.setCornerRadius(dp(14).toFloat())
-            row.background = RippleDrawable(
-                    ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000), rowBg, null)
-            val col = LinearLayout(requireContext())
-            col.orientation = LinearLayout.VERTICAL
-            val t1 = TextView(requireContext())
-            t1.text = items[i]
-            t1.textSize = 15f
-            t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            t1.setTextColor(pal.onSurface)
-            col.addView(t1, LinearLayout.LayoutParams(-2, -2))
-            val t2 = TextView(requireContext())
-            t2.text = subs[i]
-            t2.textSize = 12f
-            t2.setTextColor(pal.onVariant)
-            t2.alpha = 0.7f
-            col.addView(t2, LinearLayout.LayoutParams(-2, -2))
-            row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(M3Ui.chevron(requireActivity(), accent), LinearLayout.LayoutParams(-2, -2))
-            row.setOnClickListener {
-                dlg.dismiss()
-                if (which == 0) {
+        val box = LinearLayout(ctx)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, dp(8), 0, dp(8))
+
+        box.addView(M3Ui.listRow(act, pal, R.drawable.ic_image,
+                Lang.t("从相册选择", "Choose from gallery"),
+                Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon shown in the Google popup"),
+                M3Ui.chevron(ctx, pal.onVariant),
+                Runnable {
+                    dlg?.dismiss()
                     try {
                         iconPicker.launch("image/*")
                     } catch (t: Throwable) {
                         toast("无法打开选择器: ${t.message}")
                     }
-                } else {
-                    resetCustomIcon()
-                }
-            }
-            card.addView(row, LinearLayout.LayoutParams(-1, -2))
-            card.addView(spacer(dp(8)))
+                }), LinearLayout.LayoutParams(-1, -2))
+
+        if (custom) {
+            box.addView(M3Ui.listRow(act, pal, R.drawable.ic_restart_alt,
+                    Lang.t("恢复默认图标", "Restore default icon"),
+                    Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"),
+                    M3Ui.chevron(ctx, pal.onVariant),
+                    Runnable {
+                        dlg?.dismiss()
+                        resetCustomIcon()
+                    }), LinearLayout.LayoutParams(-1, -2))
         }
-        val btnRow = LinearLayout(requireContext())
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton("取消", accent) { dlg.dismiss() })
-        card.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
-        val w2 = dlg.window
-        if (w2 != null) w2.setLayout((resources.displayMetrics.widthPixels * 0.85f).toInt(), -2)
-        dlg.show()
+
+        val title = Lang.t("弹窗图标（当前：", "Popup icon (current: ") +
+                (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + "）"
+
+        dlg = MaterialAlertDialogBuilder(ctx)
+                .setTitle(title)
+                .setView(box)
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .show()
     }
 
     private fun showLogDialog() {

@@ -238,7 +238,7 @@ object ControlPanel {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(ctx)
             lbl.text = AncProfileLib.gainLabels(ctx)[gm]
-            lbl.textSize = 10f
+            lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerC)
@@ -287,7 +287,7 @@ object ControlPanel {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(ctx)
             lbl.text = ledNames[lm]
-            lbl.textSize = 10f
+            lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerC)

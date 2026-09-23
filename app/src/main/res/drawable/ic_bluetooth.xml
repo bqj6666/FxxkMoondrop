@@ -1,1 +1,15 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71 -4.3,-4.29 4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zM14.88,16.29L13,18.17v-3.76l1.88,1.88z"/></vector>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols（Rounded, weight 400, fill 0）官方字形。
+     来源：google/material-design-icons · symbols/web/bluetooth/materialsymbolsrounded/bluetooth_24px.svg
+     960 网格；SVG viewBox 为 "0 -960 960 960"，用 group translateY=960 归位。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M440-137v-247L284-228q-11 11-28 11t-28-11q-11-11-11-28t11-28l196-196-196-196q-11-11-11-28t11-28q11-11 28-11t28 11l156 156v-247q0-18 12-29.5t28-11.5q8 0 15 3t13 9l172 172q6 6 8.5 13t2.5 15q0 8-2.5 15t-8.5 13L536-480l144 144q6 6 8.5 13t2.5 15q0 8-2.5 15t-8.5 13L508-108q-6 6-13 9t-15 3q-16 0-28-11.5T440-137Zm80-439 76-76-76-74v150Zm0 342 76-74-76-76v150Z" />
+    </group>
+</vector>

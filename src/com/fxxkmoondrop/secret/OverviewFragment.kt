@@ -64,7 +64,7 @@ class OverviewFragment : Fragment() {
     private var heroFg = 0
 
     /** alpha2.53: 手动刷新期间的线性进度条（BLE 重连要数秒，给了真实进度反馈） */
-    private var refreshBar: android.widget.ProgressBar? = null
+    private var refreshBar: com.google.android.material.progressindicator.LinearProgressIndicator? = null
 
     private val hideRefreshBar = Runnable { refreshBar?.visibility = View.GONE }
     private var surfaceColor = 0
@@ -200,7 +200,7 @@ class OverviewFragment : Fragment() {
         texts.orientation = LinearLayout.VERTICAL
         texts.gravity = Gravity.START
         svcStatus = TextView(requireContext())
-        svcStatus!!.textSize = 17f
+        svcStatus!!.textSize = 16f
         svcStatus!!.isSingleLine = true
         svcStatus!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         svcStatus!!.setTextColor(pal0.onPrimary)
@@ -227,7 +227,7 @@ class OverviewFragment : Fragment() {
         // 右侧徽章 pill（API，动态获取）
         statusBadge = TextView(requireContext())
         statusBadge!!.text = badgeText()
-        statusBadge!!.textSize = 13f
+        statusBadge!!.textSize = 12f
         statusBadge!!.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         statusBadge!!.setTextColor(primaryColor)
         statusBadge!!.gravity = Gravity.CENTER
@@ -416,7 +416,7 @@ class OverviewFragment : Fragment() {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(requireContext())
             lbl.text = DeviceControlBridge.trackingLabels()[tm]
-            lbl.textSize = 10f
+            lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerColor)
@@ -468,7 +468,7 @@ class OverviewFragment : Fragment() {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(requireContext())
             lbl.text = DeviceControlBridge.gainLabels()[gm]
-            lbl.textSize = 10f
+            lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerColor)
@@ -521,7 +521,7 @@ class OverviewFragment : Fragment() {
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             val lbl = TextView(requireContext())
             lbl.text = ledNames[lm]
-            lbl.textSize = 10f
+            lbl.textSize = 11f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
             lbl.setTextColor(onContainerColor)
@@ -899,7 +899,7 @@ class OverviewFragment : Fragment() {
             col.orientation = LinearLayout.VERTICAL
             val name = TextView(requireContext())
             name.text = per.name + (if (per.ok) "" else (if (per.action == PermissionChecker.ACTION_NONE) Lang.t("（需手动处理）", " (manual required)") else Lang.t("（点击修复）", " (tap to fix)")))
-            name.textSize = 15f
+            name.textSize = 16f
             name.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             name.setTextColor(onSurf)
             col.addView(name, LinearLayout.LayoutParams(-2, -2))
@@ -1157,7 +1157,7 @@ class OverviewFragment : Fragment() {
             col.orientation = LinearLayout.VERTICAL
             val t1 = TextView(requireContext())
             t1.text = items[i]
-            t1.textSize = 15f
+            t1.textSize = 16f
             t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             t1.setTextColor(onSurf)
             col.addView(t1, LinearLayout.LayoutParams(-2, -2))
@@ -1597,7 +1597,7 @@ class OverviewFragment : Fragment() {
         row.addView(ic, ilp)
         val t = TextView(requireContext())
         t.text = title
-        t.textSize = 15f
+        t.textSize = 14f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(onSurfaceColor)
         row.addView(t, LinearLayout.LayoutParams(0, -2, 1f))

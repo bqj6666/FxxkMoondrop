@@ -40,26 +40,37 @@ class M3Ui {
         private const val HEADER_COLLAPSED_SP = 22f
 
         /**
-         * alpha2.53: M3 indeterminate 圆形加载指示（跨进程/异步取数时用）。
-         * 直接用系统 ProgressBar，动画由框架负责，零自绘。
+         * M3 indeterminate 圆形加载指示（跨进程/异步取数时用）。
+         *
+         * 3.3.1 起改用官方 CircularProgressIndicator：此前用平台 android.widget.ProgressBar，
+         * 那是 M3 之前的旧样式（描边细、无圆头）。M3 圆形指示是「圆头弧线、无轨道」，
+         * 直径由 indicatorSize 控制。
          */
         @JvmStatic
-        fun circularLoader(c: Context, sizeDp: Int, color: Int): android.widget.ProgressBar {
-            val pb = android.widget.ProgressBar(c)
+        fun circularLoader(c: Context, sizeDp: Int, color: Int):
+                com.google.android.material.progressindicator.CircularProgressIndicator {
+            val pb = com.google.android.material.progressindicator.CircularProgressIndicator(c)
             pb.isIndeterminate = true
-            val lp = LinearLayout.LayoutParams(dp(c, sizeDp), dp(c, sizeDp))
-            pb.layoutParams = lp
-            pb.indeterminateTintList = ColorStateList.valueOf(color)
+            pb.indicatorSize = dp(c, sizeDp)
+            pb.trackThickness = 0
+            pb.setIndicatorColor(color)
+            pb.layoutParams = LinearLayout.LayoutParams(dp(c, sizeDp), dp(c, sizeDp))
             return pb
         }
 
-        /** alpha2.53: M3 indeterminate 进度条（页面刷新中）。 */
+        /**
+         * M3 indeterminate 线性进度条（页面刷新中）。
+         * 官方 LinearProgressIndicator；轨道厚 4dp（M3 规范值）＋ 圆头指示段。
+         */
         @JvmStatic
-        fun linearLoader(c: Context, color: Int): android.widget.ProgressBar {
-            val pb = android.widget.ProgressBar(c, null, android.R.attr.progressBarStyleHorizontal)
+        fun linearLoader(c: Context, color: Int):
+                com.google.android.material.progressindicator.LinearProgressIndicator {
+            val pb = com.google.android.material.progressindicator.LinearProgressIndicator(c)
             pb.isIndeterminate = true
-            pb.layoutParams = LinearLayout.LayoutParams(-1, dp(c, 3))
-            pb.indeterminateTintList = ColorStateList.valueOf(color)
+            pb.trackThickness = dp(c, 4)
+            pb.trackCornerRadius = dp(c, 2)
+            pb.setIndicatorColor(color)
+            pb.layoutParams = LinearLayout.LayoutParams(-1, dp(c, 4))
             return pb
         }
 
@@ -657,7 +668,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.addView(View(c), LinearLayout.LayoutParams(dp(c, 10), 1))
             val t = TextView(c)
             t.text = text
-            t.textSize = 13f
+            t.textSize = 14f
             t.setTextColor(pal.onVariant)
             row.addView(t, LinearLayout.LayoutParams(-2, -2))
             return row

@@ -1,1 +1,15 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M11,21h-1l1,-7H7.5c-0.88,0 -0.33,-0.75 -0.31,-0.78C8.48,10.94 10.42,7.54 13,3h1l-1,7h3.5c0.88,0 0.34,0.75 0.31,0.78C12.93,17.29 11,21 11,21z"/></vector>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols（Rounded, weight 400, fill 0）官方字形。
+     来源：google/material-design-icons · symbols/web/bolt/materialsymbolsrounded/bolt_24px.svg
+     960 网格；SVG viewBox 为 "0 -960 960 960"，用 group translateY=960 归位。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="m422-232 207-248H469l29-227-185 267h139l-30 208Zm-62-128H236q-24 0-35.5-21.5T203-423l299-430q10-14 26-19.5t33 .5q17 6 25 21t6 32l-32 259h155q26 0 36.5 23t-6.5 43L416-100q-11 13-27 17t-31-3q-15-7-23.5-21.5T328-139l32-221Zm111-110Z" />
+    </group>
+</vector>
