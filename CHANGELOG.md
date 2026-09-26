@@ -1,3 +1,59 @@
+## 3.2.8 (328)
+> 界面全面对齐 Material 3 规范（M3 Expressive 主题 / Material Symbols 图标 / 官方组件替换自绘控件），并顺手修掉 3 个真实的取色与对比度缺陷；构建链升至 AGP 8.6.1 + Kotlin 2.3.21。
+
+### 界面：对齐 Material 3 规范
+- **主题切到 M3 Expressive**（material 1.14.0 提供 `Theme.Material3Expressive.DayNight.NoActionBar`）：
+  按钮形状与按压形变、开关、对话框、底部导航、动效曲线整体切到 expressive 规范；
+  颜色仍由 `themes.xml` 的 M3 语义色 token 覆盖，不受影响。
+  副作用（预期内）：底部导航高度 81dp → 65dp，符合 expressive 的 64dp 规范。
+- **图标统一到 Material Symbols**：32 个图标从 Material Icons（24 网格）换成 Material Symbols
+  （Rounded / weight 400 / fill 0，960 网格），与已有的 `ic_anc_*` / `ic_track_*` 同代。
+  此前项目混用两代图标集，笔画粗细与圆角风格不一致。
+  保留 `ic_gain_1/2/3` 为自绘：官方 `signal_cellular_alt` 系列底部对齐，排成一行会高低不齐。
+- **自绘控件换官方组件**：三处自绘 Dialog → `MaterialAlertDialogBuilder`（净删 40 余行手搓视图）；
+  主页刷新条与权限页圆形加载由 `ProgressBar` → 官方 `LinearProgressIndicator` /
+  `CircularProgressIndicator`；真正耗时的后台任务（root 探测、模块 PING、权限检查）接入官方
+  `LoadingIndicator`；弹窗图标选择对话框改官方外壳 + 统一列表行。
+- **尺寸与排版**：按钮触控 40dp → 48dp（M3 最小可点尺寸）、圆角同比 20dp → 24dp；
+  21 处不在规范内的字号归位到 M3 typescale。
+- **动效 token 化**：新增 `M3Ui.Motion`（duration token SHORT2/3/4、MEDIUM1/2 + easing token
+  emphasized-decelerate / emphasized-accelerate），7 处裸数字动画归位；
+  约定「进场 `enter()`、退场 `exit()`」——进场从容停下、退场果断离开，混用会显得迟钝。
+
+### 修复
+- **动态取色在浅色主题下静默失效（2 处）**：`surfaceContainerHighest` 的浅色分支用了
+  `system_neutral1_90`，`ControlPanel` 用了 `system_neutral1_80`。Android tonal palette
+  只有 0/10/50/100/200…/1000，这两个 tone 并不存在，`getIdentifier` 返回 0 → 永远走 fallback，
+  等于这两格**从未跟随壁纸**。改用最接近的有效 tone。
+  另：`ControlPanel` 的「禁用灰」在两个主题下方向相反，单个固定 tone 表达不了，已按主题分别取值。
+- **通知按钮文字不可读**：`DeviceNotif` 的 `onContainer` fallback 误写成 container 的值
+  （深色下二者相等，文字与底色同色）；`onPrimary` 也未按主题分支。
+  已与 `ThemeUtil.Palette` 的 M3 角色取值对齐，并给出正确的 fallback。
+- **选中态在深色主题下对比度不足**：选中态容器色是 `primary`，前景与描边此前一律硬编码白色。
+  浅色主题 `primary` 是深紫，白前景正常，所以这个缺陷一直没暴露；深色主题 `primary` 是**浅色**
+  （实测 `#ffbd836e`），白图标压在同为浅色的底上对比度严重不足。M3 规定「容器上的内容用对应的
+  `on*` 角色」，已改用 `onPrimary`；并连带修掉图标缓存键（原用「是否等于白色」判选中态，
+  前景一改，深色下缓存永不命中、每次重建 drawable）。`ControlPanel` 同样两处一并处理。
+  `OnboardingActivity` 成功勾选的深色底色是浅绿 `#8FD89B`，配白勾对比度约 1.8:1，改为按主题取对比色。
+- **明确不改**：`FastPairHookEntry` 里的白色常量。那些是①生成的默认占位图标
+  ②克隆宿主按钮样式，属「覆盖在 Google UI 上、必须与宿主观感一致」的场景，不属本模块主题体系。
+
+### 构建链
+- **AGP 8.5.2 → 8.6.1**、**compileSdk 34 → 35**、**material 1.13.0 → 1.14.0**、
+  `androidx.core` 显式 1.16.0（material 1.14.0 → core 1.16.0 → minCompileSdk 35 且 minAGP 8.6.0）。
+- **Kotlin 1.9.22 → 2.3.21**，含两处必要迁移：
+  `kotlinOptions.jvmTarget` 在 Kotlin 2.3+ 由警告升级为**错误**，改到顶层
+  `kotlin { compilerOptions { jvmTarget.set(Jvm_17) } }`（必须放在 `android {}` 之外）；
+  `PrefsProvider` 10 处 `arrayOf(...)` 显式化为 `arrayOf<Any>(...)`
+  （Kotlin 2.3 下 reified 参数被推断为 `Comparable<*> & Serializable` 导致编译失败）。
+- 新增 `tools/check_vectors.py`：矢量图标几何自检（校验 viewBox 与网格归位是否一致）。
+
+### 验证
+`assembleRelease` BUILD SUCCESSFUL；单测 **66 例 0 失败**；gradle 警告 **0 条**；
+APK 装机 user0 / user10 双用户成功、启动无崩溃；
+GMS hook 实测 `onModuleLoaded` / `onPackageReady` 正常，**9 个 hook 点 + 4 个接收器全部就位**
+（确认 Kotlin 升级未影响生成的字节码行为）。
+
 ## 3.2.7 (327)
 > 主界面降噪区块按设备能力显隐：硬件没有降噪的型号不再挂着点了没反应的按钮。
 

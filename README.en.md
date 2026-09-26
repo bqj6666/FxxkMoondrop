@@ -5,9 +5,9 @@
 ![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)
 
-> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.7** (versionCode 327) | License: **GPL-3.0** (see [LICENSE](LICENSE))
+> Author: [bqj6666](https://github.com/bqj6666) | Version: **3.2.8** (versionCode 328) | License: **GPL-3.0** (see [LICENSE](LICENSE))
 
-> [![Latest release](https://img.shields.io/badge/release-3.2.7-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
+> [![Latest release](https://img.shields.io/badge/release-3.2.8-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
@@ -183,6 +183,7 @@ The project maintains several development docs in the repo root; read as needed:
 
 ## Version History
 
+- **3.2.8**: **Full Material 3 alignment** - switched to the M3 Expressive theme (button shape and press morph, dialogs, motion curves; bottom navigation 81 -> 65dp); all 32 icons migrated from Material Icons (24 grid) to Material Symbols (960 grid), ending the mix of two icon generations; self-drawn widgets replaced by official components (three dialogs -> MaterialAlertDialogBuilder, refresh bar and circular loader -> official indicators, in-progress checks -> official LoadingIndicator); touch targets 40 -> 48dp, corner radius 20 -> 24dp, 21 font sizes back onto the M3 typescale, 7 animations moved onto motion tokens. **Fixes three real bugs**: two dynamic-color lookups used tonal tones that do not exist in the Android palette (`system_neutral1_90` / `_80`), so `getIdentifier` returned 0 and the fallback was used forever - those surfaces **never followed the wallpaper** in light theme; the notification's `onContainer` fallback was mistakenly set to the container value, making button text the same color as its background in dark theme; selected-state foregrounds and outlines now use the `onPrimary` role (hardcoded white was badly under-contrasted on the light-tinted dark-theme primary). **Build chain**: AGP 8.6.1, compileSdk 35, material 1.14.0, Kotlin 2.3.21.
 - **3.2.7**: The main screen's noise-control block is now **gated on device capability** - models whose hardware has no ANC at all (such as the U.C.T.S / MD-OWS-014) no longer show a row of buttons that do nothing when tapped. While disconnected or before capability is known it still shows greyed out, so it neither flickers nor misjudges. The popup and the notification already followed this rule; the main screen now matches them.
 - **3.2.6**: Fixed getting stuck on a stale LE address - when the disconnect status is 0 (a normal disconnect) the candidate list was not advanced, so after the earbuds changed their LE address (Bluetooth restart / re-pairing) the app kept retrying the same dead address forever. Candidates are now advanced whenever this session has not connected yet, so it recovers on its own.
 - **3.2.5**: **Faster connection** - the service now starts connecting to GAIA the moment the earbuds-connection broadcast arrives, instead of waiting out the 5-second poll (the system broadcast was already being delivered to the process; it was only used to show the popup, not to start the connection - and the GMS wake-up path needs root, so without it you simply waited). Measured: GAIA ready in about 2.3s, connection stable.

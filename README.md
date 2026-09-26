@@ -7,9 +7,9 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.7**（versionCode 327） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.8**（versionCode 328） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
-> [![最新正式版](https://img.shields.io/badge/release-3.2.7-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
+> [![最新正式版](https://img.shields.io/badge/release-3.2.8-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
@@ -185,6 +185,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **3.2.8**：**界面全面对齐 Material 3 规范** —— 切到 M3 Expressive 主题（按钮形变、对话框、动效曲线，底部导航 81→65dp）；32 个图标由 Material Icons（24 网格）统一到 Material Symbols（960 网格），终止项目内两代图标混用；自绘控件换成官方组件（三处对话框 → MaterialAlertDialogBuilder，刷新条与圆形加载 → 官方指示器，检查中接入官方 LoadingIndicator）；触控 40→48dp、圆角 20→24dp、21 处字号归位到 M3 typescale、7 处动画归位到 motion token。**修复 3 个真 bug**：两处动态取色写进了 Android 调色板并不存在的 tone（`system_neutral1_90` / `_80`），`getIdentifier` 返回 0 后永远走 fallback，浅色主题下那两格**从未跟随壁纸**；通知按钮的 `onContainer` fallback 误抄了 container 的值，深色下文字与底色同色不可读；选中态前景与描边改用 `onPrimary` 角色（硬编码白色在深色主题的浅色 primary 上对比度严重不足）。**构建链**：AGP 8.6.1、compileSdk 35、material 1.14.0、Kotlin 2.3.21。
 - **3.2.7**：主界面降噪区块改为**按设备能力显隐** —— 硬件本身没有降噪的型号（如 U.C.T.S / MD-OWS-014）不再挂着一排点了没反应的降噪按钮；未连接或能力未探明时仍是"显示但置灰"，不闪、不误判。弹窗与通知栏原本就按能力处理，这次把主界面补齐到同一规则。
 - **3.2.6**：修掉「首选候选是失效 LE 地址时原地打转」—— 断开码为 0（正常断开）时此前不推进候选，于是耳机换过 LE 地址后（蓝牙重启、重新配对）会一直重连同一个失效地址、永远连不上。现在「本次会话还没连上过」时也会推进候选，可自愈。
 - **3.2.5**：**连接提速** —— 耳机连接广播到达时立刻开始连 GAIA，不再干等 5 秒轮询周期（系统广播本来就免费送到进程里，此前只拿它弹窗、不拿它触发连接；GMS 那条唤醒链需要 root，断了就只能白等）。实测 GAIA 就绪约 2.3 秒，连接稳定。
