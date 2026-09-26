@@ -7,7 +7,7 @@
     android:versionCode="328"
     android:versionName="3.2.8">
 
-    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
 
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
