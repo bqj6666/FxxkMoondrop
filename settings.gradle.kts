@@ -1,4 +1,4 @@
-// FxxkMoondrop · Gradle 8.9 + AGP 8.5.2 + Kotlin 1.9.22
+// FxxkMoondrop · Gradle 8.9 + AGP 8.6.1 + Kotlin 2.3.21
 pluginManagement {
     repositories {
         google()

@@ -1,5 +1,7 @@
 # FxxkMoondrop 适配说明
 
+> 版本：3.2.8（versionCode 328） ｜ 更新日期：2026-09-26
+
 > 本文档记录 FxxkMoondrop 项目在 Moondrop 耳机适配过程中积累的协议知识、踩坑经验和实测数据。
 
 ## 设备与连接
@@ -7,7 +9,7 @@
 | 项目 | 说明 |
 |---|---|
 | 目标设备 | Moondrop 全系列高通 QCC 耳机（GAIA V3/V4）+ 中科蓝讯耳机（9ECA） |
-| 已实测 | 梦回2 / Golden Ages 2（GA2），TWS-01 定制 SoC；布丁 PUDDING（MD-TWS-056）；太空漫游2 / Space Travel 2（BT8932F 蓝讯） |
+| 已实测 | 梦回2 / Golden Ages 2（GA2，TWS-01 定制 SoC）；布丁 PUDDING（MD-TWS-056，GAIA V4 over RFCOMM）；太空漫游2 / Space Travel 2（BT8932F 蓝讯，9ECA）；太空漫游2 ULTRA；U.C.T.S（MD-OWS-014，开放式，**硬件无降噪**，GAIA 识别与控制正常） |
 | 连接方式 | GA2: BLE GATT 直连；布丁: Classic Bluetooth RFCOMM / SPP；太空漫游2: BLE GATT 直连 |
 | 业务协议 | Qualcomm GAIA V3 over BLE（GA2）/ GAIA V4 over RFCOMM（布丁）/ GAIA V3（ANC）+ 9ECA 私有协议（太空漫游2） |
 | 包名 | `com.fxxkmoondrop.secret` |
@@ -123,9 +125,25 @@ FxxkMoondrop 运行时自动探测耳机支持哪条 ANC 路径，不硬编码�
 
 ### 型号档案库（AncProfileLib）
 
-未实测型号回退默认映射（AC 名义编码 1=关 / 2=降噪 / 3=透传 / 4=抗风）。新型号实测确认后追加到 `AncProfileLib.PROFILES`，按设备名关键字匹配。用户可在设置页自定义映射，优先级最高。
+档案按**设备名关键字**匹配（大写 `contains`）。未命中型号一律回退默认映射（AC 名义编码 1=关 / 2=降噪 / 3=透传 / 4=抗风）；用户可在设置页自定义映射，优先级最高。
 
-`SPACE TRAVEL 2` 档案（alpha2.41.0 加入，2026-09-01 真机双向实测）：BT8932F 蓝讯主控（9ECA），无空间音频、三档增益；ANC 走 AudioCuration 通道，映射 `[1,2,4,3]`（同 GA2：设备码 1=关/2=降/3=抗风/4=透传）；增益 `gainMap=[2,1,0]`（gainLabels=`["低","中","高"]`，设备码 0=高/1=中/2=低，反向于恒等，alpha2.41.5 修正）。
+库内共 4 张表，按协议路径分工：
+
+| 表 | 适用路径 | 已入库型号 |
+|---|---|---|
+| `PROFILES` | AudioCuration（AC）档位映射 | `GOLDEN AGES 2`、`SPACE TRAVEL 2` |
+| `ANC_V2_PROFILES` | ANC V2 档位映射 | `PUDDING` |
+| `DC_PROFILES` | 扩展控制能力（空间音频 / 增益 / 指示灯） | `GOLDEN AGES 2`、`PUDDING`、`SPACE TRAVEL 2`、`NEKOCAKE`、`PILL`、`MOCA`（后三者为预置待实测） |
+
+#### GA2（梦回2 / Golden Ages 2）
+2026-08-24 官方 App 抓包 + 08-25 真机双向实测。AC 路径：SET `[1,2,4,3]`（UI 关 / 降 / 透 / 抗 → 设备码 1 / 2 / 4 / 3）；GET `[0,1,2,3]` —— **固件读回是 0-based 直传，与 SET 枚举不同**，这是 GET / SET 必须分开配置的原因。
+扩展控制：支持空间音频 + 三档增益，无指示灯；增益 `gainMap=[2,1,0]`。
+
+#### SPACE TRAVEL 2（太空漫游2）
+alpha2.41.0 加入，2026-09-01 真机双向实测。BT8932F 蓝讯主控（9ECA），无空间音频、三档增益、无指示灯；ANC 走 AudioCuration 通道，映射 `[1,2,4,3]`（同 GA2）；增益 `gainMap=[2,1,0]`（设备码 0=高 / 1=中 / 2=低，**反向于恒等**，alpha2.41.5 修正）。
+
+#### PUDDING（布丁，MD-TWS-056）
+走 ANC V2（非 AC），5 档：UI `[关, 降, 透, 抗, 自适应]` → 设备码 `[0, 4, 2, 3, 1]`；GET 方向 `[0, 4, 2, 3, 1]`（0 关 / 1 自适应 / 2 透 / 3 抗 / 4 降）。扩展控制：三档增益（恒等 `[0,1,2]`）+ 指示灯，无空间音频。
 
 ## 电量
 
@@ -270,12 +288,19 @@ LSPosed 模块 Hook `com.google.android.gms` 进程，注入 BroadcastReceiver �
 
 ### 作用域
 
+模块的 LSPosed **启用作用域只有两项**（`scope.list` 的内容）：
+
 | 包名 | 用途 |
 |---|---|
 | `com.google.android.gms` | Fast Pair 弹窗注入 + BLE 扫描能力借道 |
-| `com.android.settings` | 设置页注入耳机入口（准备实现） |
-| `com.android.bluetooth` | A2DP 连接状态监听 |
-| `com.moondroplab.moondrop.moondrop_app` | Hook 官方 App 的 ANC 控制路径（逆向参考） |
+| `com.android.settings` | 设置页注入耳机入口 + 蓝牙设备详情页控制面板 |
+
+下面两个包**不是作用域**，模块不会被注入其中，对应代码为预留（当前不执行）：
+
+| 包名 | 预留用途 | 状态 |
+|---|---|---|
+| `com.android.bluetooth` | A2DP 连接状态监听（连接拉起 / 断开停止） | 未启用 |
+| `com.moondroplab.moondrop.moondrop_app` | 逆向参考官方 App 的 ANC 控制路径 | 未启用 |
 
 ### 模块功能
 

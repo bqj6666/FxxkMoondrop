@@ -6,11 +6,11 @@
 
 | 项 | 要求 |
 |---|---|
-| JDK | 17 |
-| Gradle | 8.9（wrapper 固定) |
-| AGP | 8.5.2 |
-| Kotlin | 1.9.22 |
-| Android SDK | compileSdk 34, build-tools 34.0.0 |
+| JDK | 17+（CI 用 17；本机实测 21 亦可） |
+| Gradle | 8.9（wrapper 固定） |
+| AGP | 8.6.1 |
+| Kotlin | 2.3.21 |
+| Android SDK | compileSdk 35, build-tools 34.0.0 |
 | minSdk / targetSdk | 26 / 36 |
 
 ## 构建命令
@@ -62,13 +62,15 @@ FxxkMoondrop-repo/
 │           └── scope.list        # 作用域: gms + settings
 ├── src/                          # 全部 Kotlin 源码（单一权威源）
 │   └── com/fxxkmoondrop/secret/
-│       ├── *.kt                  # App 进程代码（28 个文件）
+│       ├── *.kt                  # App 进程代码（47 个文件）
 │       └── hook/
-│           └── FastPairHookEntry.kt  # GMS 进程 Hook 代码
+│           ├── FastPairHookEntry.kt    # GMS 进程 Hook 代码
+│           └── HearableControlHook.kt  # GMS Hearable Controls 官方链路桥接
 ├── gradle/wrapper/               # Gradle 8.9 wrapper
 ├── tools/
 │   ├── post_edf.py               # EDF 作用域注入 + 重签脚本
-│   └── release_notes.py          # 由 tag 反解版本、生成 Release 说明
+│   ├── release_notes.py          # 由 tag 反解版本、生成 Release 说明
+│   └── check_vectors.py          # 矢量图标几何自检（viewBox / 网格归位）
 ├── build.gradle.kts              # 根项目配置
 ├── settings.gradle.kts           # 模块声明
 ├── README.md
@@ -94,7 +96,7 @@ FxxkMoondrop-repo/
 4. `app/src/main/resources/META-INF/xposed/module.prop` — `version`（LSPosed 管理器展示用，须与 `versionName` 一致）
 5. `app/src/main/AndroidManifest.xml` — 文本 manifest 里的 `android:versionCode` / `android:versionName`（AGP 合并时会用 build.gradle.kts 的值覆盖，但仓库内不应残留旧版本号）
 
-提交信息格式：`alpha{版本}: {简要描述}`
+提交信息格式：遵循 Conventional Commits，如 `fix(ui): …` / `build: …` / `release: 3.2.8 (328) — …`
 
 ## LSPosed 模块元信息
 
@@ -116,31 +118,34 @@ staticScope=true
 
 ```
 com.google.android.gms        # Fast Pair 弹窗 + BLE 扫描
-com.android.settings          # 设置页耳机入口（还未实现）
+com.android.settings          # 设置页耳机入口 + 蓝牙设备详情页控制面板
 ```
 
-### 运行时作用域（代码中动态 Hook）
+### 代码中已实现的 Hook 路由（`XposedEntry.onPackageReady`）
 
-| 包名 | 用途 |
-|---|---|
-| `com.google.android.gms` | Fast Pair 弹窗注入 + BLE 扫描借道 |
-| `com.android.settings` | 设置页注入耳机入口 |
-| `com.android.bluetooth` | A2DP 连接状态监听（连接拉起 / 断开停止） |
-| `com.moondroplab.moondrop.moondrop_app` | 逆向参考官方 ANC 路径 |
+| 包名 | 用途 | 是否在 `scope.list` |
+|---|---|---|
+| `com.google.android.gms` | Fast Pair 弹窗注入 + BLE 扫描借道 | ✅ 是 |
+| `com.android.settings` | 设置页注入耳机入口 + 蓝牙设备详情页控制面板 | ✅ 是 |
+| `com.android.bluetooth` | A2DP 连接状态监听（连接拉起 / 断开停止） | ❌ 否，预留、不执行 |
+| `com.moondroplab.moondrop.moondrop_app` | 逆向参考官方 ANC 路径 | ❌ 否，预留、不执行 |
+
+> 不在 `scope.list` 中的包**不会**被 LSPosed 注入，其 Hook 代码不会执行。
 
 ## 依赖清单
 
 | 依赖 | 版本 | 用途 |
 |---|---|---|
 | `io.github.libxposed:api` | 102.0.0 | LSPosed Xposed API（compileOnly，运行时由 LSPosed 提供） |
-| `com.google.android.material:material` | 1.12.0 | Material 3 组件 |
+| `com.google.android.material:material` | 1.14.0 | Material 3（含 M3 Expressive）组件 |
 | `androidx.appcompat:appcompat` | 1.7.0 | AppCompat 兼容层 |
 | `androidx.fragment:fragment` | 1.7.1 | Fragment 导航 |
-| `androidx.core:core` | 1.13.1 | AndroidX 核心 |
+| `androidx.core:core` | 1.16.0 | AndroidX 核心 |
 | `androidx.recyclerview:recyclerview` | 1.3.2 | 列表组件 |
 | `androidx.lifecycle:*` | 2.7.0 | 生命周期组件 |
-| `org.jetbrains.kotlin:kotlin-stdlib` | 1.9.22 | Kotlin 标准库 |
+| `org.jetbrains.kotlin:kotlin-stdlib` | 2.3.21 | Kotlin 标准库 |
 | `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.7.3 | 协程 |
+| `org.luckypray:dexkit` | 2.2.0 | 运行时按特征反查被混淆的类名（避免硬编码混淆名） |
 | `junit:junit` | 4.13.2 | 单元测试（仅 JVM） |
 
 ## Android 四大组件
@@ -150,15 +155,17 @@ com.android.settings          # 设置页耳机入口（还未实现）
 | 类 | exported | 说明 |
 |---|---|---|
 | `MainActivity` | true | 主界面（三页 Fragment + 底部导航） |
-| `SettingsActivity` | false | 设置页 |
 | `PermissionActivity` | false | 权限检测页 |
-| `AboutActivity` | false | 关于页 |
+| `PopupActivity` | false | 模块自绘的 Fast Pair 弹窗宿主 |
+| `OnboardingActivity` | false | 首启使用引导（7 页横滑） |
+
+> 设置页与关于页不是独立 Activity，而是 `MainActivity` 内的两个 Fragment（`SettingsFragment` / `AboutFragment`）。
 
 ### Service
 
 | 类 | 说明 |
 |---|---|
-| `HeadsetDetectService` | 常驻后台服务（普通 Service，**非前台服务**，全仓无 `startForeground` 调用）；蓝牙连接监听 + GAIA 直连 + ANC 轮询。Manifest 中的 `foregroundServiceType="connectedDevice"` 仅为类型声明，当前未走前台 |
+| `HeadsetDetectService` | 常驻后台服务（普通 Service，**非前台服务**，全仓无 `startForeground` 调用）；蓝牙连接监听 + GAIA 直连 + ANC 轮询。**manifest 中未声明 `foregroundServiceType`**，也未申请任何 `FOREGROUND_SERVICE*` 权限 |
 
 ### ContentProvider
 
@@ -170,8 +177,9 @@ com.android.settings          # 设置页耳机入口（还未实现）
 
 | 类 | exported | 说明 |
 |---|---|---|
-| `BootReceiver` | true | 开机自启 |
+| `BootReceiver` | true | 开机自启 + 接收 `BT_EVENT`（蓝牙连接/断开） |
 | `AliveReceiver` | false | 保活广播接收 |
+| `NotifActionReceiver` | false | 通知栏降噪档位按钮点击 |
 
 ## 开发注意事项
 
@@ -245,22 +253,30 @@ alpha2.39 起，在 Settings 进程注入 `com.android.settings` 蓝牙设备详
 
 ### 日志抓取
 
-App 内置日志收集（设置页 → 收集日志），打包五类日志为 ZIP：
-1. 系统信息
-2. 应用设置
-3. 蓝牙状态
-4. 运行环境
-5. logcat
+App 内置日志收集（设置页 → 收集日志），打包**六类**日志为 ZIP：
+1. `01_系统信息`
+2. `02_应用与设置`
+3. `03_蓝牙信息`
+4. `04_运行环境`
+5. `05_logcat`
+6. `06_运行日志`
 
 ### 单元测试
 
 ```bash
-./gradlew test
+# 纯 JVM 单元测试（release 变体）
+./gradlew testReleaseUnitTest
 ```
 
-测试源：`app/src/test/java/com/fxxkmoondrop/secret/GaiaCommandsTest.kt`（20 个用例）。
+测试源：`app/src/test/java/com/fxxkmoondrop/secret/`，5 个文件共 **66 个用例**：
 
-覆盖范围：GAIA V3 帧构造（vendor / feature / type 位拼接，对照 ADAPTATION.md 铁证字节）、9ECA 帧头与 14 字节 payload 上限、能力位图解析与截断判定、ANC 路径优先级、设备码 ↔ UI 模式双向映射（含 GA2 的 0-based GET / 1-based SET、未知路径返回 -1）。
+| 文件 | 用例数 | 覆盖 |
+|---|---|---|
+| `GaiaCommandsTest.kt` | 23 | GAIA V3 帧构造（vendor / feature / type 位拼接，对照 ADAPTATION.md 铁证字节）、9ECA 帧头与 14 字节 payload 上限、能力位图解析与截断判定、ANC 路径优先级 |
+| `AncProfileLibTest.kt` | 21 | 设备码 ↔ UI 模式双向映射（含 GA2 的 0-based GET / 1-based SET、未知路径返回 -1）、自定义映射与历史脏配置自愈 |
+| `HookGuardTest.kt` | 8 | Hook 返回值类型安全化（防宿主进程崩溃） |
+| `DetailRowsTest.kt` | 7 | 蓝牙详情页行序与显隐判定 |
+| `RootShellTest.kt` | 7 | Root 命令构造与探测 |
 
 被测类 `GaiaCommands` 与 `AncProfileLib` 为纯字节逻辑、无 Android 依赖，因此单元测试无需 Robolectric，`app/build.gradle.kts` 中已设 `testOptions.unitTests.isReturnDefaultValues = true` 作为框架桩兜底。
 

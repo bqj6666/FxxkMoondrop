@@ -79,7 +79,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 
 ### 权限
 
-清单只保留真正在用的权限：`BLUETOOTH_CONNECT`、`BLUETOOTH_SCAN`、`BLUETOOTH`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`。
+清单只保留真正在用的权限，共 6 项：`BLUETOOTH_CONNECT`、`BLUETOOTH_SCAN`、`BLUETOOTH`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`、`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`（请求电池优化白名单，保活链使用）。
 
 - 不声明 `SYSTEM_ALERT_WINDOW`：本模块不创建悬浮窗；弹窗是 GMS 进程内的既有窗口，受 GMS 自身权限约束，与本应用无关。
 - 不声明 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE`：`HeadsetDetectService` 从不调用 `startForeground()`，实为普通后台服务。
@@ -88,36 +88,36 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 
 ### App 进程
 
-| 模块 | 文件 | 行数 | 职责 |
-|---|---|---|---|
-| **GaiaBleClient** | `GaiaBleClient.kt` | 1246 | BLE GATT / RFCOMM 直连耳机单例；连接管理、GAIA V3 + GAIA V4 + 9ECA 三协议自动识别、电量读取、ANC 控制 |
-| **HeadsetDetectService** | `HeadsetDetectService.kt` | 367 | 常驻后台服务（普通 Service，非前台服务）；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC。保活链：`BootReceiver` 开机自启 → `AliveReceiver` AlarmManager 30s 循环 `startService` → `MoondropBooter` 以 `su -c am start` 静默拉起 |
-| **HeadsetGate** | `HeadsetGate.kt` | 242 | 蓝牙连接守卫；A2DP/HEADSET profile 代理获取已连接设备 MAC |
-| **AncBridge** | `AncBridge.kt` | 126 | ANC 模式状态桥接；向 GMS 进程广播当前模式 + ANC 可用性 |
-| **PopupGate** | `PopupGate.kt` | 202 | 弹窗触发控制；管理弹窗超时、去重、延迟触发 |
-| **CapabilityProbe** | `CapabilityProbe.kt` | 169 | ANC 路径探测；查询 BASIC feature 位图，判定 ANC V1 / AudioCuration / ANC V2 |
-| **BatteryStore** | `BatteryStore.kt` | 84 | 电量缓存；GAIA 左右耳分离 + 系统广播兜底 |
-| **AncProfileLib** | `AncProfileLib.kt` | 119 | ANC 设备码型号档案；按设备名匹配 GET/SET 双向映射 |
-| **GaiaCommands** | `GaiaCommands.kt` | 635 | GAIA V3 命令编解码；BASIC / ANC / BATTERY / AudioCuration 全套帧构造 |
-| **GaiaPacketHandler** | `GaiaPacketHandler.kt` | 219 | GAIA V3 回包解析路由 |
-| **PrefsProvider** | `PrefsProvider.kt` | 53 | 跨进程 ContentProvider；SharedPreferences("cfg") 读写 |
-| **OverviewFragment** | `OverviewFragment.kt` | 1789 | 主页 Fragment；英雄卡 + 状态面板 + ANC 三按钮 + 权限检测 |
-| **OnboardingActivity** | `OnboardingActivity.kt` | 833 | 首启使用引导（7 页横滑分页）：关于 / 权限申请 / 连接管理 / 系统集成 / 耳机控制 / 适配与诊断 / 欢迎使用；页内开关与设置页共用同一份偏好与副作用，末页汇总必要权限、可选权限与模块状态 |
-| **M3Ui** | `M3Ui.kt` | 412 | Material 3 UI 组件工厂 |
-| **DeviceNotif** | `DeviceNotif.kt` | 342 | 设备常驻通知（电量 + 降噪控制合并为一条）；自定义 RemoteViews 大图标档位按钮、M3 动态取色、内容指纹去重（避免重发把用户展开的通知打回折叠态）；折叠/展开两份视图以适应折叠态约 48dp 的高度上限 |
-| **NotifActionReceiver** | `NotifActionReceiver.kt` | 33 | 通知档位按钮落地：先幂等拉起服务，再调用 `AncBridge.setAncMode`；无 Root 模式下靠这一步恢复被回收的进程 |
-| **EnvProbe** | `EnvProbe.kt` | 161 | 运行环境探测：Root（仅探文件存在，不执行 su）、FastPairHook 心跳、**无 Root 模式判定**（`isNoRootMode()`） |
-| **DeviceControlBridge** | `DeviceControlBridge.kt` | 182 | 增益/指示灯/空间音频等扩展设备控制回调 |
-| **DeviceDetailsPanel** / **ControlPanel** / **CtrlBus** | `DeviceDetailsPanel.kt` `ControlPanel.kt` `CtrlBus.kt` | - | 注入系统蓝牙设备详情页的降噪 + 功能控制面板（纯 UI 组件，只回调不持 BLE/Gaia 单例） |
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| **GaiaBleClient** | `GaiaBleClient.kt` | BLE GATT / RFCOMM 直连耳机单例；连接管理、GAIA V3 + GAIA V4 + 9ECA 三协议自动识别、电量读取、ANC 控制 |
+| **HeadsetDetectService** | `HeadsetDetectService.kt` | 常驻后台服务（普通 Service，非前台服务）；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC。保活链：`BootReceiver` 开机自启 → `AliveReceiver` AlarmManager 30s 循环 `startService` → `MoondropBooter` 以 `su -c am start` 静默拉起 |
+| **HeadsetGate** | `HeadsetGate.kt` | 蓝牙连接守卫；A2DP/HEADSET profile 代理获取已连接设备 MAC |
+| **AncBridge** | `AncBridge.kt` | ANC 模式状态桥接；向 GMS 进程广播当前模式 + ANC 可用性 |
+| **PopupGate** | `PopupGate.kt` | 弹窗触发控制；管理弹窗超时、去重、延迟触发 |
+| **CapabilityProbe** | `CapabilityProbe.kt` | ANC 路径探测；查询 BASIC feature 位图，判定 ANC V1 / AudioCuration / ANC V2 |
+| **BatteryStore** | `BatteryStore.kt` | 电量缓存；GAIA 左右耳分离 + 系统广播兜底 |
+| **AncProfileLib** | `AncProfileLib.kt` | ANC 设备码型号档案；按设备名匹配 GET/SET 双向映射 |
+| **GaiaCommands** | `GaiaCommands.kt` | GAIA V3 命令编解码；BASIC / ANC / BATTERY / AudioCuration 全套帧构造 |
+| **GaiaPacketHandler** | `GaiaPacketHandler.kt` | GAIA V3 回包解析路由 |
+| **PrefsProvider** | `PrefsProvider.kt` | 跨进程 ContentProvider；SharedPreferences("cfg") 读写 |
+| **OverviewFragment** | `OverviewFragment.kt` | 主页 Fragment；英雄卡 + 状态面板 + ANC 三按钮 + 权限检测 |
+| **OnboardingActivity** | `OnboardingActivity.kt` | 首启使用引导（7 页横滑分页）：关于 / 权限申请 / 连接管理 / 系统集成 / 耳机控制 / 适配与诊断 / 欢迎使用；页内开关与设置页共用同一份偏好与副作用，末页汇总必要权限、可选权限与模块状态 |
+| **M3Ui** | `M3Ui.kt` | Material 3 UI 组件工厂 |
+| **DeviceNotif** | `DeviceNotif.kt` | 设备常驻通知（电量 + 降噪控制合并为一条）；自定义 RemoteViews 大图标档位按钮、M3 动态取色、内容指纹去重（避免重发把用户展开的通知打回折叠态）；折叠/展开两份视图以适应折叠态约 48dp 的高度上限 |
+| **NotifActionReceiver** | `NotifActionReceiver.kt` | 通知档位按钮落地：先幂等拉起服务，再调用 `AncBridge.setAncMode`；无 Root 模式下靠这一步恢复被回收的进程 |
+| **EnvProbe** | `EnvProbe.kt` | 运行环境探测：Root（仅探文件存在，不执行 su）、FastPairHook 心跳、**无 Root 模式判定**（`isNoRootMode()`） |
+| **DeviceControlBridge** | `DeviceControlBridge.kt` | 增益/指示灯/空间音频等扩展设备控制回调 |
+| **DeviceDetailsPanel** / **ControlPanel** / **CtrlBus** | `DeviceDetailsPanel.kt` `ControlPanel.kt` `CtrlBus.kt` | 注入系统蓝牙设备详情页的降噪 + 功能控制面板（纯 UI 组件，只回调不持 BLE/Gaia 单例） |
 
 ### GMS 进程（Hook 注入）
 
-| 模块 | 文件 | 行数 | 职责 |
-|---|---|---|---|
-| **FastPairHookEntry** | `hook/FastPairHookEntry.kt` | 1677 | GMS 进程全部 Hook 逻辑；弹窗生命周期、图标/电量/ANC 按钮注入、BLE 扫描借道 |
-| **PopupProfile** | (内嵌于 FastPairHookEntry) | - | 屏幕布局参数表；按分辨率分档（6.1寸/6.3寸），坐标集中配置 |
-| **HearableControlHook** | `hook/HearableControlHook.kt` | 1021 | Hearable Controls（GFPS 消息组 0x08）官方链路桥接：DexKit 特征定位捕获官方 ANC 子模块、放开 Fast Pair 缓存门禁、在**意图入口**与**管理器发送出口**两处接住用户点击并转 GAIA、把 App 真实状态注入官方 DataStore |
-| **XposedEntry** | `XposedEntry.kt` | 403 | LSPosed 模块入口；路由到各进程 Hook |
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| **FastPairHookEntry** | `hook/FastPairHookEntry.kt` | GMS 进程全部 Hook 逻辑；弹窗生命周期、图标/电量/ANC 按钮注入、BLE 扫描借道 |
+| **PopupProfile** | (内嵌于 FastPairHookEntry) | 屏幕布局参数表；按分辨率分档（6.1寸/6.3寸），坐标集中配置 |
+| **HearableControlHook** | `hook/HearableControlHook.kt` | Hearable Controls（GFPS 消息组 0x08）官方链路桥接：DexKit 特征定位捕获官方 ANC 子模块、放开 Fast Pair 缓存门禁、在**意图入口**与**管理器发送出口**两处接住用户点击并转 GAIA、把 App 真实状态注入官方 DataStore |
+| **XposedEntry** | `XposedEntry.kt` | LSPosed 模块入口；路由到各进程 Hook |
 
 ### LSPosed 模块入口路由
 

@@ -50,8 +50,8 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 | Item | Description |
 |---|---|
 | Language | **Kotlin** |
-| Build chain | Gradle 8.9 (fixed wrapper) + AGP 8.5.2 + Kotlin 1.9.22 |
-| UI | Material 3, `Theme.Material3.DayNight.NoActionBar` + dynamic color, three-page Fragment architecture |
+| Build chain | Gradle 8.9 (fixed wrapper) + AGP 8.6.1 + Kotlin 2.3.21 |
+| UI | Material 3, `Theme.Material3Expressive.DayNight.NoActionBar` (M3 Expressive) + dynamic color, three-page Fragment architecture |
 | Minimum system | **Android 8.0** (API 26); targetSdk 36 |
 | Module | libxposed API 102 (LSPosed ≥ 2.1.1, scope `com.google.android.gms;com.android.settings`) |
 | Package | `com.fxxkmoondrop.secret` |
@@ -132,9 +132,14 @@ The module's LSPosed **scope only needs two entries**: `com.android.settings` an
 | Bluetooth device details panel | `com.android.settings` | Enabled |
 | Fast Pair popup (card / connected state) | `com.google.android.gms` | Enabled |
 
-Two further chains are kept in the source — `hookMoondrop` (GAIA command channel for the official Moondrop app) and `hookBluetooth` (`com.android.bluetooth`: A2DP state changes -> `BT_EVENT` broadcast, used to detect earbud connection):
+Two further chains are kept in the source but are **outside the scope and therefore never injected or executed**:
 
-- **They are outside the enabled scope, so they never run**;
+| Dormant chain | Target package | Status |
+|---|---|---|
+| `hookMoondrop` | `com.moondroplab.moondrop.moondrop_app` | Disabled (**not** a scope) |
+| `hookBluetooth` | `com.android.bluetooth` | Disabled (**not** a scope) |
+
+- These two packages **are not** LSPosed scopes of this module; LSPosed never injects the module into those processes, so **that code never runs**;
 - **The code is kept intact, not deleted**, ready to be enabled for future multi-device adaptation;
 - The module **does not hook the official Moondrop app** (to avoid conflicting with its own logic).
 
@@ -151,7 +156,7 @@ FxxkMoondrop-repo/
 ├── src/                  # All Kotlin source (com.fxxkmoondrop.secret)
 ├── screenshots/          # UI screenshots used in the README
 ├── gradle/               # Gradle wrapper (8.9)
-├── build.gradle.kts      # AGP 8.5.2 + Kotlin 1.9.22 (apply false)
+├── build.gradle.kts      # AGP 8.6.1 + Kotlin 2.3.21 (apply false)
 ├── settings.gradle.kts   # Module declarations and repositories
 ├── tools/                # Build helper scripts (post_edf.py: EDF injection + re-sign)
 ├── ADAPTATION.md         # Device adaptation notes (protocol knowledge / pitfalls / test data)

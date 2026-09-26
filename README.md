@@ -36,7 +36,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **无 Root 模式**：未检测到 Root 时自动回落为**仅通过通知栏与 App 主界面控制降噪**（GAIA BLE 直连本就不需要 Root）；所有 Root 依赖项静默停用，不报错、不弹窗
 - **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 功能 / 自定义映射 / 后台 / 诊断，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
 - **权限检测**（整页二级界面）：6 项实时检查，按**必要权限**（蓝牙 / 通知 / GAIA 直连）与**可选权限**（电池白名单 / Root / FastPairHook 模块）分组呈现，缺失一键跳转修复；结论只看必要项，可选项缺失不算「权限没配好」
-- **日志抓取**（设备适配）：一键收集系统信息 / 应用设置 / 蓝牙 / 运行环境 / logcat 六类日志打包为 ZIP
+- **日志抓取**（设备适配）：一键收集系统信息 / 应用与设置 / 蓝牙信息 / 运行环境 / logcat / 运行日志六类日志打包为 ZIP
 - **保活默认常开且无需 Root**：开机自启 + 30 秒看门狗 + 系统电池优化白名单（只主动询问一次）；设备已 Root 时静默追加 `deviceidle` / `appops` 增强，失败不影响使用。另有后台隐藏可选开关
 - **使用引导**：首次启动自动展示，横滑分页、每页一个功能分区 —— 关于 / 权限申请 / 连接管理 / 系统集成 / 耳机控制 / 适配与诊断 / 欢迎使用；页内开关与设置页同源，改完立即生效。看完或跳过后不再自动弹出，设置页最底部可随时重看
 - **显示层中英文切换**：语言偏好（跟随系统 / 中文 / English），主界面三 Tab、设置项、降噪面板、日志弹窗、检查权限页文案随语言切换；通过 exported ContentProvider 供 GMS 弹窗跨进程读取
@@ -52,8 +52,8 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | 项目 | 说明 |
 |---|---|
 | 语言 | **Kotlin** |
-| 构建链 | Gradle 8.9（wrapper 固定）+ AGP 8.5.2 + Kotlin 1.9.22 |
-| UI | Material 3,`Theme.Material3.DayNight.NoActionBar`+ 动态取色，三页 Fragment 架构 |
+| 构建链 | Gradle 8.9（wrapper 固定）+ AGP 8.6.1 + Kotlin 2.3.21 |
+| UI | Material 3，`Theme.Material3Expressive.DayNight.NoActionBar`（M3 Expressive）+ 动态取色，三页 Fragment 架构 |
 | 最低系统 | **Android 8.0**（API 26）；targetSdk 36 |
 | 模块 | libxposed API 102（LSPosed ≥ 2.1.1，作用域 `com.google.android.gms;com.android.settings`） |
 | 包名 | `com.fxxkmoondrop.secret` |
@@ -134,11 +134,17 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 | 蓝牙设备详情面板 | `com.android.settings` | 启用 |
 | Fast Pair 弹窗（卡片 \/ 连接态） | `com.google.android.gms` | 启用 |
 
-源码中另保留两条链——`hookMoondrop`（官方水月雨 App 的 GAIA 命令通道）与 `hookBluetooth`（`com.android.bluetooth`：A2DP 状态变化 → `BT_EVENT` 广播，用于识别耳机接入）：
+除此之外，源码里还保留两条**不在作用域内、因此永远不会被注入执行**的链：
 
-- **当前不在启用作用域内，因此不会执行**；
-- **代码完整保留、未被删除**，以备后续多设备适配时启用；
-- 模块**不 hook 官方水月雨 App**（避免与其自身逻辑冲突）。
+| 预留链 | 目标包 | 状态 |
+|---|---|---|
+| `hookMoondrop` | `com.moondroplab.moondrop.moondrop_app` | 未启用（**不是**作用域） |
+| `hookBluetooth` | `com.android.bluetooth` | 未启用（**不是**作用域） |
+
+- 这两个包**不是**本模块的 LSPosed 作用域，LSPosed 不会把模块注入这两个进程，其中的代码**不会执行**；
+- 代码**完整保留、未被删除**，以备后续多设备适配时启用；
+- 模块**不 hook 官方水月雨 App**（避免与其自身逻辑冲突）；
+- 耳机连接的识别由应用自身进程完成（`HeadsetReceiver` 收到蓝牙状态变化后发 `BT_EVENT` 广播），**不依赖** `com.android.bluetooth` 注入。
 
 > Fast Pair 弹窗的混淆类名（`dtes` \/ `dthi` \/ `dtok`）随上游重编译可能改名，已由 DexKit 特征定位自动兜底（详见版本历史 2.50）；仅当原类名加载失败时才启用，失败仍回退原类名，**不影响上述任何行为**。
 
@@ -153,14 +159,14 @@ FxxkMoondrop-repo/
 ├── src/                  # 全部 Kotlin 源码（com.fxxkmoondrop.secret）
 ├── screenshots/          # README 用到的界面截图
 ├── gradle/               # Gradle wrapper（8.9）
-├── build.gradle.kts      # AGP 8.5.2 + Kotlin 1.9.22（apply false）
+├── build.gradle.kts      # AGP 8.6.1 + Kotlin 2.3.21（apply false）
 ├── settings.gradle.kts   # 模块声明与仓库
-├── tools/                # 构建辅助脚本（post_edf.py：EDF 注入 + 重签）
+├── tools/                # 构建辅助脚本（post_edf.py：EDF 注入 + 重签；release_notes.py：Release 说明；check_vectors.py：矢量图标几何自检）
 ├── ADAPTATION.md         # 设备适配说明（协议知识 / 踩坑 / 实测数据）
 ├── ARCHITECTURE.md       # 系统架构文档（进程模型 / 数据流 / 弹窗布局 / 协议）
 ├── DEVELOPMENT.md        # 开发文档（构建环境 / 目录 / 版本规范 / 调试 / 发布清单）
 ├── CHANGELOG.md          # 更新日志（按版本号逐条记录）
-└── (无需 xposed-api-stub.jar)  # 已改用 Maven 依赖 io.github.libxposed:api:102.0.0
+└── xposed-api-stub.jar   # 旧链遗留的编译期桩，构建已改用 Maven 依赖 io.github.libxposed:api:102.0.0（此文件不再被引用）
 ```
 
 ## 开发文档
