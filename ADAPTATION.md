@@ -1,6 +1,6 @@
 # FxxkMoondrop 适配说明
 
-> 版本：3.2.9（versionCode 329） ｜ 更新日期：2026-09-27
+> 版本：3.2.10（versionCode 330） ｜ 更新日期：2026-09-27
 
 > 本文档记录 FxxkMoondrop 项目在 Moondrop 耳机适配过程中积累的协议知识、踩坑经验和实测数据。
 

@@ -27,6 +27,8 @@ CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 TAG_RE = re.compile(r"^(\d+)-(.+)$")
 HEAD_RE = re.compile(r"^##\s+((?:alpha|beta|v)?\d[\w.]*)")  # 前缀可选：兼容 alpha2.41.10 与 2.50
 FENCE_RE = re.compile(r"^-{3,}$")
+# GitHub 警示块首行：`> [!WARNING]` / `> [!CAUTION]` …（大小写不敏感）
+ALERT_RE = re.compile(r"^>\s*\[!(?:WARNING|CAUTION|IMPORTANT|NOTE|TIP)\]", re.I)
 
 
 def git_tags():
@@ -107,6 +109,39 @@ def clean(block):
     return "\n".join(lines).rstrip()
 
 
+def take_alert(block):
+    """把版本段落开头的 GitHub 警示块 `> [!WARNING] …` 抽出来。
+
+    抽出的内容由 [build_body] 置顶到发布页最前面 —— 放在「更新日志」正文里
+    用户要滚过标题才看得到，恶性缺陷的提示必须第一屏可见。
+    不是警示块开头就原样返回，段落其余部分不受影响。
+
+    返回 (alert, 剩余段落)；没有警示块时 alert 为空串。
+    """
+    lines = block.splitlines()
+    i = 1 if lines and lines[0].startswith("#") else 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) or not ALERT_RE.match(lines[i].strip()):
+        return "", block
+    j = i
+    while j < len(lines):
+        if lines[j].startswith(">"):
+            j += 1
+            continue
+        if not lines[j].strip():          # 空行：后面仍是引用行就并进同一块
+            k = j
+            while k < len(lines) and not lines[k].strip():
+                k += 1
+            if k < len(lines) and lines[k].startswith(">"):
+                j = k
+                continue
+        break
+    alert = "\n".join(lines[i:j]).rstrip()
+    rest = "\n".join(lines[:i] + lines[j:]).rstrip()
+    return alert, rest
+
+
 def demote(block):
     """标题整体降一级，避免与发布页大标题抢层级。"""
     return re.sub(r"^(#+)", lambda m: m.group(1) + "#", block, flags=re.M)
@@ -136,6 +171,12 @@ def build_body(tag, sha, repo, changelog_text, tags, prev_override):
         end = prev_i if (prev_i is not None and prev_i > cur_i) else cur_i + 1
         picked = [clean(b) for _, b in sections[cur_i:end] if b.strip()]
 
+    banner = ""
+    if picked:
+        banner, picked[0] = take_alert(picked[0])
+        if not picked[0].strip():
+            picked.pop(0)
+
     lines = ["## 正式发布 `%s`" % tag, ""]
     if sha:
         lines.append("- 提交：`%s`" % sha)
@@ -157,7 +198,10 @@ def build_body(tag, sha, repo, changelog_text, tags, prev_override):
         lines.append("详见 [Commits](%s)。" % link)
     lines.append("")
 
-    return "\n".join(lines), note
+    body = "\n".join(lines)
+    if banner:
+        body = banner + "\n\n---\n\n" + body
+    return body, note
 
 
 def main():

@@ -74,6 +74,103 @@ class AboutFragment : Fragment() {
         return box
     }
 
+    /**
+     * 3.2.10: 应用内更新日志。
+     *
+     * 只有一处数据源 [Changelog]，本方法只负责排版；升级后不必跳浏览器就能看到
+     * 「本版改了什么」与「有没有需要立刻更新的警示」。
+     * 内容少时弹窗贴合高度，超过上限才内部滚动 —— 不写死高度，避免短内容留大片空白。
+     */
+    private fun showChangelog() {
+        val pal = ThemeUtil.Palette(requireContext())
+        val (dlg, body) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+
+        body.addView(M3Ui.dialogTitle(requireContext(),
+                Lang.t("更新日志", "Changelog"), pal.onSurface), LinearLayout.LayoutParams(-1, -2))
+
+        val ver = TextView(requireContext())
+        ver.text = verText()
+        ver.textSize = 14f
+        ver.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        ver.setTextColor(pal.primary)
+        ver.gravity = Gravity.CENTER_HORIZONTAL
+        body.addView(ver, LinearLayout.LayoutParams(-1, -2))
+        body.addView(spacer(dp(16)))
+
+        val content = LinearLayout(requireContext())
+        content.orientation = LinearLayout.VERTICAL
+
+        // 警示条：旧版本的恶性缺陷要比普通条目扎眼（error 色 + 淡底）
+        val alert = Changelog.alert()
+        if (alert.isNotEmpty()) {
+            val warn = LinearLayout(requireContext())
+            warn.orientation = LinearLayout.VERTICAL
+            warn.setPadding(dp(16), dp(14), dp(16), dp(14))
+            val bg = GradientDrawable()
+            bg.setColor((pal.red and 0x00FFFFFF) or 0x26000000)
+            bg.cornerRadius = dp(16).toFloat()
+            warn.background = bg
+            val head = TextView(requireContext())
+            head.text = Lang.t("⚠  旧版本需要立即更新", "⚠  Older builds need updating")
+            head.textSize = 14f
+            head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            head.setTextColor(pal.red)
+            warn.addView(head, LinearLayout.LayoutParams(-1, -2))
+            val msg = TextView(requireContext())
+            msg.text = alert
+            msg.textSize = 13f
+            msg.setTextColor(pal.onSurface)
+            msg.setLineSpacing(dp(2).toFloat(), 1.25f)
+            msg.setPadding(0, dp(6), 0, 0)
+            warn.addView(msg, LinearLayout.LayoutParams(-1, -2))
+            content.addView(warn, LinearLayout.LayoutParams(-1, -2))
+            content.addView(spacer(dp(18)))
+        }
+
+        for (e in Changelog.entries()) {
+            val title = TextView(requireContext())
+            title.text = e[0]
+            title.textSize = 15f
+            title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            title.setTextColor(pal.onSurface)
+            content.addView(title, LinearLayout.LayoutParams(-1, -2))
+            val text = TextView(requireContext())
+            text.text = e[1]
+            text.textSize = 13f
+            text.setTextColor(pal.onVariant)
+            text.setLineSpacing(dp(2).toFloat(), 1.25f)
+            text.setPadding(0, dp(4), 0, 0)
+            content.addView(text, LinearLayout.LayoutParams(-1, -2))
+            content.addView(spacer(dp(18)))
+        }
+
+        val hint = TextView(requireContext())
+        hint.text = Lang.t("完整版本历史见仓库中的 CHANGELOG.md。",
+                "Full release history lives in CHANGELOG.md.")
+        hint.textSize = 12f
+        hint.setTextColor(pal.onVariant)
+        hint.alpha = 0.85f
+        content.addView(hint, LinearLayout.LayoutParams(-1, -2))
+
+        val sv = ScrollView(requireContext())
+        sv.addView(content)
+        body.addView(sv, LinearLayout.LayoutParams(-1, -2))
+        val maxH = (resources.displayMetrics.heightPixels * 0.52f).toInt()
+        content.post {
+            if (content.height > maxH) {
+                sv.layoutParams = LinearLayout.LayoutParams(-1, maxH)
+                sv.requestLayout()
+            }
+        }
+
+        body.addView(spacer(dp(6)))
+        val btns = LinearLayout(requireContext())
+        btns.gravity = Gravity.END
+        btns.addView(M3Ui.textButton(requireContext(), pal, Lang.t("关闭", "Close")) { dlg.dismiss() })
+        body.addView(btns, LinearLayout.LayoutParams(-1, -2))
+        dlg.show()
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
         super.onCreateView(inflater, container, savedInstanceState)
@@ -147,6 +244,10 @@ class AboutFragment : Fragment() {
         box.addView(spacer(dp(24)))
         box.addView(M3Ui.sectionTitle(act, pal, Lang.t("项目", "Project")))
         box.addView(M3Ui.groupCard(act, pal,
+                M3Ui.listRow(act, pal, R.drawable.ic_description,
+                        Lang.t("更新日志", "Changelog"),
+                        Lang.t("本版修复与变更", "Fixes and changes in this build"),
+                        M3Ui.chevron(act, pal.onVariant)) { showChangelog() },
                 M3Ui.listRow(act, pal, R.drawable.ic_code,
                         Lang.t("GitHub 仓库", "GitHub Repository"),
                         Lang.t("查看源码与更新日志", "Source code and changelog"),

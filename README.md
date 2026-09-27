@@ -7,7 +7,7 @@
 
 > **语言 / Language**：[English](README.en.md) ｜ [简体中文](README.md)
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.9**（versionCode 329） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.10**（versionCode 330） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 > [![最新正式版](https://img.shields.io/badge/release-3.2.9-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
@@ -193,6 +193,7 @@ FxxkMoondrop-repo/
 
 ## 版本历史
 
+- **3.2.10**：把**更新日志内置进应用**（「关于」页 → 项目 → 更新日志，中英双语，含本版变更与旧版本缺陷警示，短内容贴合、长内容滚动）；同步把「3.2.8 及更早版本存在恶性缺陷」的警示**置顶**到更新日志与发布页，并回填了已发布的 3.2.9 发布页（主仓与镜像仓）。本版不含蓝牙 / GAIA 逻辑改动，3.2.9 的连接修复结论全部继续有效。
 - **3.2.9**：**修复严重缺陷——偶发把耳机连到死机 / 自动关机 / 断开**。根因是连接管理存在三处重入竞态：`retryConnect()` 覆盖 `gatt` 却不关闭旧连接（旧连接仍挂在协议栈上继续收通知、与新连接共用同一回调，实测**2 条链路并存 11 分钟**、每条通知被处理两遍）；延迟重连任务无去重无取消（被连续调用 N 次就在 15 秒后并发拆建 N 次）；5 秒轮询在链路**正在建立**时也会再拆建一次，且同副耳机以两个地址各占一条目时会在一轮里发起两次连接。蓝牙栈实测曾累积 **8 条 ATT 通道**同时挂在耳机上、**1 秒内 5 次**链路重建 —— 耳机固件因此崩溃。现增加在途守卫、单实例重连任务、`isConnecting()` 判据与单轮询单连接限制；实测并存连接 **2→1**、重建 **5→1**、通知处理 **2 次→1 次**，耳机全程稳定未死机。**新增「连接弹窗」总开关**（设置 → 功能 → 官方集成，默认开；关掉后不弹 Fast Pair 卡片，通知栏与主界面不受影响）。另清理死代码（未再引用的 `xposed-api-stub.jar`、manifest 的 `package` 属性、零引用的 `.PopupActivity` 声明）、`targetSdkVersion` 对齐 36，并修正多处文档（构建链版本、组件表、测试用例数 20→66、支持设备口径改为**水月雨全系列**、作用域澄清）。
 - **3.2.8**：**界面全面对齐 Material 3 规范** —— 切到 M3 Expressive 主题（按钮形变、对话框、动效曲线，底部导航 81→65dp）；32 个图标由 Material Icons（24 网格）统一到 Material Symbols（960 网格），终止项目内两代图标混用；自绘控件换成官方组件（三处对话框 → MaterialAlertDialogBuilder，刷新条与圆形加载 → 官方指示器，检查中接入官方 LoadingIndicator）；触控 40→48dp、圆角 20→24dp、21 处字号归位到 M3 typescale、7 处动画归位到 motion token。**修复 3 个真 bug**：两处动态取色写进了 Android 调色板并不存在的 tone（`system_neutral1_90` / `_80`），`getIdentifier` 返回 0 后永远走 fallback，浅色主题下那两格**从未跟随壁纸**；通知按钮的 `onContainer` fallback 误抄了 container 的值，深色下文字与底色同色不可读；选中态前景与描边改用 `onPrimary` 角色（硬编码白色在深色主题的浅色 primary 上对比度严重不足）。**构建链**：AGP 8.6.1、compileSdk 35、material 1.14.0、Kotlin 2.3.21。
 - **3.2.7**：主界面降噪区块改为**按设备能力显隐** —— 硬件本身没有降噪的型号（如 U.C.T.S / MD-OWS-014）不再挂着一排点了没反应的降噪按钮；未连接或能力未探明时仍是"显示但置灰"，不闪、不误判。弹窗与通知栏原本就按能力处理，这次把主界面补齐到同一规则。
