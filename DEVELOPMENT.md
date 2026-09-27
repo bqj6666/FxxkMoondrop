@@ -1,6 +1,6 @@
 # FxxkMoondrop 开发文档
 
-> 版本：3.2.8（versionCode 328） ｜ 更新日期：2026-09-26
+> 版本：3.2.9（versionCode 329） ｜ 更新日期：2026-09-27
 
 ## 构建环境
 
@@ -86,8 +86,8 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.8` |
-| versionCode | 单调递增整数 | `328` |
+| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.9` |
+| versionCode | 单调递增整数 | `329` |
 
 发版时同步更新五处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`
@@ -96,7 +96,7 @@ FxxkMoondrop-repo/
 4. `app/src/main/resources/META-INF/xposed/module.prop` — `version`（LSPosed 管理器展示用，须与 `versionName` 一致）
 5. `app/src/main/AndroidManifest.xml` — 文本 manifest 里的 `android:versionCode` / `android:versionName`（AGP 合并时会用 build.gradle.kts 的值覆盖，但仓库内不应残留旧版本号）
 
-提交信息格式：遵循 Conventional Commits，如 `fix(ui): …` / `build: …` / `release: 3.2.8 (328) — …`
+提交信息格式：遵循 Conventional Commits，如 `fix(ui): …` / `build: …` / `release: 3.2.9 (329) — …`
 
 ## LSPosed 模块元信息
 

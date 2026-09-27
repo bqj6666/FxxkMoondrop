@@ -330,6 +330,11 @@ class HeadsetDetectService : Service() {
 
             // v3.16/v3.17: 检测到 Moondrop 连接时，静默拉起 GAIA 通讯服务
             var hasMoondrop = false
+            // 「耳机死机」根因 C 配套：一次轮询只允许发起一次 GAIA 连接。
+            // 同一副耳机可能以两个不同地址（BR/EDR 与 LE、或 A2DP/HFP 两条 profile）
+            // 各占一个 key，此前会在一轮里先后发起两次 connect —— 第二次必然先
+            // disconnect 掉第一次刚建好的链路（实测 37ms 内两次 connectGatt）。
+            var gaiaConnectInitiated = false
             for (key in now.sorted()) {
                 val idx = key.indexOf('|')
                 val addr = key.substring(0, idx)
@@ -353,20 +358,35 @@ class HeadsetDetectService : Service() {
                 if (gaiaAddr == null) gaiaAddr = addr
                 AppLog.i(TAG, "detect: headset " + nm + " " + addr + " -> gaia conn " + gaiaAddr)
                 // alpha1.4: 已连接/等待连接中不重复发起（地址比较在 LE 缓存下会误判）
+                if (gaiaConnectInitiated) continue
                 if (!gaia.isConnected() && gaia.deviceAddress == null) {
+                    // 与下面同一处防护：已有在途连接尝试时不要重复发起
+                    if (gaia.isConnecting()) continue
                     gaia.setCallback(gaiaCallback)
                     gaia.connect(this, gaiaAddr)
+                    gaiaConnectInitiated = true
                 } else if (!gaia.isConnected()) {
                     // 3.2.1: 链路空闲但仍残留上一次的 deviceAddress —— 此前这里连的是那个
                     // **旧地址**，于是「先连 A 再换 B」时永远在重连 A，B 一辈子连不上。
                     // 现在连本次检测到的目标 gaiaAddr；若与残留地址不同，先清掉残留再连。
                     val stale = gaia.deviceAddress
                     if (stale != null && !stale.equals(gaiaAddr, ignoreCase = true)) {
+                        // 目标换了设备：清掉旧地址再连新的（3.2.1 修复的「永远重连旧地址」）
                         AppLog.i(TAG, "gaia idle but stale addr " + stale + " -> switch to " + gaiaAddr)
                         gaia.disconnect()
+                    } else if (gaia.isConnecting()) {
+                        // 「耳机死机」根因 C：链路正在建立时此前也会再走一次 disconnect + connect。
+                        // 一次 pollConnected 里同名设备可能出现多个条目（A2DP + HFP 两条 profile），
+                        // 「已连接但等待中」也会在下一个 5 秒轮询里再次发起 —— 实测 1 秒内 5 个
+                        // GATT client 注册即注销，耳机端 BLE 链路剧烈抖动，是固件崩溃的直接诱因。
+                        // 注意：仅在「确实有活跃 gatt」时跳过；gatt 已关闭的真空闲态仍照常重连，
+                        // 否则耳机断开后将永远连不回来。
+                        AppLog.i(TAG, "gaia idle but connecting, skip redundant reconnect")
+                        continue
                     }
                     gaia.setCallback(gaiaCallback)
                     gaia.connect(this, gaiaAddr)
+                    gaiaConnectInitiated = true
                 }
             }
 

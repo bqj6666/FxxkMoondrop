@@ -172,6 +172,9 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    /** 根因 B 修复用：retryConnect() 的延迟重连任务，单实例、投递前先撤销。 */
+    private var retryReconnectRunnable: Runnable? = null
+
     companion object {
         @JvmStatic @Synchronized
         fun getInstance(): GaiaBleClient {
@@ -358,6 +361,13 @@ class GaiaBleClient private constructor() {
      * 还没发现完，按钮点了没反应」的窗口期问题。模拟连接视为就绪，便于预览。
      */
     fun isGaiaReady(): Boolean = simConnected || (gaiaReady && isConnected())
+
+    /**
+     * 是否「已有活跃 gatt 且尚未连上」= 正在连接 / 等待中。
+     * 供轮询侧判断「无需再次发起连接」，避免周期性拆建 BLE 链路（耳机死机根因 C）。
+     */
+    @Synchronized
+    fun isConnecting(): Boolean = gatt != null && !connected
 
     fun setCallback(cb: Callback?) { this.callback = cb }
 
@@ -800,6 +810,15 @@ class GaiaBleClient private constructor() {
     }
 
     private fun retryConnect() {
+        // 「耳机死机」根因 A：本函数此前直接 gatt = connectGatt(...) 覆盖字段，不像
+        // connect() 那样先 disconnectInternal()，于是被覆盖的旧 BluetoothGatt 永不 close
+        // —— 它仍挂在协议栈上继续收耳机通知，且与当前连接共用同一个 gattCallback，
+        // 导致每条通知被处理两遍、耳机端维持两条多余的 BLE 链路。
+        // 已有活跃 gatt 时直接返回：正在连接就等它、已连上就无需重连，都不该打断。
+        if (gatt != null) {
+            Log.d(GaiaConstants.TAG, "retryConnect skipped: gatt already active (connected=" + connected + ")")
+            return
+        }
         var addr: String? = null
         if (cachedLeAddress != null) {
             val useCached = cachedLeName == null || deviceAddress == null || cachedLeName.equals(
@@ -824,12 +843,19 @@ class GaiaBleClient private constructor() {
         } catch (e: Exception) {
             Log.e(GaiaConstants.TAG, "retryConnect failed", e)
         }
-        handler.postDelayed({
+        // 「耳机死机」根因 B：此前每次调用都新投一个 delayed 任务且从不取消，被连续
+        // 调用 N 次就会在 15 秒后并发执行 N 次 disconnect+connect（实测 1 秒内 5 个
+        // GATT client 注册即注销），耳机端 BLE 链路剧烈抖动 → 触发固件崩溃关机。
+        // 改为单实例 Runnable，投递前先撤销上一次，保证同时只有一个待执行重连。
+        retryReconnectRunnable?.let { handler.removeCallbacks(it) }
+        val task = Runnable {
             val a = deviceAddress
-            if (a == null || connected) return@postDelayed
-            synchronized(this) { disconnectInternal() }
+            if (a == null || connected) return@Runnable
+            synchronized(this@GaiaBleClient) { disconnectInternal() }
             connect(context!!, a)
-        }, 15000)
+        }
+        retryReconnectRunnable = task
+        handler.postDelayed(task, 15000)
     }
 
     @Synchronized
@@ -941,6 +967,8 @@ class GaiaBleClient private constructor() {
     }
 
     private fun disconnectInternal() {
+        // 根因 B 配套：主动断开时撤销待执行的重连任务，避免它稍后又把连接拉起来。
+        retryReconnectRunnable?.let { handler.removeCallbacks(it) }
         gatt?.let {
             try { it.disconnect(); it.close() } catch (_: Exception) { }
         }
