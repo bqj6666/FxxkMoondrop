@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3.2.10: 弹窗退场（与进场成对，缺了它关闭时会硬切消失）
+     - 曲线 = Motion.exit()：emphasized accelerate，独立 interpolator 资源引用
+     - 时长 = Motion.SHORT4（200ms）：退场要果断，比进场短
+     - 形态 = fade out + scale 1.0 -> 0.8（与进场同一支点，反向收起） -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@interpolator/m3_dialog_exit"
+    android:shareInterpolator="true">
+    <alpha
+        android:duration="200"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0" />
+    <scale
+        android:duration="200"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="0.8"
+        android:toYScale="0.8" />
+</set>

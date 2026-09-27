@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3.2.10: 弹窗进场（对齐 M3 弹窗动效与项目 Motion token）
+     - 曲线 = Motion.enter()：emphasized decelerate，独立 interpolator 资源引用
+     - 时长 = Motion.MEDIUM2（300ms），与连接卡片 / 图标弹窗等既有弹窗一致
+     - 形态 = fade in + scale 0.8 -> 1.0（M3 规范的弹窗缩放幅度，围绕中心）
+
+     ⚠️ 缓动必须用 android:interpolator 属性引用外部资源。
+     早期版本把 <pathInterpolator> 直接内联成 <set> 的子元素，AnimationUtils
+     只认 set/alpha/scale/rotate/translate，解析直接抛 Unknown animation name，
+     WMS 拿到 null 动画 —— 表现为弹窗完全没有动画（比系统默认还差）。 -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@interpolator/m3_dialog_enter"
+    android:shareInterpolator="true">
+    <alpha
+        android:duration="300"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+    <scale
+        android:duration="300"
+        android:fromXScale="0.8"
+        android:fromYScale="0.8"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="1.0"
+        android:toYScale="1.0" />
+</set>

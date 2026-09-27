@@ -1440,9 +1440,16 @@ class OverviewFragment : Fragment() {
         statusBadge?.text = badgeText()
         // alpha1.4: 降噪控制区块仅随真实耳机连接显示（模拟按钮不影响）
         val realConnected = HeadsetGate.getConnectedMac(requireContext()) != null
-        var st3 = moonProcState
-        if (st3 == null) st3 = Lang.t("未知", "Unknown")
-        val ancEnabled = realConnected && st3.contains("✅")
+        // 3.2.10: 判据修正 —— moonProcState 取自 serviceState()，说的是「后台监听服务是否在跑」，
+        // 而 enable 默认 true，于是它几乎恒为「✅ 运行中」。拿它当 GAIA 连接状态，结果是
+        // 蓝牙刚连上、GAIA 还没握手的窗口期里，降噪按钮已经显示成可用，点下去毫无反应。
+        // 真正的 GAIA 连接态只有 GaiaBleClient 知道 —— 等它握手成功再放行按钮。
+        val gaiaConnected = try {
+            GaiaBleClient.getInstance().isConnected()
+        } catch (_: Throwable) {
+            false
+        }
+        val ancEnabled = realConnected && gaiaConnected
         // 3.2.7: 设备已连接且能力探测**明确判定无 ANC**（probe.status()==2）时，
         // 整个降噪区块（标题 + 按钮行）隐藏。此前是无条件显示，于是像 U.C.T.S(MD-OWS-014)
         // 这种硬件本身就没有降噪的型号，主界面会挂着一排点了没反应的降噪按钮（issue #9）。

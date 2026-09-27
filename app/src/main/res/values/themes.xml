@@ -24,4 +24,12 @@
         <item name="android:colorBackground">@color/m3_surface</item>
         <item name="android:colorBackgroundFloating">@color/m3_surface_container_high</item>
     </style>
+
+    <!-- 3.2.10: 统一弹窗动效（M3Ui.materialDialog 通过 window.setWindowAnimations 引用）。
+         进场 fade+scale 300ms 走 emphasized decelerate，退场 200ms 走 emphasized accelerate ——
+         进出场必须成对，只有进场会让关闭时硬切、显得比系统弹窗廉价。 -->
+    <style name="M3DialogAnim">
+        <item name="android:windowEnterAnimation">@anim/m3_dialog_in</item>
+        <item name="android:windowExitAnimation">@anim/m3_dialog_out</item>
+    </style>
 </resources>

@@ -152,16 +152,19 @@ class AboutFragment : Fragment() {
         hint.alpha = 0.85f
         content.addView(hint, LinearLayout.LayoutParams(-1, -2))
 
+        // 3.2.10: 显示前先按弹窗可用宽度量一次内容，再决定 wrap 还是限高。
+        // 原实现是 post 到布局后再改高度，弹窗会先撑满、下一帧突然收缩 —— 就是那段难看的跳动。
+        // 宽度 = 弹窗宽（0.84 屏宽，见 M3Ui.materialDialog）减去 body 左右各 24dp 内边距。
+        val availW = (resources.displayMetrics.widthPixels * 0.84f).toInt() - dp(48)
+        content.measure(
+                View.MeasureSpec.makeMeasureSpec(availW, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val maxH = (resources.displayMetrics.heightPixels * 0.52f).toInt()
+        val svH = if (content.measuredHeight > maxH) maxH
+                  else LinearLayout.LayoutParams.WRAP_CONTENT
         val sv = ScrollView(requireContext())
         sv.addView(content)
-        body.addView(sv, LinearLayout.LayoutParams(-1, -2))
-        val maxH = (resources.displayMetrics.heightPixels * 0.52f).toInt()
-        content.post {
-            if (content.height > maxH) {
-                sv.layoutParams = LinearLayout.LayoutParams(-1, maxH)
-                sv.requestLayout()
-            }
-        }
+        body.addView(sv, LinearLayout.LayoutParams(-1, svH))
 
         body.addView(spacer(dp(6)))
         val btns = LinearLayout(requireContext())

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3.2.10: 弹窗进场缓动 = M3 emphasized decelerate
+     （数值与 M3Ui.Motion.enter() 同源；改 token 要一并同步） -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:controlX1="0.05"
+    android:controlY1="0.7"
+    android:controlX2="0.1"
+    android:controlY2="1.0" />

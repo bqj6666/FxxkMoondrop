@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3.2.10: 固定 id 表。
+
+     m3_page_scroll —— 各页 M3Ui.largeHeaderPage 的主 ScrollView。
+     页面视图是代码动态构建的，不给 id 的话 Android 的 view state 机制无从
+     匹配，Activity 重建（切换主题 / AMOLED 等设置）后滚动位置必然丢，
+     页面上跳回顶部。固定 id 后可被 saveHierarchyState / restoreHierarchyState
+     自动认领，重建后停在原处。 -->
+<resources>
+    <item name="m3_page_scroll" type="id" />
+</resources>

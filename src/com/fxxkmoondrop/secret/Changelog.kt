@@ -25,6 +25,20 @@ object Changelog {
                             "The About page now has a changelog entry, so you can see what this build "
                                     + "changed and any urgent update notice without opening a browser.")),
             arrayOf(
+                    Lang.t("3.2.10 · 修复：弹窗动效、切主题跳页、降噪按钮可用态",
+                            "3.2.10 · Fixes: dialog motion, scroll jump on theme switch, ANC button state"),
+                    Lang.t("弹窗的进出场缓动写法非法，动画实际没被系统加载 —— 表现为「啪」地出现、"
+                            + "关闭时硬切消失，现已按 M3 规范补齐；切换主题 / AMOLED 后页面不再跳回顶部，"
+                            + "引导页同样不再跳；主界面降噪按钮改为等 GAIA 真正连上才可用，"
+                            + "蓝牙刚连上、GAIA 尚未握手时不再显示成可点却毫无反应。",
+                            "The dialog enter/exit easing was written in a form the framework rejects, "
+                                    + "so no animation was ever loaded: dialogs popped in and cut out hard. "
+                                    + "Now aligned with the M3 spec. Switching theme or AMOLED no longer "
+                                    + "jumps the page back to the top, and the onboarding pages no longer "
+                                    + "do either. The main-screen noise-control buttons now unlock only "
+                                    + "once GAIA is actually connected, instead of looking tappable while "
+                                    + "the link is still being established.")),
+            arrayOf(
                     Lang.t("3.2.9 · 严重修复：偶发把耳机连到死机 / 关机 / 断开",
                             "3.2.9 · Critical fix: rare hang / power-off / disconnect of the earbuds"),
                     Lang.t("根因是连接管理存在三处重入竞态：重建前没关闭旧连接（旧链路永不释放，"

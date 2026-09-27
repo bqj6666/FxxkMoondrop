@@ -55,6 +55,11 @@ class OnboardingActivity : Activity() {
     private var permLoading = false
     private var welcomeLoading = false
     private lateinit var welcomeBox: LinearLayout
+    // 3.2.10: 权限页与欢迎页的内容会整块重建（removeAllViews -> 重新填充），
+    // 重建瞬间内容高度归零，ScrollView 的 scrollY 被一起夹到 0。
+    // 记下这两页的滚动容器，重建完把位置接回去。
+    private var permScroll: ScrollView? = null
+    private var welcomeScroll: ScrollView? = null
 
     /** 全应用唯一的偏好表（与设置页同源）。 */
     private fun sp() = getSharedPreferences("cfg", Context.MODE_PRIVATE)
@@ -322,10 +327,12 @@ class OnboardingActivity : Activity() {
     private fun pagePerms(): View {
         permBox = LinearLayout(this)
         permBox.orientation = LinearLayout.VERTICAL
-        return buildPage(Lang.t(this, "权限申请", "Permissions"),
+        val page = buildPage(Lang.t(this, "权限申请", "Permissions"),
                 Lang.t(this, "以下为功能运行所需的权限与环境检查项，缺失时点击相应条目完成授权；必要项缺失会直接影响使用，可选项仅影响增强功能。",
                         "Permissions and environment checks the app relies on. Tap a pending item to grant it; missing required items directly affect usage, optional ones only affect enhancements."),
                 R.drawable.ic_shield, permBox)
+        permScroll = page as? ScrollView
+        return page
     }
 
     /**
@@ -337,6 +344,8 @@ class OnboardingActivity : Activity() {
     private fun refreshPerms() {
         if (!::permBox.isInitialized || permLoading) return
         permLoading = true
+        // 3.2.10: 内容要整块重建，先记住滚动位置，重建完再补回去。
+        val keepY = permScroll?.scrollY ?: 0
         permBox.removeAllViews()
         permBox.addView(M3Ui.loadingRow(this, pal, Lang.t(this, "正在检查…", "Checking…")))
         val act = this
@@ -359,6 +368,7 @@ class OnboardingActivity : Activity() {
                     permBox.addView(hint(Lang.tf("尚有 %d 项必要权限未就绪，点击上方条目可前往授权。",
                             "%d required item(s) pending — tap a row above to grant.", missReq)))
                 }
+                restorePageScroll(permScroll, keepY)
             }
         }.start()
     }
@@ -650,10 +660,12 @@ class OnboardingActivity : Activity() {
     private fun pageWelcome(): View {
         welcomeBox = LinearLayout(this)
         welcomeBox.orientation = LinearLayout.VERTICAL
-        return buildPage(Lang.t(this, "欢迎使用", "Welcome"),
+        val page = buildPage(Lang.t(this, "欢迎使用", "Welcome"),
                 Lang.t(this, "引导到此结束，以下为当前环境状态，可以开始使用了。",
                         "That is the whole tour. Below is the current environment status — you are good to go."),
                 R.drawable.ic_check, welcomeBox)
+        welcomeScroll = page as? ScrollView
+        return page
     }
 
     /**
@@ -665,6 +677,8 @@ class OnboardingActivity : Activity() {
     private fun refreshWelcome() {
         if (!::welcomeBox.isInitialized || welcomeLoading) return
         welcomeLoading = true
+        // 3.2.10: 同权限页 —— 重建前记住滚动位置。
+        val keepY = welcomeScroll?.scrollY ?: 0
         welcomeBox.removeAllViews()
         welcomeBox.addView(M3Ui.loadingRow(this, pal, Lang.t(this, "正在检查…", "Checking…")))
         val act = this
@@ -710,8 +724,21 @@ class OnboardingActivity : Activity() {
                                 Lang.t(act, "已完成，可在设置页最底部重新查看",
                                         "Completed — replay it from the bottom of Settings")))
                 welcomeBox.addView(M3Ui.groupCard(act, pal, *rows))
+                restorePageScroll(welcomeScroll, keepY)
             }
         }.start()
+    }
+
+    /**
+     * 3.2.10: 内容整块重建后把滚动位置接回去。
+     *
+     * removeAllViews() 会让 ScrollView 的内容高度瞬间归零，scrollY 被一起夹到 0 ——
+     * 权限页每次 onResume 都会重建（从系统授权页返回就是一次），用户会看到整页跳回顶部。
+     * 重建后的内容要先测量布局，scrollTo 才有意义，所以放到下一帧执行。
+     */
+    private fun restorePageScroll(sv: ScrollView?, y: Int) {
+        if (sv == null || y <= 0) return
+        sv.post { if (sv.scrollY != y) sv.scrollTo(0, y) }
     }
 
     private fun summaryRow(title: String, ok: Boolean, detail: String): View =

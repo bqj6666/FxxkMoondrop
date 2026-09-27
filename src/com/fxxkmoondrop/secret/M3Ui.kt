@@ -117,6 +117,9 @@ class M3Ui {
             val header = collapsingHeader(act, pal, title, expanded)
 
             val sv = android.widget.ScrollView(act)
+            // 3.2.10: 固定 id —— Activity 重建（切主题 / AMOLED 等设置）后，
+            // 系统 view state 机制才能按 id 认领并恢复滚动位置，否则页面上跳回顶部。
+            sv.id = R.id.m3_page_scroll
             sv.setBackgroundColor(pal.surface)
             sv.setPadding(0, expanded, 0, 0)
             // 关键：默认 clipToPadding=true 会把顶部内边距区当成裁剪区，
@@ -132,6 +135,10 @@ class M3Ui {
 
             sv.setOnScrollChangeListener { _, _, sy, _, _ -> header.onScroll(sy) }
             header.apply(0f)
+            // 3.2.10: 重建后 ScrollView 是在自己的 onLayout 里还原滚动位置的，
+            // 那一刻 onScrollChange 已经派发完，大标题栏会停在展开态、把正文压住。
+            // 下一帧按真实 scrollY 补一次同步；正常进入时 scrollY=0，apply 内部去重直接返回。
+            sv.post { header.onScroll(sv.scrollY) }
             return LargeHeaderPage(container, sv, header)
         }
 
@@ -288,6 +295,10 @@ class M3Ui {
             if (win != null) {
                 win.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0x00000000))
                 win.setDimAmount(0.5f)
+                // 3.2.10: 进出场动效在此收口 —— 自绘弹窗此前既无进场也无退场，
+                // 卡片是「啪」地出现、点关闭又硬切消失，明显比系统弹窗廉价。
+                // 放在构建器里，所有走 materialDialog 的弹窗自动一致。
+                win.setWindowAnimations(R.style.M3DialogAnim)
             }
             val density = c.resources.displayMetrics.density
             val card = MaterialCardView(c)
