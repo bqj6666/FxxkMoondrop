@@ -321,7 +321,27 @@ class SettingsFragment : Fragment() {
                 getSP().edit().putBoolean("feat_detail_panel", checked).commit()
             }
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail))
+        // 连接弹窗总开关：与官方集成同组 —— 弹窗同样由 GMS 进程 Hook 承担，
+        // 模块未激活时一并置灰。关掉后所有弹窗路径（立即 / 延迟 / 超时 / GAIA 就绪）
+        // 统一不弹；通知栏与主界面控制不受影响。
+        val swPopup = makeTintedSwitch()
+        swPopup.isChecked = if (hookOff) false else getSP().getBoolean("feat_popup", true)
+        if (hookOff) {
+            swPopup.isEnabled = false
+            swPopup.isClickable = false
+            swPopup.alpha = 0.4f
+        }
+        val rowPopup = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_devices,
+                Lang.t("连接弹窗", "Connection popup"),
+                Lang.t("耳机连接时弹出 Google Fast Pair 卡片（图标 / 电量 / 降噪按钮）；关闭后仍可用通知栏与主界面控制",
+                        "Show the Google Fast Pair card on connect (icon / battery / ANC); the notification and main screen keep working when off"),
+                swPopup, null)
+        if (!hookOff) {
+            swPopup.setOnCheckedChangeListener { _, checked ->
+                getSP().edit().putBoolean("feat_popup", checked).commit()
+            }
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail, rowPopup))
         box.addView(spacer(dp(14)))
 
         box.addView(makeSubLabel(Lang.t("通知", "Notifications")))
@@ -958,7 +978,9 @@ class SettingsFragment : Fragment() {
                     toast(if (ok) "✅ 弹窗图标已更新（下次连接生效）" else "写入图标失败")
                 }
                 if (scaled !== bmp && !scaled.isRecycled) scaled.recycle()
-                if (bmp != null && !bmp.isRecycled) bmp.recycle()
+                // bmp 已在上方判空（null 时 return@Thread），此处编译器已智能转换为非空，
+                // 原先的 `bmp != null &&` 恒真会产生警告，去掉后语义完全等价。
+                if (!bmp.isRecycled) bmp.recycle()
             } catch (t: Throwable) {
                 requireActivity().runOnUiThread { toast("图标处理失败: ${t.message}") }
             }

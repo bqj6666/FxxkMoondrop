@@ -156,10 +156,9 @@ com.android.settings          # 设置页耳机入口 + 蓝牙设备详情页控
 |---|---|---|
 | `MainActivity` | true | 主界面（三页 Fragment + 底部导航） |
 | `PermissionActivity` | false | 权限检测页 |
-| `PopupActivity` | false | 模块自绘的 Fast Pair 弹窗宿主 |
 | `OnboardingActivity` | false | 首启使用引导（7 页横滑） |
 
-> 设置页与关于页不是独立 Activity，而是 `MainActivity` 内的两个 Fragment（`SettingsFragment` / `AboutFragment`）。
+> 设置页与关于页不是独立 Activity，而是 `MainActivity` 内的两个 Fragment（`SettingsFragment` / `AboutFragment`）。全仓 Activity 只有上述 **3 个**。
 
 ### Service
 

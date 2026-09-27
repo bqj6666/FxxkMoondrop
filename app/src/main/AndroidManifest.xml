@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- FxxkMoondrop M3 构建链文本 manifest（由二进制 AXML 完整转写，组件/权限/元数据不增不减） -->
+<!-- FxxkMoondrop M3 构建链文本 manifest（由二进制 AXML 完整转写） -->
 <!-- 版本号以 app/build.gradle.kts 的 defaultConfig 为准（AGP 合并时覆盖此处）；
      这两个属性此前停留在旧链的 alpha2.27 / 254，3.0.4 起同步为正式版本号，避免仓库里残留 alpha 字样。 -->
+<!-- 3.2.9 清理两处死声明：
+     - 移除 package 属性：AGP 8 起该属性被忽略并告警（改用 build.gradle.kts 的 namespace），
+       两者值同为 com.fxxkmoondrop.secret，删除不改变任何行为。
+     - 移除 .PopupActivity 声明：该类在源码中不存在、全仓零引用、无 intent-filter、
+       exported=false，永远不会被启动。 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.fxxkmoondrop.secret"
     android:versionCode="328"
     android:versionName="3.2.8">
 
@@ -40,8 +44,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity android:name=".PopupActivity" android:exported="false" />
 
         <!-- 3.1.0: 首次启动的使用引导（设置页最底部也能重看） -->
         <activity android:name=".OnboardingActivity" android:exported="false" />

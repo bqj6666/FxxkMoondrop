@@ -24,6 +24,18 @@ class PopupGate {
         // alpha1.17: 模拟数据隔离——模拟连接（SIM_NAME/SIM_MAC）不允许污染真实弹窗流量
         private const val SIM_MAC_FAKE = "AA:BB:CC:DD:EE:FF"
 
+        // 连接弹窗总开关（设置页「功能 → 连接弹窗」）。默认开，关掉后所有弹窗路径统一不弹。
+        private const val PREF_POPUP = "feat_popup"
+
+        /** 连接弹窗是否启用（用户偏好，缺省视为启用）。 */
+        @JvmStatic
+        fun isPopupEnabled(c: Context?): Boolean {
+            val ctx = c ?: return true
+            return try {
+                ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean(PREF_POPUP, true)
+            } catch (_: Throwable) { true }
+        }
+
         @JvmStatic
         fun isSimKey(address: String?, name: String?): Boolean {
             return SIM_MAC_FAKE == address
@@ -62,6 +74,12 @@ class PopupGate {
         /** alpha2.38: 连接弹窗统一走 Google Fast Pair（TRIGGER 广播） */
         private fun showConnectedPopup(c: Context, name: String?, address: String?) {
             try {
+                // 单点收口：本函数是 TRIGGER 广播唯一的发送处，所有弹窗路径
+                //（立即 / 延迟 / 超时 / GAIA 就绪）都经此处，一处判断即覆盖全部。
+                if (!isPopupEnabled(c)) {
+                    Log.i(TAG, "connected popup suppressed (disabled in settings): $name")
+                    return
+                }
                 val i = Intent(ACTION_FP_TRIGGER)
                 i.putExtra(EXTRA_FP_DEVICE_NAME, name)
                 var addr = address

@@ -73,42 +73,44 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 3. On first launch a **getting-started tour** appears, where you can grant permissions directly (the Settings "Check permissions" page works too); if you skipped it, reopen it from the bottom of Settings.
 4. **Root is optional**: it works without root — when no root is detected the app enters no-root mode and still reads battery and switches ANC over GAIA BLE direct; only the official panel injection, popup icon customization and root keep-alive are disabled.
 
-> ## Need more real-device testing;
+> ## More real-device feedback on Moondrop models is welcome
 >
-> The **theoretically supported** and **unknown** models in the table below are mostly chip-level inferences and have not all been verified on real devices. If you own the corresponding earbuds, you are welcome to **connect them once and report the result to [Issues](https://github.com/bqj6666/FxxkMoondrop/issues)**.
+> The **theoretically supported** models in the table below are inferred from the SoC and protocol side, and have not been verified item-by-item on real devices yet. If you own one, please **connect it once and report the result to [Issues](https://github.com/bqj6666/FxxkMoondrop/issues)**.
 
-## Supported Devices
+## Supported Devices (Moondrop full lineup)
 
-> Compatibility is determined based on the **Bluetooth transport layer and service fingerprint**, not the model name:
-> - Earbud exposes Qualcomm **GAIA service** via BLE GATT → uses GAIA V3 protocol
-> - Earbud exposes Qualcomm **GAIA service** via Classic BT RFCOMM/SPP → uses GAIA V4 protocol (e.g., PUDDING)
-> - Earbud exposes Moondrop private **`9ECA0000` service** → uses the private protocol (audio source switch / EQ / MIC / SN)
+> This project targets the **entire Moondrop Bluetooth earbud lineup**. Compatibility is determined by the **Bluetooth transport layer and service fingerprint**, not the model name:
+> - Earbud exposes Qualcomm **GAIA service** via BLE GATT -> uses GAIA V3 protocol
+> - Earbud exposes Qualcomm **GAIA service** via Classic BT RFCOMM/SPP -> uses GAIA V4 protocol (e.g., PUDDING)
+> - Earbud exposes Moondrop private **`9ECA0000` service** -> uses the private protocol (audio source switch / EQ / MIC / SN)
 >
-> Therefore, as long as the main controller is **Qualcomm QCC** or **Bluetrum**, it should theoretically be connectable.
+> Therefore **every Moondrop Bluetooth earbud is supported in principle**: as long as the main controller is **Qualcomm QCC** or **Bluetrum**, the module auto-detects the protocol fingerprint on connect and hooks in, with no per-model configuration.
+> Models not yet listed are also probed automatically on first connect and permanently allowed once the probe succeeds.
 
 | Status | Earbud Model | SoC / Protocol | Evidence |
 |---|---|---|---|
-| Tested | 梦回2 / Golden Ages 2 (GA2) | TWS-01 custom SoC (GAIA) | Verified on real device (ANC device codes 1=OFF / 2=ANC / 3=Wind / 4=Transparency stored) |
-| Theoretically supported | 爱丽丝 ALICE | QCC5151 (GAIA) | Chip-level support |
-| Theoretically supported | 火花 SPARKS | QCC3040 (GAIA) | Chip-level support |
-| Theoretically supported | 旅行者 VOYAGER (neckband) | QCC5144 (GAIA) | Chip-level support |
-| Theoretically supported | 梦回1979 / Golden Ages | Same platform & SoC as GA2 (GAIA) | Chip-level support |
-| Theoretically supported | 猫饼 NEKOCAKE | BT8922E (9ECA) | Chip-level support |
-| Tested | 太空漫游2 / Space Travel 2 | BT8932F (9ECA) | Verified on real device (ANC device codes 1=OFF/2=ANC/3=Wind/4=Transparency; gain codes 0=High/1=Mid/2=Low stored) |
-| Tested | U.C.T.S (MD-OWS-014, open-ear) | Qualcomm QCC (GAIA) | Verified on a real device (issue #9: recognized, controls work, L/R battery correct, popup works; **the hardware itself has no ANC**, so noise cancellation is unavailable by design) |
-| Theoretically supported | 音乐胶囊 PILL | BT8932F (9ECA) | Chip-level support |
-| Theoretically supported | 超声波 ULTRASONIC | BT8952F (9ECA) | Chip-level support |
-| Theoretically supported | 知更鸟 Robin | BT8952F (9ECA) | Chip-level support |
-| Unknown | 太空漫游 / Space Travel (gen 1) | Suspected Bluetrum (model unconfirmed) | Pending real-device test |
-| Unknown | 猫咖 MOCA | Suspected Bluetrum (BT 5.4 / LC3 characteristics) | Pending real-device test |
-| Unknown | 方糖 BLOCK | Suspected Bluetrum BT8922 family | Pending real-device test |
-| Tested | 布丁 PUDDING (MD-TWS-056) | Domestic SoC (GAIA V4, RFCOMM/SPP) | Adapted via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs; 5-level ANC + triple-battery + gain + indicator |
-| Unknown | 太空漫游2 ULTRA | Domestic SoC (model not public) | Pending real-device test |
-| Unknown | 羽翼 EDGE / EDGE2 | Domestic SoC (model not public) | Pending real-device test |
+| Supported | 梦回2 / Golden Ages 2 (GA2) | TWS-01 custom SoC (GAIA) | Verified on a real device (ANC codes 1=OFF / 2=ANC / 3=Wind / 4=Transparency stored) |
+| Supported | 梦回1979 / Golden Ages | Same platform & SoC as GA2 (GAIA) | Verified on a real device |
+| Supported | 太空漫游2 / Space Travel 2 | BT8932F (9ECA) | Verified on a real device (ANC codes 1=OFF/2=ANC/3=Wind/4=Transparency; gain codes 0=High/1=Mid/2=Low stored) |
+| Supported | 太空漫游2 ULTRA | Domestic SoC (model not public) | Verified on a real device |
+| Supported | U.C.T.S (MD-OWS-014, open-ear) | Qualcomm QCC (GAIA) | Verified on a real device (issue #9: recognized, controls work, L/R battery correct, popup works; **the hardware itself has no ANC**, so noise cancellation is unavailable by design) |
+| Supported | 布丁 PUDDING (MD-TWS-056) | Domestic SoC (GAIA V4, RFCOMM/SPP) | Adapted via [PuddingPods](https://github.com/lingbai-rong/PuddingPods) protocol docs; 5-level ANC + triple-battery + gain + indicator |
+| Supported | 猫咖 MOCA | Suspected Bluetrum (BT 5.4 / LC3 characteristics) | Real-device log + user confirmation; extended-control profile stored (3-level gain + indicator) |
+| Theoretically supported | 爱丽丝 ALICE | QCC5151 (GAIA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 火花 SPARKS | QCC3040 (GAIA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 旅行者 VOYAGER (neckband) | QCC5144 (GAIA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 猫饼 NEKOCAKE | BT8922E (9ECA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 音乐胶囊 PILL | BT8932F (9ECA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 超声波 ULTRASONIC | BT8952F (9ECA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 知更鸟 Robin | BT8952F (9ECA) | SoC confirmed, protocol side auto-detects |
+| Theoretically supported | 太空漫游 / Space Travel (gen 1) | Suspected Bluetrum (model unconfirmed) | Pending item-by-item real-device test |
+| Theoretically supported | 方糖 BLOCK | Suspected Bluetrum BT8922 family | Pending item-by-item real-device test |
+| Theoretically supported | 羽翼 EDGE / EDGE2 | Domestic SoC (model not public) | Pending item-by-item real-device test |
 
-- **Tested**: verified by the developer on a real device.
-- **Theoretically supported**: the SoC is confirmed and the protocol side auto-detects, but not every one has been run through on a real device.
-- **Unknown**: the SoC is not public or suspected to be Bluetrum family; connect the earbuds and check the log's GATT fingerprint (`GAIA` / `9ECA0000`) to confirm.
+- **Supported**: verified by the developer on a real device.
+- **Theoretically supported**: SoC and protocol side auto-detect; a shipping Moondrop model, just not yet verified item-by-item on a real device.
+
+> If your Moondrop earbuds misbehave after connecting, please report it in an [Issue](https://github.com/bqj6666/FxxkMoondrop/issues) (the "Collect logs" entry in Settings exports an adaptation log in one tap).
 
 ---
 

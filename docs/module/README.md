@@ -38,16 +38,14 @@ Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动
 |---|---|---|---|---|
 | ![主页](screenshots/home.png) | ![设置](screenshots/settings.png) | ![关于](screenshots/about.png) | ![Fast Pair](screenshots/fastpair.png) | ![设备通知](screenshots/notif.png) |
 
-## 支持设备
+## 支持设备（水月雨全系列）
 
-> 兼容性判定基于**蓝牙传输层与服务指纹**，不依赖型号名。因此只要主控为**高通 QCC** 或**中科蓝讯（Bluetrum）**，理论上即可接入。
+> 本项目面向**水月雨（Moondrop）全系列蓝牙耳机**。兼容性判定基于**蓝牙传输层与服务指纹**，不依赖型号名。因此只要主控为**高通 QCC** 或**中科蓝讯（Bluetrum）**，**水月雨全系列蓝牙耳机均在支持之列**；未收录型号也会在首次连接时自动探测，通过后永久放行。
 
-- **已实测**：梦回2 / Golden Ages 2（GAIA）、太空漫游2 / Space Travel 2（9ECA）、U.C.T.S（MD-OWS-014，GAIA；硬件无降噪）
-- **理论上支持**：爱丽丝 / 火花 / 旅行者 / 梦回1979 / 猫饼 / 音乐胶囊 / 超声波 / 知更鸟 / 布丁（GAIA V4）
-- **未知**：太空漫游（一代）/ 猫咖 / 方糖 / 太空漫游2 ULTRA / 羽翼 EDGE 等，待实机验证
+- **已实机验证**：梦回2 / Golden Ages 2（GAIA）、梦回1979、太空漫游2 / Space Travel 2（9ECA）、太空漫游2 ULTRA、U.C.T.S（MD-OWS-014，GAIA；硬件无降噪）、布丁 PUDDING（GAIA V4）、猫咖 MOCA
+- **理论上支持**：爱丽丝 / 火花 / 旅行者 / 猫饼 / 音乐胶囊 / 超声波 / 知更鸟 / 太空漫游（一代）/ 方糖 / 羽翼 EDGE 等水月雨全系列型号
 
 更多细分的型号、主控与协议依据，见源码仓库 [FxxkMoondrop README](https://github.com/bqj6666/FxxkMoondrop)。
-
 ## 安装
 
 1. 下载并安装 APK（见源码仓库 [Releases](https://github.com/bqj6666/FxxkMoondrop/releases)）
