@@ -68,6 +68,47 @@ class UpdateCheckerFixtureTest {
     }
 
     @Test
+    fun `列表里存在草稿时，预发布通道必须跳过草稿取到 ci 版`() {
+        // 回归：GitHub 把**草稿排在最前**（草稿没有发布时间）。此前 parseListJson
+        // 直接取 arr[0]，于是这个废弃草稿 `287-alpha2.52` 永远被当成最新预发布 ——
+        // 它的 body 是空的，提取不到 commit，判否后永远显示「已是最新」，
+        // 预发布检查等于完全失效。实测该仓库正是这个状态。
+        val r = UpdateChecker.parseListJson(fixture("releases_list_with_draft.json"))
+        assertNotNull("必须能挑出一条，而不是被草稿挡住", r)
+        assertTrue("挑出来的必须是 ci 预发布，实际是 " + r!!.tag,
+                r.tag.startsWith("ci-"))
+        assertNull("该条不能是草稿", UpdateChecker.parseStableTag(r.tag))
+    }
+
+    @Test
+    fun `正式版通道的列表解析不会挑到预发布`() {
+        val r = UpdateChecker.parseListJson(fixture("releases_list_with_draft.json"),
+                prerelease = false)
+        assertNotNull("列表里应有正式版条目", r)
+        assertNotNull("正式版通道只能挑出正式版 tag，实际是 " + r!!.tag,
+                UpdateChecker.parseStableTag(r.tag))
+    }
+
+    @Test
+    fun `只有草稿时返回 null 而不是把草稿当版本`() {
+        // 全是草稿 -> 没有可用的已发布版本。此前会把草稿 tag 当版本号显示出去
+        val onlyDraft = """
+            [{"tag_name":"999-draft-only","draft":true,"prerelease":false,"body":""}]
+        """.trimIndent()
+        assertNull(UpdateChecker.parseListJson(onlyDraft))
+        assertNull(UpdateChecker.parseListJson(onlyDraft, prerelease = false))
+    }
+
+    @Test
+    fun `真实 atom 在预发布通道优先挑 ci 而不是刚发布的正式版`() {
+        // atom 按时间倒序，刚发完正式版时第一条就是正式版 tag
+        val r = UpdateChecker.parseAtom(fixture("releases.atom"), prerelease = true)
+        assertNotNull(r)
+        assertNull("预发布通道不应挑出正式版 tag，实际是 " + r!!.tag,
+                UpdateChecker.parseStableTag(r.tag))
+    }
+
+    @Test
     fun `畸形响应不抛异常，一律返回 null`() {
         // 网络层拿到错误页/空体时不允许崩 —— 这条保证「联网失败不影响现有功能」
         assertNull(UpdateChecker.parseLatestJson(""))

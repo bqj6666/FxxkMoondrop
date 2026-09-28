@@ -31,7 +31,7 @@ object UpdateChecker {
 
     private const val REPO = "https://github.com/bqj6666/FxxkMoondrop"
     private const val API_LATEST = "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases/latest"
-    private const val API_LIST = "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases?per_page=20"
+    private const val API_LIST = "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases?per_page=30"
     private const val ATOM = "https://github.com/bqj6666/FxxkMoondrop/releases.atom"
 
     private const val ASSET = "app-release.apk"
@@ -178,12 +178,35 @@ object UpdateChecker {
         if (xml.isNullOrBlank()) return null
         val entries = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
                 .findAll(xml).map { it.groupValues[1] }.toList()
-        for (e in entries) {
-            val tag = Regex("Repository/\\d+/([^<\\s]+)").find(e)?.groupValues?.get(1) ?: continue
-            if (!prerelease && parseStableTag(tag) == null) continue
+
+        fun tagOf(e: String) =
+                Regex("Repository/\\d+/([^<\\s]+)").find(e)?.groupValues?.get(1)
+
+        fun releaseOf(e: String): RemoteRelease? {
+            val tag = tagOf(e) ?: return null
             val content = Regex("<content[^>]*>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
                     .find(e)?.groupValues?.get(1)
             return RemoteRelease(tag, content)
+        }
+
+        // 预发布通道**优先**挑非正式版 tag（ci-N）。atom 按时间倒序，
+        // 刚发完正式版时第一条就是正式版；不筛的话预发布通道会拿正式版的 commit
+        // 去比，得出「有新版本」并给出正式版下载链接 —— 与用户所选通道不符。
+        // 一条 ci 都没有时（项目刚起步或 atom 被正式版挤满）回退取第一条，
+        // 宁可能力退化，也不要让用户看到「检查失败」。
+        if (prerelease) {
+            for (e in entries) {
+                if (tagOf(e)?.let { parseStableTag(it) == null } == true) {
+                    releaseOf(e)?.let { return it }
+                }
+            }
+            return entries.firstOrNull()?.let { releaseOf(it) }
+        }
+
+        for (e in entries) {
+            val tag = tagOf(e) ?: continue
+            if (parseStableTag(tag) == null) continue
+            return releaseOf(e)
         }
         return null
     }
@@ -269,16 +292,32 @@ object UpdateChecker {
         }
     } catch (_: Throwable) { null }
 
-    /** 解析 `/releases` 列表响应，取最新一条（列表按时间倒序）。 */
+    /**
+     * 解析 `/releases` 列表响应，挑出该通道的最新一条。
+     *
+     * 这里曾经直接取 `arr[0]`，而 **GitHub 把草稿排在最前**（草稿没有发布时间，
+     * 排序结果是它们先于所有已发布项）。仓库里只要存在一个很久以前存下的草稿，
+     * 预发布通道就会永远取到它：草稿的 body 是空的 -> 提取不到 commit ->
+     * `isCommitNewer(null, local)` 保守判否 -> 永远显示「已是最新」。
+     * 实测该仓库的 `287-alpha2.52` 草稿正是如此，预发布检查因此完全失效。
+     *
+     * 所以：草稿一律跳过，再按通道筛 prerelease 标记。
+     * @param prerelease true = 预发布通道（只要 prerelease=true 的条目）
+     */
     @JvmStatic
-    fun parseListJson(text: String?): RemoteRelease? = try {
+    fun parseListJson(text: String?, prerelease: Boolean = true): RemoteRelease? = try {
         if (text.isNullOrBlank()) null else {
             val arr = JSONArray(text)
-            if (arr.length() == 0) null else {
-                val o = arr.getJSONObject(0)
-                val tag = o.optString("tag_name").ifBlank { null }
-                if (tag == null) null else RemoteRelease(tag, o.optString("body").ifBlank { null })
+            var found: RemoteRelease? = null
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                if (o.optBoolean("draft", false)) continue
+                if (o.optBoolean("prerelease", false) != prerelease) continue
+                val tag = o.optString("tag_name").ifBlank { null } ?: continue
+                found = RemoteRelease(tag, o.optString("body").ifBlank { null })
+                break
             }
+            found
         }
     } catch (_: Throwable) { null }
 
@@ -292,7 +331,8 @@ object UpdateChecker {
     private fun apiRelease(ch: Channel): RemoteRelease? = try {
         val url = if (ch == Channel.STABLE) API_LATEST else API_LIST
         val text = httpGet(url)
-        if (ch == Channel.STABLE) parseLatestJson(text) else parseListJson(text)
+        if (ch == Channel.STABLE) parseLatestJson(text)
+        else parseListJson(text, prerelease = true)
     } catch (t: Throwable) {
         Log.d(TAG, "api fetch failed: " + t)
         null
