@@ -9,7 +9,7 @@
        exported=false，永远不会被启动。 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:versionCode="329"
-    android:versionName="3.2.10">
+    android:versionName="3.2.11">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
 
