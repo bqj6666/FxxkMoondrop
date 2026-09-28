@@ -49,6 +49,10 @@
   导出的模块日志里看不到本模块的任何痕迹 —— 「hook 究竟有没有加载」无法判定，
   连带用户提交的日志也无法定位问题（issue #10 即因此卡住：日志里既无本模块的加载/注册记录，
   也无任何报错）。入口加载、各接收器注册、PING/PONG、电量回包现在都会进入模块日志。
+  各注入点的安装结果也一并接入（`hookSettings` / `hookDeviceDetailsPanel` /
+  `hookDetailProfileVisibility` / `hookBluetooth` 与 Moondrop 侧共 48 处）——
+  设置页进程实测可看到完整安装序列；高频运行时失败日志仍留在 logcat，
+  不灌进模块日志，避免把注入序列刷掉。
 - **电池更新接收器此前被重复注册三份**，且其中两份分别落在 PING 的 `try` 与 `catch` 块内部 ——
   于是每条电量广播会刷三次 UI，更糟的是那份嵌在 `catch` 里的只在 PING 注册抛异常时才会执行。
   现收敛为独立的一份。实测：模块日志中 `battery update receiver registered` 由 3 条降为 1 条。
