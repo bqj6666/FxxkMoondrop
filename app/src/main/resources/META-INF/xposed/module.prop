@@ -7,3 +7,4 @@ description=Moondrop 蓝牙耳机助手
 minApiVersion=101
 targetApiVersion=102
 staticScope=true
+autoHotReload=true

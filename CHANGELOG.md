@@ -43,6 +43,31 @@
   窗口期里，降噪按钮已经显示成可用，点下去却毫无反应。改为以 `GaiaBleClient.isConnected()`
   为准 —— 等 GAIA 真正连上再放行按钮。
 
+### 修复：热重载真正可用（两个关键缺失）
+
+上一版实现了热重载回调，但实测发现光有回调还不够，缺两样东西：
+
+- **`module.prop` 缺少 `autoHotReload=true`**。官方 API 文档写明热重载的触发方式是
+  「through the service, or by app updating **if `autoHotReload` is set to true in module.prop`**」，
+  而更新模块 APK 正是走后者 —— 没有这个声明，安装新版本不会触发重载，
+  模块仍然要等用户强行停止作用域应用。补上之后，**更新模块即自动重载，无需任何手动操作**。
+- **重载后 hook 会逐轮累积**。官方 `onHotReloaded` 的默认实现负责「卸掉上一代全部 hook」，
+  而我们把它整个覆盖了却没自己卸 —— 重装等于往旧 hook 上叠加。
+  实测该遗漏让 `oldHooks` 逐轮增长（15 → 28），同一方法会被回调多次。
+  现在重载时先 `unhook` 上一代全部 hook 再重新安装。
+
+**实测（更新模块 APK 触发，OnePlus 13T / Android 16 / LSPosed 2.2.0）**：
+
+```text
+onHotReloading: cleanup receivers & allow
+onHotReloaded: process=com.google.android.gms, oldHooks=13
+onHotReloaded: unhooked 13 old hooks
+onHotReloaded: hooks reinstalled
+```
+
+- 连续两轮重载 `oldHooks` 稳定在 13（GMS）/ 6（gms.unstable），修复前是 15 → 28 递增。
+- 重载后 7 个接收器各注册 1 次，无重复；PING → PONG 正常，模块状态探测返回 true。
+
 ### 新增：支持模块热重载
 
 - **模块现在声明参与 libxposed 的热重载**，更新模块后无需再强行停止作用域应用。

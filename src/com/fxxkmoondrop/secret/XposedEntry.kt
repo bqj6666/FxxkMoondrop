@@ -154,6 +154,14 @@ class XposedEntry : XposedModule() {
     override fun onHotReloaded(param: HotReloadedParam) {
         val process = param.processName
         xlog("onHotReloaded: process=" + process + ", oldHooks=" + param.oldHookHandles.size)
+        // 必须先卸掉上一代 hook：官方默认实现做的就是这件事，而这里把它覆盖掉了 ——
+        // 不自己卸，重装就是往旧 hook 上叠加。实测该遗漏会让 oldHooks 逐轮增长
+        // （15 -> 28），hook 越积越多、同一个方法被回调多次。
+        var unhooked = 0
+        for (h in param.oldHookHandles) {
+            try { h.unhook(); unhooked++ } catch (_: Throwable) { }
+        }
+        xlog("onHotReloaded: unhooked " + unhooked + " old hooks")
         val cl = targetClassLoader()
         if (cl == null) {
             xlog("onHotReloaded: classLoader unavailable, hooks NOT reinstalled")
