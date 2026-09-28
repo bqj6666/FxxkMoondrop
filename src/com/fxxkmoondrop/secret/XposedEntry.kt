@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.util.Log
 import com.fxxkmoondrop.secret.hook.FastPairHookEntry
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
@@ -80,6 +82,26 @@ class XposedEntry : XposedModule() {
 
     private val fastPairHook = FastPairHookEntry()
 
+    /** 3.2.10: 本进程注册过的动态接收器，热重载前统一注销（同 FastPairHookEntry 的理由）。 */
+    private val regReceivers =
+            java.util.Collections.synchronizedList(ArrayList<Pair<Context, BroadcastReceiver>>())
+
+    private fun reg(ctx: Context, r: BroadcastReceiver, f: IntentFilter, flag: Int) {
+        // flag < 0 = 不带标志的旧式注册（API 33 以下），保持与原行为一致
+        if (flag >= 0) ctx.registerReceiver(r, f, flag)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") ctx.registerReceiver(r, f)
+        regReceivers.add(ctx.applicationContext to r)
+    }
+
+    fun unregisterAllReceivers() {
+        synchronized(regReceivers) {
+            for ((c, r) in regReceivers) {
+                try { c.unregisterReceiver(r) } catch (_: Throwable) { }
+            }
+            regReceivers.clear()
+        }
+    }
+
     /** 3.2.10: 模块自证日志 —— 同时写 logcat 与 LSPosed 模块日志。
      *
      *  此前全程只用 android.util.Log，用户按 LSPosed 常规方式导出的模块日志里
@@ -99,16 +121,71 @@ class XposedEntry : XposedModule() {
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        val pkg = param.packageName
-        val cl = param.classLoader
-        xlog("onPackageReady: " + pkg)
-        when (pkg) {
-            PKG_SETTINGS -> { hookSettings(cl); hookDeviceDetailsPanel(cl); hookDetailProfileVisibility(cl) }
-            PKG_MOONDROP -> hookMoondrop(cl)
-            PKG_BLUETOOTH -> hookBluetooth(cl)
-            PKG_GMS -> fastPairHook.onGmsLoaded(this, cl)
+        xlog("onPackageReady: " + param.packageName)
+        installFor(param.packageName, param.classLoader)
+    }
+
+    /**
+     * 3.2.10: 声明参与热重载。
+     *
+     * libxposed 的默认实现是 `return false` —— 框架据此直接拒绝重载，
+     * 这正是本模块此前「改了代码必须重启作用域应用」的原因。
+     *
+     * 注销接收器必须在这里做（不能在 onHotReloaded）：此刻旧模块实例与旧 ClassLoader
+     * 仍然有效，能访问到登记表。框架的 hot reload 只恢复被 hook 的方法调用，
+     * 不会碰动态注册的 receiver —— 漏掉这一步，重载后重装会变成重复注册。
+     */
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        // 注意 HotReloadingParam 不含 processName（只有 HotReloadedParam 继承 ModuleLoadedParam）
+        xlog("onHotReloading: cleanup receivers & allow")
+        try { unregisterAllReceivers() } catch (th: Throwable) { xlog("hot reload unregister fail: " + th) }
+        try { clearBtWatch() } catch (_: Throwable) { }
+        try { fastPairHook.unregisterAllReceivers() } catch (th: Throwable) { xlog("hot reload gms unregister fail: " + th) }
+        return true
+    }
+
+    /**
+     * 3.2.10: 重载完成 —— 重新安装 hook。
+     *
+     * 默认实现只是把旧 hookHandle 全部 unhook，并不会重装；不在这里重走一遍安装，
+     * 重载后模块就等于没装。进程名可能是带后缀的形式（如 com.google.android.gms.unstable、
+     * com.android.settings:background），所以按前缀匹配而非等值比较。
+     */
+    override fun onHotReloaded(param: HotReloadedParam) {
+        val process = param.processName
+        xlog("onHotReloaded: process=" + process + ", oldHooks=" + param.oldHookHandles.size)
+        val cl = targetClassLoader()
+        if (cl == null) {
+            xlog("onHotReloaded: classLoader unavailable, hooks NOT reinstalled")
+            return
+        }
+        try {
+            installFor(process, cl)
+            xlog("onHotReloaded: hooks reinstalled")
+        } catch (th: Throwable) {
+            xlog("onHotReloaded reinstall failed: " + th)
         }
     }
+
+    /** 按进程/包名分发注入。onPackageReady 与 onHotReloaded 共用同一份逻辑。 */
+    private fun installFor(name: String, cl: ClassLoader) {
+        when {
+            name.startsWith(PKG_SETTINGS) -> {
+                hookSettings(cl); hookDeviceDetailsPanel(cl); hookDetailProfileVisibility(cl)
+            }
+            name.startsWith(PKG_MOONDROP) -> hookMoondrop(cl)
+            name.startsWith(PKG_BLUETOOTH) -> hookBluetooth(cl)
+            name.startsWith(PKG_GMS) -> fastPairHook.onGmsLoaded(this, cl)
+            else -> xlog("installFor: no target for " + name)
+        }
+    }
+
+    /** 热重载时拿目标进程的 ClassLoader：模块在目标进程内运行，取当前 Application 的即可。 */
+    private fun targetClassLoader(): ClassLoader? = try {
+        val app = HookHelper.callStaticMethod(
+                Class.forName("android.app.ActivityThread"), "currentApplication")
+        (app as? Context)?.classLoader
+    } catch (_: Throwable) { null }
 
     // ==================== Bluetooth A2DP ====================
 
@@ -1385,10 +1462,10 @@ class XposedEntry : XposedModule() {
         val intentFilter = IntentFilter("com.fxxkmoondrop.ACTION_CMD")
         try {
             if (Build.VERSION.SDK_INT >= 33) {
-                context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+                reg(context, broadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
-                context.registerReceiver(broadcastReceiver, intentFilter)
+                reg(context, broadcastReceiver, intentFilter, -1)
             }
             xlog("cmd receiver registered")
         } catch (th: Throwable) {

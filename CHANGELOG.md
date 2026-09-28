@@ -43,6 +43,20 @@
   窗口期里，降噪按钮已经显示成可用，点下去却毫无反应。改为以 `GaiaBleClient.isConnected()`
   为准 —— 等 GAIA 真正连上再放行按钮。
 
+### 新增：支持模块热重载
+
+- **模块现在声明参与 libxposed 的热重载**，更新模块后无需再强行停止作用域应用。
+  此前完全没实现相关回调，而 libxposed 的默认实现是 `onHotReloading` 直接 `return false`
+  （框架据此判定模块不支持重载）、`onHotReloaded` 只把旧 hook 卸掉、不重装 ——
+  这正是「改了模块还必须重启应用」的原因。
+- 重装逻辑与正常注入共用同一份分发（`installFor`），按进程名前缀匹配，
+  兼容 `com.google.android.gms.unstable`、`com.android.settings:background`
+  这类带后缀的进程名。
+- **重载前会注销本进程注册过的全部动态接收器**。框架的热重载只恢复被 hook 的方法调用，
+  不会碰动态注册的 `BroadcastReceiver`；漏掉这一步，重装就会变成重复注册
+  （同一广播被处理多次 —— 与 3.2.10 修掉的电池接收器重复注册是同一类故障）。
+  注销放在 `onHotReloading`：那一刻旧模块实例与旧 ClassLoader 仍然有效，能读到登记表。
+
 ### 修复：模块日志与接收器注册缺陷
 
 - **模块现在会写 LSPosed 模块日志**。此前全程只用 `android.util.Log`，用户按 LSPosed 常规方式

@@ -1269,6 +1269,31 @@ class FastPairHookEntry {
      *  报告者提交的日志里既没有本模块的注册记录，也没有任何报错，只能靠猜。
      *  走 XposedInterface.log 之后，加载与注册序列会直接进入模块日志。
      */
+    /** 3.2.10: 本进程注册过的动态接收器，供热重载时统一注销。
+     *
+     *  框架的 hot reload 只恢复被 hook 的方法调用，不会碰动态注册的 receiver ——
+     *  不在重载前注销，重装就会变成重复注册（同一广播被处理多次）。
+     *  必须在 onHotReloading 里做：那时旧实例与旧 ClassLoader 仍然有效。 */
+    private val regReceivers =
+            java.util.Collections.synchronizedList(ArrayList<Pair<Context, BroadcastReceiver>>())
+
+    private fun reg(ctx: Context, r: BroadcastReceiver, f: IntentFilter, flag: Int) {
+        // flag < 0 = 不带标志的旧式注册（API 33 以下），保持与原行为一致
+        if (flag >= 0) ctx.registerReceiver(r, f, flag)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") ctx.registerReceiver(r, f)
+        regReceivers.add(ctx.applicationContext to r)
+    }
+
+    /** 注销本进程注册过的全部动态接收器（热重载前调用）。 */
+    fun unregisterAllReceivers() {
+        synchronized(regReceivers) {
+            for ((c, r) in regReceivers) {
+                try { c.unregisterReceiver(r) } catch (_: Throwable) { }
+            }
+            regReceivers.clear()
+        }
+    }
+
     private fun xlog(msg: String) {
         Log.d(TAG, "[FastPairHook] " + msg)
         try {
@@ -1306,7 +1331,7 @@ class FastPairHookEntry {
                     postShow(context, cl, deviceName)
                 }
             }
-            ctx.registerReceiver(receiver, filter, exportedFlag)
+            reg(ctx, receiver, filter, exportedFlag)
             xlog("trigger receiver registered")
         } catch (t: Throwable) {
             xlog("trigger receiver fail: " + t)
@@ -1369,7 +1394,7 @@ class FastPairHookEntry {
                     }, ACL_POSTSHOW_DELAY_MS)
                 }
             }
-            ctx.registerReceiver(btReceiver, acl, exportedFlag)
+            reg(ctx, btReceiver, acl, exportedFlag)
             xlog("bluetooth ACL receiver registered")
         } catch (t: Throwable) {
             xlog("bluetooth receiver fail: " + t)
@@ -1393,7 +1418,7 @@ class FastPairHookEntry {
                     }
                 }
             }
-            ctx.registerReceiver(modeStateReceiver, ms, exportedFlag)
+            reg(ctx, modeStateReceiver, ms, exportedFlag)
             xlog("mode state receiver registered")
         } catch (t: Throwable) {
             xlog("mode state receiver fail: " + t)
@@ -1417,7 +1442,7 @@ class FastPairHookEntry {
                     }
                 }
             }
-            ctx.registerReceiver(ancStatusReceiver, ancF, exportedFlag)
+            reg(ctx, ancStatusReceiver, ancF, exportedFlag)
             xlog("ANC status receiver registered")
         } catch (t: Throwable) {
             xlog("ANC status receiver fail: " + t)
@@ -1431,7 +1456,7 @@ class FastPairHookEntry {
                     handleLeScanRequest()
                 }
             }
-            ctx.registerReceiver(reqReceiver, reqF, exportedFlag)
+            reg(ctx, reqReceiver, reqF, exportedFlag)
             xlog("LE scan request receiver registered")
         } catch (t: Throwable) {
             xlog("LE scan req receiver fail: " + t)
@@ -1453,7 +1478,7 @@ class FastPairHookEntry {
                     }
                 }
             }
-            ctx.registerReceiver(pingReceiver, pingF, exportedFlag)
+            reg(ctx, pingReceiver, pingF, exportedFlag)
             xlog("ping receiver registered")
         } catch (t: Throwable) {
             xlog("ping receiver fail: " + t)
@@ -1479,7 +1504,7 @@ class FastPairHookEntry {
                     }
                 }
             }
-            ctx.registerReceiver(battReceiver, battF, exportedFlag)
+            reg(ctx, battReceiver, battF, exportedFlag)
             xlog("battery update receiver registered")
         } catch (t: Throwable) {
             xlog("battery receiver fail: " + t)
