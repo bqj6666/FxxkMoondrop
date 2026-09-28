@@ -613,6 +613,48 @@ class SettingsFragment : Fragment() {
         box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
+        // ── 更新：联网检查更新（3.2.11）──
+        //    默认关闭，且开关关闭时不发起任何请求（见 UpdateChecker.check 的首行返回）。
+        box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("更新", "Updates")))
+        val swNetUpdate = makeTintedSwitch()
+        swNetUpdate.isChecked = UpdateChecker.isEnabled(requireContext())
+        val rowNetUpdate = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_settings_ethernet,
+                Lang.t("联网检查更新", "Check for updates online"),
+                Lang.t("查询 GitHub 公开接口获知新版本；不发送设备信息，不收集任何数据",
+                        "Queries GitHub's public API for new versions; no device info is sent and nothing is collected"),
+                swNetUpdate, null)
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowNetUpdate))
+
+        // 「更新通道」只在联网开启时存在。
+        // 不复用 scheduleRebuild：为了显一行而整页重建，页面会闪一下、焦点也丢，
+        // 代价明显大于收益 —— 改成本地淡入淡出（M3Ui.reveal，与「种子颜色」行同一组 token）。
+        val chIdx = if (UpdateChecker.channel(requireContext()) == UpdateChecker.Channel.PRERELEASE) 1 else 0
+        val rowChannel = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("更新通道", "Update channel"),
+                Lang.t("预发布为每次提交自动构建，可能含未验证改动",
+                        "Pre-release builds come from every commit and may contain unverified changes"),
+                arrayOf(Lang.t("正式版", "Stable"), Lang.t("预发布", "Pre-release")),
+                chIdx) { mi ->
+            UpdateChecker.setChannel(requireContext(),
+                    if (mi == 1) UpdateChecker.Channel.PRERELEASE else UpdateChecker.Channel.STABLE)
+        }
+        // 行本体没有背景，卡片一律由 groupCard 提供 —— 与上方开关行同一种视觉。
+        // 裸行直接塞进页面会缺底色与圆角，一眼就不像这个页面的东西。
+        val optsHolder = LinearLayout(requireContext())
+        optsHolder.orientation = LinearLayout.VERTICAL
+        optsHolder.addView(spacer(dp(12)))
+        optsHolder.addView(M3Ui.groupCard(requireActivity(), pal, rowChannel),
+                LinearLayout.LayoutParams(-1, -2))
+        optsHolder.visibility =
+                if (UpdateChecker.isEnabled(requireContext())) View.VISIBLE else View.GONE
+        box.addView(optsHolder, LinearLayout.LayoutParams(-1, -2))
+
+        swNetUpdate.setOnCheckedChangeListener { _, checked ->
+            UpdateChecker.setEnabled(requireContext(), checked)
+            M3Ui.reveal(optsHolder, checked)
+        }
+        box.addView(spacer(dp(14)))
+
         // ── 帮助：使用引导入口（3.1.0）—— 放在全页最底部，
         //    想重看功能概览、权限申请与各项开关时不必卸载重装 ──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("帮助", "Help")))

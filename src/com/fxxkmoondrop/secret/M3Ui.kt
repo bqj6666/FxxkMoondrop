@@ -326,7 +326,9 @@ class M3Ui {
             tv.textSize = 22f
             tv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             tv.setTextColor(color)
-            tv.gravity = Gravity.CENTER_HORIZONTAL
+            // M3 规范：弹窗标题与正文同一条起始线，左对齐。
+            // 居中标题是 MD2 时代的做法，和下面左对齐的正文摆在一起会明显不齐。
+            tv.gravity = Gravity.START
             return tv
         }
 
@@ -560,6 +562,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 }
                 showMenuAt(v, pal, items, cur, { pick ->
                     cur = pick
+                    // 右侧「当前值」必须在这里统一就地刷新。
+                    // 原先只有部分调用点自己调 setDropdownValue，漏调的行（如「更新通道」）
+                    // 选完看不出任何变化，得等整页重建才更新 —— 就是那种「不实时」。
+                    value.text = items[pick]
                     onPick(pick)
                 }, at[0], at[1])
             }
@@ -570,6 +576,38 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun setDropdownValue(row: View, text: String) {
             row.findViewWithTag<TextView>(TAG_DROPDOWN_VALUE)?.text = text
+        }
+
+        /**
+         * 行组进出的标准动效：淡入 + 上滑 8dp。
+         *
+         * 与设置页「种子颜色」行用的是同一组 token（进场 MEDIUM1 + decelerate，
+         * 退场 SHORT4 + accelerate）—— 页面上凡是「开关控制某行出现」的地方手感必须一致，
+         * 否则一个滑一个蹦，一眼就看得出没打磨过。
+         *
+         * 退场要等动画结束才真正 GONE：立刻设 GONE 会让淡出无从播放，行是「啪」地消失的。
+         */
+        @JvmStatic
+        fun reveal(v: View, show: Boolean) {
+            if (show == (v.visibility == View.VISIBLE)) return   // 状态未变：不重放动画
+            v.animate().cancel()
+            val dy = dp(v.context, 8).toFloat()
+            if (show) {
+                v.alpha = 0f
+                v.translationY = dy
+                v.visibility = View.VISIBLE
+                v.animate().alpha(1f).translationY(0f)
+                        .setDuration(Motion.MEDIUM1)
+                        .setInterpolator(Motion.enter())
+                        .start()
+            } else {
+                v.animate().alpha(0f).translationY(dy)
+                        .setDuration(Motion.SHORT4)
+                        .setInterpolator(Motion.exit())
+                        // alpha 为 0 才落 GONE：动画被新的 reveal(true) 打断时不会误藏
+                        .withEndAction { if (v.alpha == 0f) v.visibility = View.GONE }
+                        .start()
+            }
         }
 
         /**
@@ -633,7 +671,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             // 先量一次拿到菜单实际尺寸，再夹到屏幕内（贴边不裁切）
             menu.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val dm = c.resources.displayMetrics
-            val mw = menu.measuredWidth
+            // M3 规范：菜单最小宽度 112dp。选项文字很短时（如「正式版」「预发布」）
+            // wrap_content 会把菜单缩成一条窄缝，既不像菜单也难点；左右各留 24dp 边距封顶。
+            val mw = Math.max(menu.measuredWidth, dp(c, 112))
+                    .coerceAtMost(dm.widthPixels - dp(c, 48))
             val mh = menu.measuredHeight
             val m = dp(c, 8)
             val px = x.coerceIn(m, (dm.widthPixels - mw - m).coerceAtLeast(m))

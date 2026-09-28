@@ -286,6 +286,7 @@ class OnboardingActivity : Activity() {
         pages.add(pagePerms())
         pages.add(pageConnection())
         pages.add(pageInjection())
+        pages.add(pageUpdate())
         pages.add(pageHeadset())
         pages.add(pageTools())
         pages.add(pageWelcome())
@@ -590,6 +591,68 @@ class OnboardingActivity : Activity() {
                 R.drawable.ic_tune, wrap)
     }
 
+    // ── 5. 更新（3.2.11 新增）───────────────────────────────────
+
+    /**
+     * 联网检查更新。
+     *
+     * 与设置页共用同一份 SP（UpdateChecker 内部统一读写），两处必须双向同步 ——
+     * 这里改了，设置页那一项也要跟着变。
+     * 默认**关闭**：不替用户决定是否让应用联网。
+     */
+    private fun pageUpdate(): View {
+        val wrap = LinearLayout(this)
+        wrap.orientation = LinearLayout.VERTICAL
+
+        val rows = ArrayList<View>()
+
+        val swNet = m3Switch()
+        swNet.isChecked = UpdateChecker.isEnabled(this)
+        rows.add(M3Ui.listRow(this, pal, R.drawable.ic_settings_ethernet,
+                Lang.t(this, "联网检查更新", "Check for updates online"),
+                Lang.t(this, "查询 GitHub 公开接口获知新版本；可随时在设置页关闭",
+                        "Queries GitHub's public API for new versions; can be turned off in Settings"),
+                swNet, null))
+        wrap.addView(M3Ui.groupCard(this, pal, *rows.toTypedArray()))
+
+        // 开关打开后才出现通道选择，避免默认关时摆一堆用不上的选项
+        val chIdx = if (UpdateChecker.channel(this) == UpdateChecker.Channel.PRERELEASE) 1 else 0
+        val rowChannel = M3Ui.dropdownRow(this, pal,
+                Lang.t(this, "更新通道", "Update channel"),
+                Lang.t(this, "预发布为每次提交自动构建，可能含未验证改动",
+                        "Pre-release builds come from every commit and may contain unverified changes"),
+                arrayOf(Lang.t(this, "正式版", "Stable"), Lang.t(this, "预发布", "Pre-release")),
+                chIdx) { mi ->
+            UpdateChecker.setChannel(this,
+                    if (mi == 1) UpdateChecker.Channel.PRERELEASE else UpdateChecker.Channel.STABLE)
+        }
+        val chanHolder = LinearLayout(this)
+        chanHolder.orientation = LinearLayout.VERTICAL
+        chanHolder.visibility = if (swNet.isChecked) View.VISIBLE else View.GONE
+        // 行本体没有背景，卡片由 groupCard 提供（与上面那行开关同一种视觉）
+        chanHolder.addView(M3Ui.groupCard(this, pal, rowChannel),
+                LinearLayout.LayoutParams(-1, -2))
+
+        swNet.setOnCheckedChangeListener { _, checked ->
+            UpdateChecker.setEnabled(this, checked)
+            M3Ui.reveal(chanHolder, checked)
+        }
+
+        wrap.addView(spacer(dp(12)))
+        wrap.addView(chanHolder, LinearLayout.LayoutParams(-1, -2))
+        wrap.addView(spacer(dp(12)))
+        wrap.addView(hint(Lang.t(this,
+                "开启后应用只会访问 GitHub 的公开接口查询版本号与更新说明，" +
+                        "不发送任何设备信息、不收集数据；拒绝也不影响其它功能。",
+                "When enabled, the app only queries GitHub's public API for version info and " +
+                        "release notes. No device information is sent and nothing is collected. " +
+                        "Declining does not affect any other feature.")))
+        return buildPage(Lang.t(this, "更新", "Updates"),
+                Lang.t(this, "是否让应用联网查询新版本，以及跟哪条更新通道。",
+                        "Whether the app may check online for new versions, and which channel to follow."),
+                R.drawable.ic_refresh, wrap)
+    }
+
     // ── 5. 耳机控制 ─────────────────────────────────────────────
 
     private fun pageHeadset(): View {
@@ -856,7 +919,7 @@ class OnboardingActivity : Activity() {
         /** 页数与各页序号（序号即内容分区，见类注释）。 */
         private const val PAGE_ABOUT = 0
         private const val PAGE_PERMS = 1
-        private const val PAGE_COUNT = 7
+        private const val PAGE_COUNT = 8   // 3.2.11: 新增「更新」页
 
         /** 已看过引导（设置页底部的入口不受它限制，随时可重看）。 */
         const val KEY_DONE = "onboard_seen_v310"

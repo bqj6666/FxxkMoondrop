@@ -75,11 +75,14 @@ class AboutFragment : Fragment() {
     }
 
     /**
-     * 3.2.10: 应用内更新日志。
+     * 更新日志（3.2.11 起**纯联网**）。
      *
-     * 只有一处数据源 [Changelog]，本方法只负责排版；升级后不必跳浏览器就能看到
-     * 「本版改了什么」与「有没有需要立刻更新的警示」。
-     * 内容少时弹窗贴合高度，超过上限才内部滚动 —— 不写死高度，避免短内容留大片空白。
+     * 数据源只有 GitHub release 的 body 一个。APK 内不再内置任何日志副本 ——
+     * 那份副本每次发版都要手工同步，迟早与仓库里的 CHANGELOG.md 对不上，
+     * 与其维护两份不如只留权威的那一份。
+     *
+     * 先摆一个 loading 占位，拿到结果后整体重排；内容少时贴合高度，
+     * 超上限才内部滚动 —— 不写死高度，避免短内容留大片空白。
      */
     private fun showChangelog() {
         val pal = ThemeUtil.Palette(requireContext())
@@ -99,79 +102,217 @@ class AboutFragment : Fragment() {
 
         val content = LinearLayout(requireContext())
         content.orientation = LinearLayout.VERTICAL
+        content.addView(M3Ui.loadingRow(requireContext(), pal,
+                Lang.t("正在获取更新日志…", "Fetching the changelog…")),
+                LinearLayout.LayoutParams(-1, -2))
 
-        // 警示条：旧版本的恶性缺陷要比普通条目扎眼（error 色 + 淡底）
-        val alert = Changelog.alert()
-        if (alert.isNotEmpty()) {
-            val warn = LinearLayout(requireContext())
-            warn.orientation = LinearLayout.VERTICAL
-            warn.setPadding(dp(16), dp(14), dp(16), dp(14))
-            val bg = GradientDrawable()
-            bg.setColor((pal.red and 0x00FFFFFF) or 0x26000000)
-            bg.cornerRadius = dp(16).toFloat()
-            warn.background = bg
-            val head = TextView(requireContext())
-            head.text = Lang.t("⚠  旧版本需要立即更新", "⚠  Older builds need updating")
-            head.textSize = 14f
-            head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            head.setTextColor(pal.red)
-            warn.addView(head, LinearLayout.LayoutParams(-1, -2))
-            val msg = TextView(requireContext())
-            msg.text = alert
-            msg.textSize = 13f
-            msg.setTextColor(pal.onSurface)
-            msg.setLineSpacing(dp(2).toFloat(), 1.25f)
-            msg.setPadding(0, dp(6), 0, 0)
-            warn.addView(msg, LinearLayout.LayoutParams(-1, -2))
-            content.addView(warn, LinearLayout.LayoutParams(-1, -2))
-            content.addView(spacer(dp(18)))
-        }
-
-        for (e in Changelog.entries()) {
-            val title = TextView(requireContext())
-            title.text = e[0]
-            title.textSize = 15f
-            title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            title.setTextColor(pal.onSurface)
-            content.addView(title, LinearLayout.LayoutParams(-1, -2))
-            val text = TextView(requireContext())
-            text.text = e[1]
-            text.textSize = 13f
-            text.setTextColor(pal.onVariant)
-            text.setLineSpacing(dp(2).toFloat(), 1.25f)
-            text.setPadding(0, dp(4), 0, 0)
-            content.addView(text, LinearLayout.LayoutParams(-1, -2))
-            content.addView(spacer(dp(18)))
-        }
-
-        val hint = TextView(requireContext())
-        hint.text = Lang.t("完整版本历史见仓库中的 CHANGELOG.md。",
-                "Full release history lives in CHANGELOG.md.")
-        hint.textSize = 12f
-        hint.setTextColor(pal.onVariant)
-        hint.alpha = 0.85f
-        content.addView(hint, LinearLayout.LayoutParams(-1, -2))
-
-        // 3.2.10: 显示前先按弹窗可用宽度量一次内容，再决定 wrap 还是限高。
-        // 原实现是 post 到布局后再改高度，弹窗会先撑满、下一帧突然收缩 —— 就是那段难看的跳动。
-        // 宽度 = 弹窗宽（0.84 屏宽，见 M3Ui.materialDialog）减去 body 左右各 24dp 内边距。
+        // 宽度 = 弹窗宽（0.84 屏宽，见 M3Ui.materialDialog）减去 body 左右各 24dp 内边距
         val availW = (resources.displayMetrics.widthPixels * 0.84f).toInt() - dp(48)
-        content.measure(
-                View.MeasureSpec.makeMeasureSpec(availW, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         val maxH = (resources.displayMetrics.heightPixels * 0.52f).toInt()
-        val svH = if (content.measuredHeight > maxH) maxH
-                  else LinearLayout.LayoutParams.WRAP_CONTENT
-        val sv = ScrollView(requireContext())
-        sv.addView(content)
-        body.addView(sv, LinearLayout.LayoutParams(-1, svH))
 
-        body.addView(spacer(dp(6)))
-        val btns = LinearLayout(requireContext())
-        btns.gravity = Gravity.END
-        btns.addView(M3Ui.textButton(requireContext(), pal, Lang.t("关闭", "Close")) { dlg.dismiss() })
-        body.addView(btns, LinearLayout.LayoutParams(-1, -2))
+        val contentSv = ScrollView(requireContext())
+        contentSv.addView(content)
+        body.addView(contentSv,
+                LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        body.addView(spacer(dp(16)))
+        val actions = LinearLayout(requireContext())
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(requireContext(), pal,
+                Lang.t("关闭", "Close")) { dlg.dismiss() },
+                LinearLayout.LayoutParams(-2, -2))
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2))
         dlg.show()
+
+        // 进弹窗自动查一次（走 6 小时缓存，不重复打网络）。
+        // 联网开关关闭时根本进不到这里 —— 入口行本身就不显示。
+        checkUpdate(force = false) { res ->
+            if (dlg.isShowing) renderRemoteNotes(content, contentSv, actions, res, availW, maxH, pal)
+        }
+    }
+
+    /**
+     * 把联网结果渲染进弹窗，并重算滚动高度。
+     *
+     * 高度必须重算：初始高度是按 loading 占位量出来的，换成整篇日志后不重算，
+     * 要么留一大片空白，要么内容被截断。
+     */
+    private fun renderRemoteNotes(content: LinearLayout, sv: ScrollView, actions: LinearLayout,
+                                  res: UpdateChecker.Result,
+                                  availW: Int, maxH: Int, pal: ThemeUtil.Palette) {
+        try {
+            content.removeAllViews()
+            val ctx = requireContext()
+
+            fun line(msg: String, color: Int, sizeF: Float): TextView {
+                val t = TextView(ctx)
+                t.text = msg
+                t.textSize = sizeF
+                t.setTextColor(color)
+                t.setLineSpacing(dp(2).toFloat(), 1.25f)
+                return t
+            }
+
+            fun notesBlock(notes: String?) {
+                content.addView(line(
+                        if (notes.isNullOrBlank())
+                            Lang.t("这一版没有单独的更新说明。", "This build has no release notes.")
+                        else prettyNotes(notes),
+                        pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
+            }
+
+            when (res) {
+                is UpdateChecker.Result.Disabled ->
+                    content.addView(line(Lang.t("联网检查更新已关闭，无法获取更新日志。",
+                                    "Online update check is off; the changelog is unavailable."),
+                            pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
+
+                is UpdateChecker.Result.Failed ->
+                    content.addView(line(Lang.t("无法获取更新日志，请确认网络可用后重试。",
+                                    "Could not fetch the changelog. Check your connection and try again."),
+                            pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
+
+                is UpdateChecker.Result.UpToDate -> {
+                    // 已是最新：远端 latest 就是本机这一版，它的说明正是「本版改了什么」
+                    content.addView(line(Lang.t("已是最新版本（" + res.currentLabel + "）",
+                                    "Up to date (" + res.currentLabel + ")"),
+                            pal.green, 13f), LinearLayout.LayoutParams(-1, -2))
+                    content.addView(spacer(dp(10)))
+                    notesBlock(res.notes)
+                }
+
+                is UpdateChecker.Result.Available -> {
+                    val label = res.info.versionName ?: res.info.tag
+                    val head = line(Lang.t("最新版 " + label + " 的更新内容",
+                            "What's new in " + label), pal.primary, 15f)
+                    head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                    content.addView(head, LinearLayout.LayoutParams(-1, -2))
+                    content.addView(spacer(dp(8)))
+                    notesBlock(res.info.notes)
+                    // 「下载」放弹窗底部的动作行，而不是塞进滚动内容里 ——
+                    // 塞进去要滚到最后才看得见，而且和「关闭」分处两地，姿势与
+                    // 「检查更新」弹窗也不一致。点它直接交给系统浏览器，不在应用内下载。
+                    val lp = LinearLayout.LayoutParams(-2, -2)
+                    lp.marginStart = dp(8)
+                    actions.addView(M3Ui.filledButton(requireActivity(), pal,
+                            Lang.t("下载 " + label, "Download " + label)) {
+                        openUrl(res.info.downloadUrl)
+                    }, lp)
+                }
+            }
+
+            // 与初次构建同一套测量方式，避免顺序不同造成高度跳变
+            content.measure(
+                    View.MeasureSpec.makeMeasureSpec(availW, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            val lp = sv.layoutParams
+            lp.height = if (content.measuredHeight > maxH) maxH
+                        else LinearLayout.LayoutParams.WRAP_CONTENT
+            sv.layoutParams = lp
+        } catch (t: Throwable) {
+            // 弹窗里的渲染失败不值得打扰用户
+        }
+    }
+
+    // ── 3.2.11: 联网检查更新 ──────────────────────────────────────
+
+    /**
+     * 后台检查更新，结果回主线程。
+     *
+     * UpdateChecker.check 会阻塞（最长 5s 连接 + 8s 读取），必须在子线程。
+     * 联网开关关闭时它内部直接返回 Disabled，不会建立任何连接。
+     */
+    private fun checkUpdate(force: Boolean,
+                            onResult: (UpdateChecker.Result) -> Unit) {
+        val appCtx = requireContext().applicationContext
+        Thread {
+            val res = try {
+                UpdateChecker.check(appCtx, force)
+            } catch (t: Throwable) {
+                UpdateChecker.Result.Failed      // 兜底：联网问题绝不允许冒泡到 UI
+            }
+            activity?.runOnUiThread { if (isAdded) onResult(res) }
+        }.start()
+    }
+
+    /**
+     * 「检查更新」行：强制重查（绕过缓存），结果用一个小弹窗明确告知。
+     *
+     * 两个动作必须在**同一行**、右对齐、间距 8dp，确认动作在最右（M3 弹窗规范）。
+     * 「下载」要等联网结果回来才知道有没有，所以先建好动作行、再把按钮插进去：
+     * 直接 body.addView 追加会另起一行，把「关闭」和「下载」拆成上下两块，
+     * 看上去根本不像一个弹窗。
+     */
+    private fun manualCheckUpdate() {
+        val pal = ThemeUtil.Palette(requireContext())
+        val (dlg, body) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+        body.addView(M3Ui.dialogTitle(requireContext(),
+                Lang.t("检查更新", "Check for updates"), pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        body.addView(spacer(dp(10)))
+
+        val msg = TextView(requireContext())
+        msg.text = Lang.t("正在检查…", "Checking…")
+        msg.textSize = 14f
+        msg.setTextColor(pal.onVariant)
+        msg.setLineSpacing(dp(2).toFloat(), 1.25f)
+        body.addView(msg, LinearLayout.LayoutParams(-1, -2))
+        body.addView(spacer(dp(16)))
+
+        val actions = LinearLayout(requireContext())
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(requireContext(), pal,
+                Lang.t("关闭", "Close")) { dlg.dismiss() },
+                LinearLayout.LayoutParams(-2, -2))
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2))
+        dlg.show()
+
+        checkUpdate(force = true) { res ->
+            msg.text = when (res) {
+                is UpdateChecker.Result.Disabled ->
+                    Lang.t("联网检查更新已关闭。可在「设置 → 更新」中开启。",
+                            "Online update check is off. Enable it in Settings → Updates.")
+                is UpdateChecker.Result.UpToDate ->
+                    Lang.t("已是最新版本（" + res.currentLabel + "）",
+                            "You are up to date (" + res.currentLabel + ")")
+                is UpdateChecker.Result.Available ->
+                    Lang.t("发现新版本 " + (res.info.versionName ?: res.info.tag),
+                            "New version available: " + (res.info.versionName ?: res.info.tag))
+                is UpdateChecker.Result.Failed ->
+                    Lang.t("检查失败。请确认网络可用，或稍后重试。",
+                            "Check failed. Make sure you are online, or try again later.")
+            }
+            if (res is UpdateChecker.Result.Available) {
+                // 插到动作行最右（「关闭」之后）—— 确认动作放最右是 M3 的规定顺序
+                val lp = LinearLayout.LayoutParams(-2, -2)
+                lp.marginStart = dp(8)
+                actions.addView(M3Ui.filledButton(requireActivity(), pal,
+                        Lang.t("下载", "Download")) { openUrl(res.info.downloadUrl) }, lp)
+            }
+        }
+    }
+
+    /** 把 release body 的 markdown 粗加工成可读纯文本（不做完整渲染，够看即可）。 */
+    private fun prettyNotes(raw: String): String {
+        val out = ArrayList<String>()
+        for (line in raw.split("\n")) {
+            val t = line.trim()
+            when {
+                t.isEmpty() -> if (out.isNotEmpty() && out.last().isNotEmpty()) out.add("")
+                t.startsWith("> [!") -> Unit                    // GitHub 警示块标记
+                t == ">" -> Unit
+                t.startsWith(">") -> out.add(t.removePrefix(">").trim())
+                t.startsWith("####") -> out.add(t.removePrefix("####").trim())
+                t.startsWith("###") -> out.add(t.removePrefix("###").trim())
+                t.startsWith("##") -> out.add(t.removePrefix("##").trim())
+                t.startsWith("#") -> out.add(t.removePrefix("#").trim())
+                t.startsWith("- ") || t.startsWith("* ") -> out.add("· " + t.substring(2))
+                else -> out.add(t)
+            }
+        }
+        return out.joinToString("\n").trim()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
@@ -246,24 +387,33 @@ class AboutFragment : Fragment() {
         // ── 项目 ──
         box.addView(spacer(dp(24)))
         box.addView(M3Ui.sectionTitle(act, pal, Lang.t("项目", "Project")))
-        box.addView(M3Ui.groupCard(act, pal,
-                M3Ui.listRow(act, pal, R.drawable.ic_description,
-                        Lang.t("更新日志", "Changelog"),
-                        Lang.t("本版修复与变更", "Fixes and changes in this build"),
-                        M3Ui.chevron(act, pal.onVariant)) { showChangelog() },
-                M3Ui.listRow(act, pal, R.drawable.ic_code,
-                        Lang.t("GitHub 仓库", "GitHub Repository"),
-                        Lang.t("查看源码与更新日志", "Source code and changelog"),
-                        M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl) },
-                M3Ui.listRow(act, pal, R.drawable.ic_bug_report,
-                        Lang.t("反馈问题", "Report an issue"),
-                        Lang.t("提交设备适配问题与日志", "Submit device issue with logs"),
-                        M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl + "/issues") },
-                M3Ui.listRow(act, pal, R.drawable.ic_person,
-                        Lang.t("作者", "Author"), "bqj6666", null, null),
-                M3Ui.listRow(act, pal, R.drawable.ic_group,
-                        Lang.t("协助者", "Contributors"),
-                        "Deepseek · Qwen · ChatGPT · Kimi", null, null)),
+        // 「检查更新」「更新日志」都是联网功能：开关关着还留着入口，
+        // 点下去必然失败，不如干脆不显示。
+        val projRows = ArrayList<View>()
+        if (UpdateChecker.isEnabled(requireContext())) {
+            projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_refresh,
+                    Lang.t("检查更新", "Check for updates"),
+                    Lang.t("联网查询是否有新版本", "Query online for a newer version"),
+                    M3Ui.chevron(act, pal.onVariant)) { manualCheckUpdate() })
+            projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_description,
+                    Lang.t("更新日志", "Changelog"),
+                    Lang.t("本版修复与变更", "Fixes and changes in this build"),
+                    M3Ui.chevron(act, pal.onVariant)) { showChangelog() })
+        }
+        projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_code,
+                Lang.t("GitHub 仓库", "GitHub Repository"),
+                Lang.t("查看源码与更新日志", "Source code and changelog"),
+                M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl) })
+        projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_bug_report,
+                Lang.t("反馈问题", "Report an issue"),
+                Lang.t("提交设备适配问题与日志", "Submit device issue with logs"),
+                M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl + "/issues") })
+        projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_person,
+                Lang.t("作者", "Author"), "bqj6666", null, null))
+        projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_group,
+                Lang.t("协助者", "Contributors"),
+                "Deepseek · Qwen · ChatGPT · Kimi", null, null))
+        box.addView(M3Ui.groupCard(act, pal, *projRows.toTypedArray()),
                 LinearLayout.LayoutParams(-1, -2))
 
         // ── 许可 ──

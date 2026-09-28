@@ -131,6 +131,10 @@ dependencies {
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
     testImplementation("junit:junit:4.13.2")
+    // 测试专用：android.jar 里的 org.json 是桩（且 unitTests.isReturnDefaultValues=true
+    // 会让它静默返回默认值），必须用真实实现才能验证 release 响应的解析。
+    // 仅测试期生效，不进 APK、不增加运行时体积。
+    testImplementation("org.json:json:20240303")
     // 3.0.3: HookGuardTest 需要 XposedInterface.Chain 做桩，测试期才把它放进 classpath
     // （主代码仍是 compileOnly，运行时由 LSPosed 提供，不进 APK）
     testImplementation("io.github.libxposed:api:102.0.0")

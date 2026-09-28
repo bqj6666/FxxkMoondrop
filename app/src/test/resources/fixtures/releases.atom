@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/bqj6666/FxxkMoondrop/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/bqj6666/FxxkMoondrop/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/bqj6666/FxxkMoondrop/releases.atom"/>
+  <title>Release notes from FxxkMoondrop</title>
+  <updated>2026-09-28T05:45:54Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-199</id>
+    <updated>2026-09-28T05:47:59Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-199"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #199）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;a1750e0dc9381ae64aded5766c41418335059c30&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-198</id>
+    <updated>2026-09-28T05:38:08Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-198"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #198）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;200cfe43cb2e893a4fafcad33af1a78a16f415c0&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-197</id>
+    <updated>2026-09-28T05:31:31Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-197"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #197）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;a329cbd16c1fac260a10b55ce70939caa2f972b8&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-196</id>
+    <updated>2026-09-28T05:18:09Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-196"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #196）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;97696f574e7efd998e5e98d1b2f74c7e39612b0c&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-195</id>
+    <updated>2026-09-28T05:05:42Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-195"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #195）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;f7f2c0a9c157d557bf0729cf6065f2420448a4a3&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/330-3.2.10</id>
+    <updated>2026-09-27T09:59:38Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/330-3.2.10"/>
+    <title>FxxkMoondrop 330-3.2.10</title>
+    <content type="html">&lt;div class=&quot;markdown-alert markdown-alert-warning&quot;&gt;&lt;p class=&quot;markdown-alert-title&quot;&gt;&lt;svg data-component=&quot;Octicon&quot; class=&quot;octicon octicon-alert mr-2&quot; viewBox=&quot;0 0 16 16&quot; version=&quot;1.1&quot; width=&quot;16&quot; height=&quot;16&quot; aria-hidden=&quot;true&quot;&gt;&lt;path d=&quot;M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z&quot;&gt;&lt;/path&gt;&lt;/svg&gt;Warning&lt;/p&gt;&lt;p&gt;&lt;strong&gt;请所有用户升级到 3.2.10（或至少 3.2.9）。&lt;/strong&gt;&lt;br&gt;
+&lt;strong&gt;3.2.8 及更早版本存在恶性缺陷&lt;/strong&gt;：用本模块连接耳机后，偶发导致耳机&lt;strong&gt;死机 / 自动关机 / 断开连接&lt;/strong&gt;。&lt;br&gt;
+根因是模块会与耳机同时挂起多条 BLE 链路，并在一秒内反复拆建连接，把耳机固件逼到崩溃。&lt;br&gt;
+缺陷取决于触发时序，所以表现为偶发；一旦触发，耳机即无响应或直接掉电关机。&lt;strong&gt;旧版本请不要再使用。&lt;/strong&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;blockquote&gt;
+&lt;p&gt;承接 3.2.9 的严重缺陷修复。本版把更新日志&lt;strong&gt;内置进应用&lt;/strong&gt;、把「3.2.8 及更早版本存在恶性缺陷」的警示&lt;strong&gt;置顶&lt;/strong&gt;到更新日志与发布页（让旧版用户能看到），&lt;br&gt;
+并修掉四处界面缺陷：弹窗进出场动效实际未生效、切换主题或 AMOLED 后页面跳回顶部、&lt;br&gt;
+引导页内容刷新后跳回顶部、主界面降噪按钮在 GAIA 尚未连接时就显示为可用。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;hr&gt;
+&lt;h2&gt;正式发布 &lt;code&gt;330-3.2.10&lt;/code&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;69f32e08a95947d8ae4441722773f01526b9eff3&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：tag &lt;code&gt;330-3.2.10&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（APK Signature Scheme v2）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;更新日志&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;自上个正式版 &lt;code&gt;329-3.2.9&lt;/code&gt; 以来的全部变更。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3&gt;3.2.10 (330)&lt;/h3&gt;
+&lt;h4&gt;新增：应用内更新日志&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;「关于」页 → &lt;strong&gt;项目 → 更新日志&lt;/strong&gt;，直接查看本版变更与已知缺陷警示，无需跳浏览器。&lt;/li&gt;
+&lt;li&gt;数据源集中在 &lt;code&gt;Changelog.kt&lt;/code&gt;（中英双语），升级后一眼能看到「本版改了什么」与「是否需要立刻更新」；&lt;br&gt;
+完整版本历史仍在仓库的 &lt;code&gt;CHANGELOG.md&lt;/code&gt;。&lt;/li&gt;
+&lt;li&gt;旧版本缺陷警示在弹窗顶部用 error 色 + 淡底单独成条，不与普通条目混排。&lt;/li&gt;
+&lt;li&gt;内容短时弹窗贴合高度、超长才内部滚动，不写死高度。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;发布侧：恶性缺陷警示置顶&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;tools/release_notes.py&lt;/code&gt; 支持把版本段落开头的 GitHub 警示块（&lt;code&gt;&amp;gt; [!WARNING]&lt;/code&gt; 等）&lt;br&gt;
+自动提到发布页最前面 —— 放在「更新日志」正文里，用户要滚过标题才看得到；&lt;br&gt;
+恶性缺陷的提示必须第一屏可见。不是警示块开头的版本段落完全不受影响（已用 3.2.8 回归验证）。&lt;/li&gt;
+&lt;li&gt;同步回填了已发布的 &lt;code&gt;329-3.2.9&lt;/code&gt; 发布页（&lt;strong&gt;主仓与镜像仓&lt;/strong&gt;），旧版用户在我们的发布页同样能看到该警示。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;修复：弹窗动效、切主题跳页、降噪按钮可用态&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;弹窗的进出场动画此前根本没生效&lt;/strong&gt;：缓动被写成 &lt;code&gt;&amp;lt;set&amp;gt;&lt;/code&gt; 里的内联 &lt;code&gt;&amp;lt;pathInterpolator&amp;gt;&lt;/code&gt; 元素，&lt;br&gt;
+而 &lt;code&gt;AnimationUtils&lt;/code&gt; 只认 &lt;code&gt;set / alpha / scale / rotate / translate&lt;/code&gt;，解析直接抛&lt;br&gt;
+&lt;code&gt;Unknown animation name&lt;/code&gt;，WMS 最终拿到 null 动画 —— 表现就是弹窗「啪」地出现、&lt;br&gt;
+关闭时硬切消失，比系统默认弹窗还廉价。缓动改为独立的 &lt;code&gt;@interpolator&lt;/code&gt; 资源引用，&lt;br&gt;
+缩放幅度按 M3 规范取 0.8 ⇄ 1.0（进场 300ms / 退场 200ms），并做了抓帧回归：&lt;br&gt;
+开合过程都能看到连续渐变帧，不再是单帧突变。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;切换主题不再跳回页面顶部&lt;/strong&gt;：各页主 ScrollView 是代码动态构建的、没有 id，&lt;br&gt;
+Activity 因切换主题 / AMOLED 重建时，系统的 view state 机制无从匹配，滚动位置必然丢。&lt;br&gt;
+固定 id 后可被自动保存与恢复；大标题栏也在重建后补一次同步，不再停在展开态压住正文。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;引导页不再跳回顶部&lt;/strong&gt;：权限页与欢迎页的内容每次刷新都整块重建（&lt;code&gt;removeAllViews&lt;/code&gt;），&lt;br&gt;
+内容高度瞬间归零会把 &lt;code&gt;scrollY&lt;/code&gt; 一起夹到 0。现在重建前记住位置、重建后接回。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;降噪按钮的可用性判据修正&lt;/strong&gt;：原先拿 &lt;code&gt;serviceState()&lt;/code&gt;（「后台监听服务是否在跑」，&lt;br&gt;
+&lt;code&gt;enable&lt;/code&gt; 默认 true ⇒ 几乎恒为 ✅）冒充 GAIA 连接状态，于是蓝牙刚连上、GAIA 尚未握手的&lt;br&gt;
+窗口期里，降噪按钮已经显示成可用，点下去却毫无反应。改为以 &lt;code&gt;GaiaBleClient.isConnected()&lt;/code&gt;&lt;br&gt;
+为准 —— 等 GAIA 真正连上再放行按钮。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;其他&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;3.2.9 的连接修复与验证结论全部继续有效。本版对 GAIA 的改动只涉及界面可用性判据，不碰连接与协议逻辑。&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/329-3.2.9</id>
+    <updated>2026-09-27T09:16:07Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/329-3.2.9"/>
+    <title>FxxkMoondrop 329-3.2.9</title>
+    <content type="html">&lt;div class=&quot;markdown-alert markdown-alert-warning&quot;&gt;&lt;p class=&quot;markdown-alert-title&quot;&gt;&lt;svg data-component=&quot;Octicon&quot; class=&quot;octicon octicon-alert mr-2&quot; viewBox=&quot;0 0 16 16&quot; version=&quot;1.1&quot; width=&quot;16&quot; height=&quot;16&quot; aria-hidden=&quot;true&quot;&gt;&lt;path d=&quot;M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z&quot;&gt;&lt;/path&gt;&lt;/svg&gt;Warning&lt;/p&gt;&lt;p&gt;&lt;strong&gt;所有用户请立即更新到 3.2.9 或更高版本。&lt;/strong&gt;&lt;br&gt;
+&lt;strong&gt;3.2.8 及更早版本存在恶性缺陷&lt;/strong&gt;：用本模块连接耳机后，偶发导致耳机&lt;strong&gt;死机 / 自动关机 / 断开连接&lt;/strong&gt;。&lt;br&gt;
+根因是模块会与耳机同时挂起多条 BLE 链路，并在一秒内反复拆建连接，把耳机固件逼到崩溃。&lt;br&gt;
+缺陷取决于触发时序，所以表现为偶发；一旦触发，耳机即无响应或直接掉电关机。&lt;strong&gt;旧版本请不要再使用。&lt;/strong&gt;&lt;/p&gt;
+&lt;/div&gt;
+&lt;blockquote&gt;
+&lt;p&gt;修复&lt;strong&gt;严重缺陷&lt;/strong&gt;：本模块偶发导致耳机&lt;strong&gt;死机 / 自动关机 / 断开连接&lt;/strong&gt;。根因是连接管理存在竞态，会让应用与耳机之间同时挂起多条 BLE 链路、并在一秒内反复拆建。另新增「连接弹窗」总开关，并清理若干文档与死代码。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;hr&gt;
+&lt;h2&gt;正式发布 &lt;code&gt;329-3.2.9&lt;/code&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;16bc1551c31a9ea7868c58bb80889c41778b9638&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：tag &lt;code&gt;329-3.2.9&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（APK Signature Scheme v2）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;更新日志&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;自上个正式版 &lt;code&gt;328-3.2.8&lt;/code&gt; 以来的全部变更。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3&gt;3.2.9 (329)&lt;/h3&gt;
+&lt;h4&gt;严重修复：偶发把耳机连到死机 / 关机 / 断开&lt;/h4&gt;
+&lt;p&gt;&lt;strong&gt;现象&lt;/strong&gt;：用本模块连接耳机后，有时耳机会直接死机、自动关机或异常断开。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;取证&lt;/strong&gt;（真机实测，非推测）：&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;指标&lt;/th&gt;
+&lt;th&gt;修复前&lt;/th&gt;
+&lt;th&gt;修复后&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;并存的 GATT 连接数&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;2&lt;/strong&gt;（其中一条存活 11 分钟未释放）&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;1&lt;/strong&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;1 秒内的链路重建次数&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;5&lt;/strong&gt;&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;1&lt;/strong&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;每条耳机通知被处理次数&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;2&lt;/strong&gt;&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;1&lt;/strong&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;蓝牙栈内累积的 ATT 通道&lt;/td&gt;
+&lt;td&gt;&lt;strong&gt;8&lt;/strong&gt; 条同时挂在耳机上&lt;/td&gt;
+&lt;td&gt;0（随连接正常释放）&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;dumpsys bluetooth_manager&lt;/code&gt; 的 &lt;code&gt;GATT Client Map&lt;/code&gt; 显示两个 app 记录并存：&lt;br&gt;
+&lt;code&gt;app_if: 28 transport AUTO&lt;/code&gt; 与 &lt;code&gt;app_if: 29 transport LE&lt;/code&gt;，从连接建立起一直存活到进程被杀。&lt;/li&gt;
+&lt;li&gt;蓝牙栈日志出现 8 条 ATT 通道被一次性本地终止：&lt;br&gt;
+&lt;code&gt;GATT_CONN_TERMINATE_LOCAL_HOST ... att_id: 44,46,47,48,49,50,52,54&lt;/code&gt;。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;根因&lt;/strong&gt;（三处，均为连接管理的重入竞态）：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;GaiaBleClient.retryConnect()&lt;/code&gt; 覆盖 &lt;code&gt;gatt&lt;/code&gt; 却不关闭旧连接&lt;/strong&gt;&lt;br&gt;
+该函数直接 &lt;code&gt;gatt = device.connectGatt(...)&lt;/code&gt;，不像 &lt;code&gt;connect()&lt;/code&gt; 那样先 &lt;code&gt;disconnectInternal()&lt;/code&gt;。&lt;br&gt;
+被覆盖的旧 &lt;code&gt;BluetoothGatt&lt;/code&gt; 永不 &lt;code&gt;close()&lt;/code&gt;，仍挂在协议栈上继续接收耳机通知，且与当前连接&lt;br&gt;
+&lt;strong&gt;共用同一个 &lt;code&gt;gattCallback&lt;/code&gt;&lt;/strong&gt; —— 这就是「并存 2 条链路」和「每条通知被处理两遍」的来源。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;延迟重连任务无去重、无取消&lt;/strong&gt;&lt;br&gt;
+&lt;code&gt;retryConnect()&lt;/code&gt; 每次调用都新投一个 15 秒后的 &lt;code&gt;disconnect + connect&lt;/code&gt; 任务且从不撤销。&lt;br&gt;
+被连续调用 N 次，就会在 15 秒后并发执行 N 次链路拆建。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;轮询侧无「在途」判据，周期性重建链路&lt;/strong&gt;&lt;br&gt;
+&lt;code&gt;HeadsetDetectService&lt;/code&gt; 每 5 秒轮询一次；链路&lt;strong&gt;正在建立&lt;/strong&gt;时也会再走一遍 &lt;code&gt;disconnect + connect&lt;/code&gt;。&lt;br&gt;
+且同一副耳机可能以两个地址（BR/EDR 与 LE，或 A2DP / HFP 两条 profile）各占一个条目，&lt;br&gt;
+一轮里先后发起两次连接 —— 第二次必然先拆掉第一次刚建好的链路（实测 37 ms 内两次 &lt;code&gt;connectGatt&lt;/code&gt;）。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;strong&gt;影响链&lt;/strong&gt;：耳机固件被要求同时维持多条 GATT 链路、并承受每秒数次链路建立 / 拆除，&lt;br&gt;
+部分固件处理不当即崩溃 → 表现为死机、关机、断开。因依赖扫描与超时的触发时序，故为&lt;strong&gt;偶发&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;修复&lt;/strong&gt;：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;retryConnect()&lt;/code&gt; 增加在途守卫：已有活跃 &lt;code&gt;gatt&lt;/code&gt; 时直接返回，不再覆盖式重建。&lt;/li&gt;
+&lt;li&gt;延迟重连任务改为&lt;strong&gt;单实例 Runnable&lt;/strong&gt;，投递前先撤销上一次；&lt;code&gt;disconnectInternal()&lt;/code&gt; 一并撤销待执行任务。&lt;/li&gt;
+&lt;li&gt;新增 &lt;code&gt;GaiaBleClient.isConnecting()&lt;/code&gt;，轮询侧在「链路正在建立」时跳过，不再重复发起。&lt;br&gt;
+仅在&lt;strong&gt;确实存在活跃 gatt&lt;/strong&gt; 时跳过 —— &lt;code&gt;gatt&lt;/code&gt; 已关闭的真空闲态仍照常重连，&lt;strong&gt;不影响&lt;/strong&gt;断开后重新连回。&lt;/li&gt;
+&lt;li&gt;一次轮询最多发起一次 GAIA 连接（此前同轮可能两次）。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;验证&lt;/strong&gt;：受控复现（force-stop 后重启连接，采集 75 秒）—— 并存 GATT 连接 1 条、&lt;br&gt;
+&lt;code&gt;connectGatt&lt;/code&gt; 仅 2 次、每条 RX 只处理 1 次、耳机全程保持 &lt;code&gt;STATE_CONNECTED&lt;/code&gt; 未死机；&lt;br&gt;
+单测 66 例 0 失败；改动未引入任何新编译告警（强制全量重编，告警集合与改动前逐条一致）。&lt;/p&gt;
+&lt;h4&gt;新增：连接弹窗总开关&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;设置页 → &lt;strong&gt;功能 → 官方集成 → 「连接弹窗」&lt;/strong&gt;，默认开启。&lt;/li&gt;
+&lt;li&gt;关掉后不再弹 Google Fast Pair 卡片（图标 / 电量 / 降噪按钮），通知栏与主界面控制不受影响。&lt;/li&gt;
+&lt;li&gt;实现为&lt;strong&gt;单点收口&lt;/strong&gt;：&lt;code&gt;PopupGate.showConnectedPopup()&lt;/code&gt; 是弹窗广播的唯一发送处，&lt;br&gt;
+四条路径（立即 / 延迟 / 超时 / GAIA 就绪）都汇聚于此，一处判断即覆盖全部。&lt;/li&gt;
+&lt;li&gt;与同组的「官方降噪面板 / 蓝牙详情页面板」一致，在模块未激活时置灰。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;其他&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;清理死代码与死声明：删除构建脚本已不再引用的 &lt;code&gt;xposed-api-stub.jar&lt;/code&gt;；&lt;br&gt;
+移除 AndroidManifest 中被 AGP 8 忽略并每次告警的 &lt;code&gt;package&lt;/code&gt; 属性（改用 &lt;code&gt;namespace&lt;/code&gt;，取值相同）；&lt;br&gt;
+移除源码中并不存在、全仓零引用的 &lt;code&gt;.PopupActivity&lt;/code&gt; 声明。&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;uses-sdk&lt;/code&gt; 的 &lt;code&gt;targetSdkVersion&lt;/code&gt; 由 34 对齐为 36（与 DSL 一致，此前每次构建都会告警并被忽略）。&lt;/li&gt;
+&lt;li&gt;文档修正：构建链版本（AGP 8.6.1 / Kotlin 2.3.21 / compileSdk 35）、组件表、&lt;br&gt;
+测试用例数（20 → 66）、日志类别数、依赖清单、支持设备口径（改为&lt;strong&gt;水月雨全系列&lt;/strong&gt;）、&lt;br&gt;
+作用域说明（澄清 &lt;code&gt;com.android.bluetooth&lt;/code&gt; 与官方 App 包&lt;strong&gt;不在&lt;/strong&gt;作用域内）。&lt;/li&gt;
+&lt;li&gt;架构文档移除逐模块行数表：该类精确数字每次改代码即失效且无读者价值，改为只列职责。&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-194</id>
+    <updated>2026-09-27T16:03:46Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-194"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #194）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;735b92320c9092d8f26d5c6f3a7fa67154c0a437&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-193</id>
+    <updated>2026-09-27T16:03:13Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-193"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #193）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;73861ab97bea6f69700000b100fbf164d25151b8&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-192</id>
+    <updated>2026-09-27T11:16:52Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-192"/>
+    <title>FxxkMoondrop CI build</title>
+    <content type="html">&lt;h2&gt;自动构建发布（CI #192）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;df0ec0c3c3e74ec03cbf952385de70c6a550cac0&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：push main&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+</feed>
