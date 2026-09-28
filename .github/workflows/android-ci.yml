@@ -127,7 +127,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ci-${{ github.run_number }}
-          name: FxxkMoondrop CI build #${{ github.run_number }}
+          name: "FxxkMoondrop CI build #${{ github.run_number }}"
           body_path: ci_body.md
           files: |
             app/build/outputs/apk/release/*.apk
