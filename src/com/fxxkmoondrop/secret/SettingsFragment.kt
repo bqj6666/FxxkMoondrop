@@ -121,9 +121,11 @@ class SettingsFragment : Fragment() {
         //   Root 模式 / 模块模式（无 root 但模块激活）/ 无 Root 模式。
         //   模块未探测时显示「检测中…」，探测落定后（见本函数末尾）就地刷新这一行。
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("运行模式", "Run mode")))
+        // 3.2.10: 这一行可点 = 重查一次（与权限页「重新检查」同一语义）。
+        // 此前是纯展示行：模块判负后会一直挂着「未激活」，用户在这里无从恢复。
         val rowRunMode = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_info,
                 EnvProbe.runModeName(requireContext()), EnvProbe.runModeDetail(requireContext()),
-                null, null)
+                null, Runnable { recheckRunMode() })
         listRowLabels(rowRunMode)?.let { (nameTv, detailTv) ->
             runModeNameTv = nameTv
             runModeDetailTv = detailTv
@@ -648,9 +650,40 @@ class SettingsFragment : Fragment() {
     }
 
     /**
+     * 3.2.10: 点「运行模式」行 -> 重新检测模块状态。
+     *
+     * 与权限页「重新检查」同一语义：先清掉 root / hook 的负结果再实测。
+     * 只读缓存的刷新（onResume）不够 —— 负结果在有效期内会被 checkAll 直接复用，
+     * 用户点了看不到任何变化。探测最长阻塞 10s，必须在子线程。
+     */
+    private fun recheckRunMode() {
+        val act = activity ?: return
+        val appCtx = act.applicationContext
+        // 即时反馈，避免点下去像没反应
+        runModeNameTv?.text = Lang.t(appCtx, "检测中…", "Detecting…")
+        runModeDetailTv?.text = Lang.t(appCtx, "正在检测 FastPairHook 模块状态…",
+                "Detecting FastPairHook module…")
+        val before = EnvProbe.hookActiveCached()
+        Thread {
+            RootShell.retryNow()
+            EnvProbe.retryHookProbe()
+            RootShell.isAvailable()
+            EnvProbe.isFastPairHookActive(appCtx)
+            act.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                runModeNameTv?.text = EnvProbe.runModeName(appCtx)
+                runModeDetailTv?.text = EnvProbe.runModeDetail(appCtx)
+                // 模块是否激活决定「官方集成」那几项要不要置灰，状态变了得整页重画。
+                // 滚动位置由 m3_page_scroll 的固定 id 保留，不会跳回顶部。
+                if (before != EnvProbe.hookActiveCached()) scheduleRebuild(0L)
+            }
+        }.start()
+    }
+
+    /**
      * 取 [M3Ui.listRow] 里「标题 / 副标题」两个 TextView。
      * 运行模式行要用：模块状态是子线程探测出来的，落定后就地改文本，
-     * 比整页重建更轻（重建会丢滚动位置）。结构不符时返回 null —— 只影响刷新，不影响渲染。
+     * 比整页重建更轻（重建虽已能保留滚动位置，但仍比就地改文本重）。结构不符时返回 null。
      */
     private fun listRowLabels(row: View): Pair<TextView, TextView>? {
         val labels = runCatching {

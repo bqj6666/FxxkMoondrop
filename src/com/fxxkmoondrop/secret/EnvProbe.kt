@@ -108,9 +108,9 @@ class EnvProbe private constructor() {
          * FastPairHook（LSPosed 模块）是否激活：向 GMS 发 PING，收到 PONG 即激活。
          * 阻塞等待（PING_TIMEOUT_MS），请在子线程调用。
          *
-         * 缓存策略（3.0.5 同 RootShell）：**正结果永久缓存**（激活了就不会变）；
-         * 负结果可被 [retryHookProbe] 清掉，用于「刚在 LSPosed 里启用模块」的场景 ——
-         * 否则一次未激活会被记到进程结束，用户启用后仍被当成无模块。
+         * 缓存策略：正结果永久缓存；负结果 30 秒 TTL（见 NEGATIVE_TTL_MS），过期自动重探 ——
+         * 一次超时不代表模块没启用（GMS 冷启动时 PONG 可能迟到数秒）。
+         * 用户显式「重新检测」走 [retryHookProbe]，无条件清空缓存后重测。
          */
         @JvmStatic
         fun isFastPairHookActive(ctx: Context?): Boolean {
@@ -145,14 +145,19 @@ class EnvProbe private constructor() {
             return if (negativeExpired()) null else false
         }
 
-        /** 清掉 hook 的负结果，下次调用重新 PING（用于用户显式「重新检测」）。 */
+        /**
+         * 用户在界面上显式要求「重新检测」：无条件丢弃缓存，下次调用重新 PING。
+         *
+         * 3.2.10: 正结果此前不清（激活了就不会变），但模块是可以在 LSPosed 里被停用的 ——
+         * 那时 App 仍会一直显示「模块模式」，用户点刷新也查不出来。显式点击的语义就是
+         * 「我要看当前真实状态」，故一律清空。仅用于用户动作，勿放进自动刷新路径
+         * （那会让每次进页面都白跑一次最长 10s 的探测）。
+         */
         @JvmStatic
         fun retryHookProbe() {
             synchronized(this) {
-                if (sHookActive != true) {
-                    sHookActive = null
-                    sHookActiveAt = 0L
-                }
+                sHookActive = null
+                sHookActiveAt = 0L
             }
         }
 
