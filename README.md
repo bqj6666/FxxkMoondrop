@@ -9,7 +9,7 @@
 
 > 作者：[bqj6666](https://github.com/bqj6666) ｜ 
 
-> [![最新正式版](https://img.shields.io/badge/release-3.2.10-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
+> [![最新正式版](https://img.shields.io/github/v/release/bqj6666/FxxkMoondrop?style=flat-square&labelColor=555555&color=2ea44f&label=%E6%9C%80%E6%96%B0%E6%AD%A3%E5%BC%8F%E7%89%88)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
 Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 

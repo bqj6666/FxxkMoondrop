@@ -7,7 +7,7 @@
 
 > Author: [bqj6666](https://github.com/bqj6666) |
 
-> [![Latest release](https://img.shields.io/badge/release-3.2.10-2ea44f?style=flat-square&labelColor=555555)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
+> [![Latest release](https://img.shields.io/github/v/release/bqj6666/FxxkMoondrop?style=flat-square&labelColor=555555&color=2ea44f)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) | [Changelog](CHANGELOG.md)
 
 Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** when the earbuds connect, and talks to the earbuds directly over **GAIA BLE** to read status and control noise cancellation. The project itself is an **LSPosed / Xposed module**.
 
