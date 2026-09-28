@@ -402,6 +402,16 @@ class SettingsFragment : Fragment() {
             getSP().edit().putBoolean("popup_skip_landscape", checked).commit()
         }
 
+        // 模块未激活时弹窗永不出现，调时机没有意义 —— 与上面的总开关同待遇。
+        // （总开关关掉（用户偏好）时刻意不灰：先配好时机再开总开关是正常用法；
+        //   而模块未激活是环境问题，灰掉才如实反映「这几项现在不起作用」。）
+        if (hookOff) {
+            for (r in arrayOf(rowTiming, rowDelay, rowSkipLock, rowSkipLand)) {
+                r.isEnabled = false
+                r.alpha = 0.4f
+                r.setOnClickListener(null)
+            }
+        }
         box.addView(M3Ui.groupCard(requireActivity(), pal,
                 rowPopup, rowTiming, rowDelay, rowSkipLock, rowSkipLand))
         box.addView(spacer(dp(14)))
@@ -670,6 +680,21 @@ class SettingsFragment : Fragment() {
             simRestoreHandler.postDelayed(simRestoreRunnable, 30000)
         }
         simBox.addView(simConnBtn, LinearLayout.LayoutParams(-1, -2))
+        // 模拟连接的一半效果在 GMS 弹窗上：模块未激活时那张卡片不会出现，
+        // 点下去只剩主界面静默切进模拟态 —— 与按钮名字给人的预期不符。
+        // 与「官方集成」那四项同待遇：确定不可用时置灰并写明原因。
+        if (hookOff) {
+            // simConnBtn 字段声明为可空（供旧版本兼容路径判空），这里用安全调用
+            simConnBtn?.isEnabled = false
+            simConnBtn?.alpha = 0.4f
+            simBox.addView(spacer(dp(8)))
+            val simHint = TextView(requireContext())
+            simHint.text = Lang.t("需要 FastPairHook 模块才能在 GMS 中显示卡片",
+                    "Requires the FastPairHook module to show the card in GMS")
+            simHint.textSize = 12f
+            simHint.setTextColor(pal.onVariant)
+            simBox.addView(simHint, LinearLayout.LayoutParams(-1, -2))
+        }
         simBox.addView(spacer(dp(10)))
         // alpha2.38: 模拟断开按钮已移除（不再有断开弹窗，30s 自动恢复即可）
         box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
