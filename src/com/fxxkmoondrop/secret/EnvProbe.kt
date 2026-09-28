@@ -33,6 +33,9 @@ class EnvProbe private constructor() {
         @Volatile
         private var sHookActive: Boolean? = null
 
+        /** 探测在途锁：同一进程内只允许一次 PING 在飞。 */
+        private val probeLock = Any()
+
         /** 是否检测到 Root（结果进程内缓存；无阻塞，可主线程调用） */
         @JvmStatic
         fun isRooted(): Boolean {
@@ -97,9 +100,16 @@ class EnvProbe private constructor() {
         @JvmStatic
         fun isFastPairHookActive(ctx: Context?): Boolean {
             sHookActive?.let { return it }
-            val h = pingHook(ctx)
-            sHookActive = h
-            return h
+            // 3.2.10: 加在途锁。此前无互斥，主界面 / 引导页 / 权限页会各自发起一次探测，
+            // 同一进程内就并发连发多个 PING，而 GMS 侧每个已注册的 receiver 各回一次 PONG
+            // （实测一次进入页面 = 2 个 PING / 8 个 PONG）。锁内双检：等锁期间若已有人
+            // 填好结果就直接复用，不再重复广播。pingHook 阻塞最多 4s，故仍须在子线程调用。
+            synchronized(probeLock) {
+                sHookActive?.let { return it }
+                val h = pingHook(ctx)
+                sHookActive = h
+                return h
+            }
         }
 
         /** 非阻塞读 hook 激活缓存：null = 还没探测过（调用方按旧行为保守处理）。 */

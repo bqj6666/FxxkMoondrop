@@ -80,14 +80,28 @@ class XposedEntry : XposedModule() {
 
     private val fastPairHook = FastPairHookEntry()
 
+    /** 3.2.10: 模块自证日志 —— 同时写 logcat 与 LSPosed 模块日志。
+     *
+     *  此前全程只用 android.util.Log，用户按 LSPosed 常规方式导出的模块日志里
+     *  看不到本模块的任何痕迹，于是「hook 究竟有没有加载」无法判定 —— issue #10
+     *  的日志里既没有本模块的加载/注册记录，也没有任何报错，只能靠猜。
+     *  走 XposedInterface.log 之后，加载与注入序列会直接进入模块日志。
+     */
+    private fun xlog(msg: String) {
+        Log.d(TAG, msg)
+        try {
+            log(Log.INFO, TAG, msg)
+        } catch (_: Throwable) { }
+    }
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
-        Log.d(TAG, "onModuleLoaded: ${param.processName}")
+        xlog("onModuleLoaded: process=" + param.processName)
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
         val pkg = param.packageName
         val cl = param.classLoader
-        Log.d(TAG, "onPackageReady: $pkg")
+        xlog("onPackageReady: " + pkg)
         when (pkg) {
             PKG_SETTINGS -> { hookSettings(cl); hookDeviceDetailsPanel(cl); hookDetailProfileVisibility(cl) }
             PKG_MOONDROP -> hookMoondrop(cl)

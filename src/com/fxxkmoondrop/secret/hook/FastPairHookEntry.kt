@@ -56,7 +56,7 @@ class FastPairHookEntry {
     fun onGmsLoaded(module: XposedModule, cl: ClassLoader) {
         sGmsCl = cl
         sModule = module
-        Log.d(TAG, "[FastPairHook] GMS loaded, classLoader=" + cl)
+        xlog("GMS loaded, classLoader=" + cl)
 
         // Hearable Controls（GFPS 消息组 0x08）官方链路基座：
         // 捕获官方 ANC 子模块实例 + 只对目标设备放开 Fast Pair 缓存门禁。
@@ -1262,6 +1262,20 @@ class FastPairHookEntry {
         }
     }
 
+    /** 3.2.10: 模块自证日志 —— 同时写 logcat 与 LSPosed 模块日志。
+     *
+     *  此前全程只用 android.util.Log，于是用户按 LSPosed 常规方式导出的模块日志里
+     *  看不到本模块的任何痕迹：「hook 究竟有没有加载」根本无法判定。issue #10 就卡在这里 ——
+     *  报告者提交的日志里既没有本模块的注册记录，也没有任何报错，只能靠猜。
+     *  走 XposedInterface.log 之后，加载与注册序列会直接进入模块日志。
+     */
+    private fun xlog(msg: String) {
+        Log.d(TAG, "[FastPairHook] " + msg)
+        try {
+            sModule?.log(Log.INFO, TAG, msg)
+        } catch (_: Throwable) { }
+    }
+
     private fun doRegister(ctx: Context, cl: ClassLoader) {
         sAppContext = ctx
         var exportedFlag: Int
@@ -1293,9 +1307,9 @@ class FastPairHookEntry {
                 }
             }
             ctx.registerReceiver(receiver, filter, exportedFlag)
-            Log.d(TAG, "[FastPairHook] trigger receiver registered")
+            xlog("trigger receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] trigger receiver fail: " + t)
+            xlog("trigger receiver fail: " + t)
         }
         // 蓝牙 ACL_CONNECTED 自动触发
         try {
@@ -1356,9 +1370,9 @@ class FastPairHookEntry {
                 }
             }
             ctx.registerReceiver(btReceiver, acl, exportedFlag)
-            Log.d(TAG, "[FastPairHook] bluetooth ACL receiver registered")
+            xlog("bluetooth ACL receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] bluetooth receiver fail: " + t)
+            xlog("bluetooth receiver fail: " + t)
         }
         // alpha1.20: 应用广播当前降噪模式 -> 弹窗按钮高亮
         try {
@@ -1380,9 +1394,9 @@ class FastPairHookEntry {
                 }
             }
             ctx.registerReceiver(modeStateReceiver, ms, exportedFlag)
-            Log.d(TAG, "[FastPairHook] mode state receiver registered")
+            xlog("mode state receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] mode state receiver fail: " + t)
+            xlog("mode state receiver fail: " + t)
         }
         // alpha2.22: 应用广播 ANC 能力状态 -> 驱动弹窗降噪按钮三态
         try {
@@ -1404,9 +1418,9 @@ class FastPairHookEntry {
                 }
             }
             ctx.registerReceiver(ancStatusReceiver, ancF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] ANC status receiver registered")
+            xlog("ANC status receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] ANC status receiver fail: " + t)
+            xlog("ANC status receiver fail: " + t)
         }
         // ** alpha1.32: 应用请求 LE 扫描 -> GMS 侧 receiver **
         try {
@@ -1418,10 +1432,11 @@ class FastPairHookEntry {
                 }
             }
             ctx.registerReceiver(reqReceiver, reqF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] LE scan request receiver registered")
+            xlog("LE scan request receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] LE scan req receiver fail: " + t)
+            xlog("LE scan req receiver fail: " + t)
         }
+        // ** alpha1.34: 应用探测模块激活 -> PING/PONG **
         // ** alpha1.34: 应用探测模块激活 -> PING/PONG **
         try {
             val pingF = IntentFilter(ACTION_FASTPAIR_PING)
@@ -1432,65 +1447,22 @@ class FastPairHookEntry {
                         pong.setPackage(PKG_APP)
                         pong.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         context.sendBroadcast(pong)
-                        Log.d(TAG, "[FastPairHook] ping -> pong")
+                        xlog("ping -> pong")
                     } catch (t: Throwable) {
-                        Log.d(TAG, "[FastPairHook] pong fail: " + t)
+                        xlog("pong fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(pingReceiver, pingF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] ping receiver registered")
-    
-        // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
-        try {
-            val battF = IntentFilter(ACTION_BATTERY_UPDATE)
-            val battReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    try {
-                        val l = intent.getIntExtra("left", -1)
-                        val r = intent.getIntExtra("right", -1)
-                        val sys = intent.getIntExtra("sys", -1)
-                        if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
-                        if (sys >= 0) setSystemBattery(sys)
-                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
-                    } catch (t: Throwable) {
-                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
-                    }
-                }
-            }
-            ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] battery update receiver registered")
+            xlog("ping receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
+            xlog("ping receiver fail: " + t)
         }
-    } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] ping receiver fail: " + t)
-    
-        // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
-        try {
-            val battF = IntentFilter(ACTION_BATTERY_UPDATE)
-            val battReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    try {
-                        val l = intent.getIntExtra("left", -1)
-                        val r = intent.getIntExtra("right", -1)
-                        val sys = intent.getIntExtra("sys", -1)
-                        if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
-                        if (sys >= 0) setSystemBattery(sys)
-                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
-                    } catch (t: Throwable) {
-                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
-                    }
-                }
-            }
-            ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] battery update receiver registered")
-        } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
-        }
-    }
 
         // alpha2.27: 接收 app 进程广播的电量更新（GMS 弹窗刷新）
+        // 3.2.10: 这段此前被重复粘贴了三份，且分别落在 ping 的 try 与 catch 块内部 ——
+        // 于是电池接收器最多注册三遍（每条电量广播刷三次 UI），其中一份更是只在 ping
+        // 注册抛异常时才会执行。现在收敛为独立的一份，与 ping 互不牵连。
         try {
             val battF = IntentFilter(ACTION_BATTERY_UPDATE)
             val battReceiver = object : BroadcastReceiver() {
@@ -1501,16 +1473,16 @@ class FastPairHookEntry {
                         val sys = intent.getIntExtra("sys", -1)
                         if (l >= 0 || r >= 0) refreshBatteryOverlay(l, r)
                         if (sys >= 0) setSystemBattery(sys)
-                        Log.d(TAG, "[FastPairHook] battery update RX: l=" + l + " r=" + r + " sys=" + sys)
+                        xlog("battery update RX: l=" + l + " r=" + r + " sys=" + sys)
                     } catch (t: Throwable) {
-                        Log.d(TAG, "[FastPairHook] battery RX fail: " + t)
+                        xlog("battery RX fail: " + t)
                     }
                 }
             }
             ctx.registerReceiver(battReceiver, battF, exportedFlag)
-            Log.d(TAG, "[FastPairHook] battery update receiver registered")
+            xlog("battery update receiver registered")
         } catch (t: Throwable) {
-            Log.d(TAG, "[FastPairHook] battery receiver fail: " + t)
+            xlog("battery receiver fail: " + t)
         }
     }
 
