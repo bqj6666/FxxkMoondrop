@@ -125,9 +125,9 @@ class XposedEntry : XposedModule() {
                     handleA2dpState(chain.thisObject, chain.args)
                     chain.proceed()
                 }
-                Log.d(TAG, "bluetooth A2dpService hooked (3-arg)")
+                xlog("bluetooth A2dpService hooked (3-arg)")
             } catch (th: Throwable) {
-                Log.d(TAG, "bluetooth hook 3-arg failed: $th")
+                xlog("bluetooth hook 3-arg failed: $th")
             }
             // 4-arg variant
             try {
@@ -138,12 +138,12 @@ class XposedEntry : XposedModule() {
                     handleA2dpState(chain.thisObject, chain.args)
                     chain.proceed()
                 }
-                Log.d(TAG, "bluetooth A2dpService hooked (4-arg)")
+                xlog("bluetooth A2dpService hooked (4-arg)")
             } catch (th: Throwable) {
-                Log.d(TAG, "bluetooth hook 4-arg failed: $th")
+                xlog("bluetooth hook 4-arg failed: $th")
             }
         } catch (th: Throwable) {
-            Log.d(TAG, "bluetooth hook init failed: $th")
+            xlog("bluetooth hook init failed: $th")
         }
     }
 
@@ -211,12 +211,12 @@ class XposedEntry : XposedModule() {
                     intent.setClassName(PKG_APP, "com.fxxkmoondrop.secret.MainActivity")
                     HookHelper.callMethod(pref, "setIntent", intent)
                     HookHelper.callMethod(prefScreen, "addPreference", pref)
-                    Log.d(TAG, "entry injected into ConnectionPreferences")
+                    xlog("entry injected into ConnectionPreferences")
                 } catch (th: Throwable) {
-                    Log.e(TAG, "settings inject error", th)
+                    xlog("settings inject error: " + th)
                 }
             }
-            Log.d(TAG, "hookSettings: DashboardFragment.onCreatePreferences hooked")
+            xlog("hookSettings: DashboardFragment.onCreatePreferences hooked")
             try {
                 val startM = fragCls.getDeclaredMethod("onStart")
                 hook(startM).intercept { chain ->
@@ -227,8 +227,8 @@ class XposedEntry : XposedModule() {
                     } catch (th: Throwable) { Log.e(TAG, "detail extras onStart error", th) }
                     null
                 }
-                Log.d(TAG, "hookSettings: DashboardFragment.onStart hooked")
-            } catch (th: Throwable) { Log.d(TAG, "onStart hook failed: $th") }
+                xlog("hookSettings: DashboardFragment.onStart hooked")
+            } catch (th: Throwable) { xlog("onStart hook failed: $th") }
             try {
                 val resM = fragCls.getDeclaredMethod("onResume")
                 hook(resM).intercept { chain ->
@@ -239,8 +239,8 @@ class XposedEntry : XposedModule() {
                     } catch (th: Throwable) { Log.e(TAG, "detail extras onResume error", th) }
                     null
                 }
-                Log.d(TAG, "hookSettings: DashboardFragment.onResume hooked")
-            } catch (th: Throwable) { Log.d(TAG, "onResume hook failed: $th") }
+                xlog("hookSettings: DashboardFragment.onResume hooked")
+            } catch (th: Throwable) { xlog("onResume hook failed: $th") }
             try {
                 // 详情页销毁时摘掉页面级状态观察者，避免观察者挂在已结束的页面上不放。
                 // Settings 的 DashboardFragment 自己没覆盖 onDestroy，声明式查找会直接抛；
@@ -260,10 +260,10 @@ class XposedEntry : XposedModule() {
                     } catch (th: Throwable) { Log.d(TAG, "detail watch cleanup failed: $th") }
                     null
                 }
-                Log.d(TAG, "hookSettings: DashboardFragment.onDestroy hooked")
-            } catch (th: Throwable) { Log.d(TAG, "onDestroy hook failed: $th") }
+                xlog("hookSettings: DashboardFragment.onDestroy hooked")
+            } catch (th: Throwable) { xlog("onDestroy hook failed: $th") }
         } catch (th: Throwable) {
-            Log.d(TAG, "hookSettings failed: $th")
+            xlog("hookSettings failed: $th")
         }
     }
 
@@ -294,9 +294,9 @@ class XposedEntry : XposedModule() {
                 officialTakeoverAddr = HookHelper.callMethod(cached, "getAddress") as? String
                 true
             }
-            Log.d(TAG, "official spatial rows: isAvailable hooked")
+            xlog("official spatial rows: isAvailable hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hook official spatial isAvailable failed: " + th)
+            xlog("hook official spatial isAvailable failed: " + th)
         }
         try {
             val sc = Class.forName("android.media.Spatializer", true, cl)
@@ -370,9 +370,9 @@ class XposedEntry : XposedModule() {
                         spatialUiMode = AncProfileLib.trackingModeFor(spatialOn, on))
                 chain.proceed()
             }
-            Log.d(TAG, "official spatial rows: Spatializer state/click hooked")
+            xlog("official spatial rows: Spatializer state/click hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hook Spatializer availability failed: " + th)
+            xlog("hook Spatializer availability failed: " + th)
         }
     }
 
@@ -399,9 +399,9 @@ class XposedEntry : XposedModule() {
                     }
                 }
             }
-            Log.d(TAG, "official spatial rows: gating hooked")
+            xlog("official spatial rows: gating hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hook official row gating failed: " + th)
+            xlog("hook official row gating failed: " + th)
         }
     }
 
@@ -530,7 +530,7 @@ class XposedEntry : XposedModule() {
     private fun hookDeviceDetailsPanel(cl: ClassLoader) {
         // 第 3 项：分类功能开关。用户可在设置里关掉本面板；默认开。
         if (!featEnabled(cl, "feat_detail_panel")) {
-            Log.d(TAG, "hookDeviceDetailsPanel: disabled by setting")
+            xlog("hookDeviceDetailsPanel: disabled by setting")
             return
         }
         try {
@@ -658,9 +658,9 @@ class XposedEntry : XposedModule() {
                     HookHelper.callMethod(pref, "setTitle", if (zh) "Moondrop 耳机控制" else "Moondrop Headset Control")
                     HookHelper.callMethod(pref, "setSummary", if (zh) "降噪 / 空间音频 / 增益 / 指示灯" else "ANC / spatial / gain / LED")
                     HookHelper.callMethod(prefScreen, "addPreference", pref)
-                    Log.d(TAG, "device details panel injected")
+                    xlog("device details panel injected")
                 } catch (th: Throwable) {
-                    Log.e(TAG, "device details inject error", th)
+                    xlog("device details inject error: " + th)
                 }
             }
             // 官方蓝牙详情页每次重排后，把我们的几行摆到官方位置（见 placeOurRows）。
@@ -687,9 +687,9 @@ class XposedEntry : XposedModule() {
                     } catch (th: Throwable) { Log.e(TAG, "detail extras error", th) }
                     null
                 }
-                Log.d(TAG, "hookDeviceDetailsPanel: updatePreferenceOrder hooked")
+                xlog("hookDeviceDetailsPanel: updatePreferenceOrder hooked")
             } catch (th: Throwable) {
-                Log.d(TAG, "updatePreferenceOrder hook failed: $th")
+                xlog("updatePreferenceOrder hook failed: $th")
             }
             // 官方那两行就是我们的开关本体：点完让官方 controller 重读一次状态（它会来问我们
             // 耳机端的实际状态），官方那个开关的勾选态与头部追踪行才会立刻跟上。
@@ -727,14 +727,14 @@ class XposedEntry : XposedModule() {
                         } catch (th: Throwable) { Log.d(TAG, "official spatial click sync failed: $th") }
                         r
                     }
-                    Log.d(TAG, "hookDeviceDetailsPanel: official spatial audio click hooked")
+                    xlog("hookDeviceDetailsPanel: official spatial audio click hooked")
                 }
-            } catch (th: Throwable) { Log.d(TAG, "official spatial hook failed: $th") }
+            } catch (th: Throwable) { xlog("official spatial hook failed: $th") }
             hookOfficialSpatialRows(cl)
             hookOfficialRowGating(cl)
-            Log.d(TAG, "hookDeviceDetailsPanel: BluetoothDeviceDetailsFragment hooked")
+            xlog("hookDeviceDetailsPanel: BluetoothDeviceDetailsFragment hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hookDeviceDetailsPanel failed: $th")
+            xlog("hookDeviceDetailsPanel failed: $th")
         }
     }
 
@@ -1086,9 +1086,9 @@ class XposedEntry : XposedModule() {
                 }
                 chain.proceed()
             }
-            Log.d(TAG, "hookDetailProfileVisibility: provider hooked")
+            xlog("hookDetailProfileVisibility: provider hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hookDetailProfileVisibility provider failed: $th")
+            xlog("hookDetailProfileVisibility provider failed: $th")
         }
         try {
             val ctrlCls = Class.forName("com.android.settings.bluetooth.BluetoothDetailsProfilesController", true, cl)
@@ -1101,9 +1101,9 @@ class XposedEntry : XposedModule() {
                 }
                 chain.proceed()
             }
-            Log.d(TAG, "hookDetailProfileVisibility: profiles controller hooked")
+            xlog("hookDetailProfileVisibility: profiles controller hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "hookDetailProfileVisibility controller failed: $th")
+            xlog("hookDetailProfileVisibility controller failed: $th")
         }
     }
 
@@ -1244,9 +1244,9 @@ class XposedEntry : XposedModule() {
                 }
                 chain.proceed()
             }
-            Log.d(TAG, "MainActivity.onCreate hooked (silent launch)")
+            xlog("MainActivity.onCreate hooked (silent launch)")
         } catch (th: Throwable) {
-            Log.d(TAG, "silent launch hook failed: $th")
+            xlog("silent launch hook failed: $th")
         }
 
         // Application.onCreate -> register cmd receiver
@@ -1261,9 +1261,9 @@ class XposedEntry : XposedModule() {
                     Log.e(TAG, "Application.onCreate hook err", th)
                 }
             }
-            Log.d(TAG, "Application.onCreate hooked")
+            xlog("Application.onCreate hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "Application hook failed: $th")
+            xlog("Application hook failed: $th")
         }
 
         // onAncMode -> broadcast
@@ -1278,9 +1278,9 @@ class XposedEntry : XposedModule() {
                     Log.e(TAG, "onAncMode hook err", th)
                 }
             }
-            Log.d(TAG, "onAncMode hooked")
+            xlog("onAncMode hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "onAncMode hook failed: $th")
+            xlog("onAncMode hook failed: $th")
         }
 
         // setCurrentMode -> UI to ANC_V2 mapping
@@ -1302,9 +1302,9 @@ class XposedEntry : XposedModule() {
                 }
                 chain.proceed()
             }
-            Log.d(TAG, "setCurrentMode hooked")
+            xlog("setCurrentMode hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "setCurrentMode hook failed: $th")
+            xlog("setCurrentMode hook failed: $th")
         }
 
         // AudioCuration onInfo -> broadcast
@@ -1325,9 +1325,9 @@ class XposedEntry : XposedModule() {
                     Log.e(TAG, "AudioCuration onInfo hook err", th)
                 }
             }
-            Log.d(TAG, "AudioCuration onInfo hooked")
+            xlog("AudioCuration onInfo hooked")
         } catch (th: Throwable) {
-            Log.d(TAG, "AudioCuration onInfo hook failed: $th")
+            xlog("AudioCuration onInfo hook failed: $th")
         }
     }
 
@@ -1390,9 +1390,9 @@ class XposedEntry : XposedModule() {
                 @Suppress("DEPRECATION")
                 context.registerReceiver(broadcastReceiver, intentFilter)
             }
-            Log.d(TAG, "cmd receiver registered")
+            xlog("cmd receiver registered")
         } catch (th: Throwable) {
-            Log.d(TAG, "registerReceiver failed: $th")
+            xlog("registerReceiver failed: $th")
         }
     }
 
@@ -1400,12 +1400,12 @@ class XposedEntry : XposedModule() {
         if (i < 0 || i >= 6) return
         val gaiaSvcCls = Class.forName(CLS_GAIA_SERVICE, true, cl)
         val qtil = HookHelper.callStaticMethod(gaiaSvcCls, "getQtilManager") ?: run {
-            Log.d(TAG, "QtilManager null, fallback to AncV1")
+            xlog("QtilManager null, fallback to AncV1")
             setAncV1Mode(cl, i)
             return
         }
         val plugin = HookHelper.callMethod(qtil, "getAncV2Plugin") ?: run {
-            Log.d(TAG, "AncV2Plugin null, fallback to AncV1")
+            xlog("AncV2Plugin null, fallback to AncV1")
             setAncV1Mode(cl, i)
             return
         }
