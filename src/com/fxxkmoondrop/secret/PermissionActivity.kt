@@ -112,7 +112,11 @@ class PermissionActivity : Activity() {
 
         // ── 底部：全宽重新检查（官方 Filled 按钮）──
         val btnWrap = LinearLayout(this)
-        val refresh = M3Ui.filledButton(this, pal, Lang.t(this, "重新检查", "Re-check")) { startCheck() }
+        // 3.2.10: 显式点击必须强制重探 —— 否则负结果在缓存有效期内会被直接复用，
+        // 按钮只会把旧结论再渲染一遍（用户点了「重新检查」却什么都没查）。
+        val refresh = M3Ui.filledButton(this, pal, Lang.t(this, "重新检查", "Re-check")) {
+            startCheck(force = true)
+        }
         btnWrap.addView(refresh, LinearLayout.LayoutParams(-1, -2))
         root.addView(btnWrap, LinearLayout.LayoutParams(-1, -2))
         root.addView(spacer(dp(6)))
@@ -131,8 +135,17 @@ class PermissionActivity : Activity() {
         startCheck()
     }
 
-    /** 后台检查权限，完成后刷新 UI（不阻塞主线程） */
-    private fun startCheck() {
+    /**
+     * 后台检查权限，完成后刷新 UI（不阻塞主线程）。
+     * @param force 用户的显式「重新检查」：先清掉 root / hook 的负结果再实测。
+     *  自动刷新（onCreate / onResume / 授权返回）保持 false，复用缓存，
+     *  否则每次返回页面都要白跑一次 su exec 与最长 10s 的模块 PING。
+     */
+    private fun startCheck(force: Boolean = false) {
+        if (force) {
+            RootShell.retryNow()
+            EnvProbe.retryHookProbe()
+        }
         headTitle.text = Lang.t(this, "正在检查…", "Checking…")
         headSub.text = Lang.t(this, "设备权限与运行环境", "Device permissions & runtime")
         headIcon.setImageResource(R.drawable.ic_refresh)
