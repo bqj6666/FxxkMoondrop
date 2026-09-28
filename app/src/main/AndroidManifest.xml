@@ -8,8 +8,8 @@
      - 移除 .PopupActivity 声明：该类在源码中不存在、全仓零引用、无 intent-filter、
        exported=false，永远不会被启动。 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    android:versionCode="331"
-    android:versionName="3.2.11">
+    android:versionCode="332"
+    android:versionName="3.2.12">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
 
