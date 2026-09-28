@@ -26,15 +26,30 @@ class EnvProbe private constructor() {
         const val ACTION_FASTPAIR_PONG = "com.fxxkmoondrop.secret.FASTPAIR_PONG"
 
         private const val PKG_GMS = "com.google.android.gms"
-        private const val PING_TIMEOUT_MS = 4000L
+        /** PING 等待窗口。GMS 冷启动（刚开机 / 刚重启 GMS 进程）时 PING→PONG 实测迟到约 8.4s，
+         *  4s 的窗口会把这种正常情况误判成「模块未激活」，故放宽到 10s。
+         *  pingHook 阻塞等待，必须子线程调用。 */
+        private const val PING_TIMEOUT_MS = 10000L
+
+        /** 负结果缓存有效期。一次超时不代表模块没激活（见上），
+         *  过期后允许重新探测，避免把「未激活」钉死到进程结束。 */
+        private const val NEGATIVE_TTL_MS = 30_000L
 
         @Volatile
         private var sRooted: Boolean? = null
         @Volatile
         private var sHookActive: Boolean? = null
 
+        /** sHookActive 的写入时刻（elapsedRealtime），用于负结果 TTL。 */
+        @Volatile
+        private var sHookActiveAt = 0L
+
         /** 探测在途锁：同一进程内只允许一次 PING 在飞。 */
         private val probeLock = Any()
+
+        /** 负结果是否已过期：过期就允许重新探测。 */
+        private fun negativeExpired(): Boolean =
+                android.os.SystemClock.elapsedRealtime() - sHookActiveAt >= NEGATIVE_TTL_MS
 
         /** 是否检测到 Root（结果进程内缓存；无阻塞，可主线程调用） */
         @JvmStatic
@@ -91,7 +106,7 @@ class EnvProbe private constructor() {
 
         /**
          * FastPairHook（LSPosed 模块）是否激活：向 GMS 发 PING，收到 PONG 即激活。
-         * 阻塞等待（PING_TIMEOUT_MS，1.8s），请在子线程调用。
+         * 阻塞等待（PING_TIMEOUT_MS），请在子线程调用。
          *
          * 缓存策略（3.0.5 同 RootShell）：**正结果永久缓存**（激活了就不会变）；
          * 负结果可被 [retryHookProbe] 清掉，用于「刚在 LSPosed 里启用模块」的场景 ——
@@ -99,33 +114,51 @@ class EnvProbe private constructor() {
          */
         @JvmStatic
         fun isFastPairHookActive(ctx: Context?): Boolean {
-            sHookActive?.let { return it }
-            // 3.2.10: 加在途锁。此前无互斥，主界面 / 引导页 / 权限页会各自发起一次探测，
+            // 3.2.10: 正结果永久有效；负结果只在 NEGATIVE_TTL_MS 内有效。
+            // 此前负结果也是永久缓存，而 GMS 冷启动时一次 PING 超时就会被判「未激活」
+            // 并记到进程结束 —— 用户看到的就是永远未激活（issue #10）。
+            sHookActive?.let { cached ->
+                if (cached || !negativeExpired()) return cached
+            }
+            // 3.2.10: 在途锁。此前无互斥，主界面 / 引导页 / 权限页会各自发起一次探测，
             // 同一进程内就并发连发多个 PING，而 GMS 侧每个已注册的 receiver 各回一次 PONG
             // （实测一次进入页面 = 2 个 PING / 8 个 PONG）。锁内双检：等锁期间若已有人
-            // 填好结果就直接复用，不再重复广播。pingHook 阻塞最多 4s，故仍须在子线程调用。
+            // 填好结果就直接复用，不再重复广播。pingHook 阻塞最多 PING_TIMEOUT_MS，须子线程调用。
             synchronized(probeLock) {
-                sHookActive?.let { return it }
+                sHookActive?.let { cached ->
+                    if (cached || !negativeExpired()) return cached
+                }
                 val h = pingHook(ctx)
                 sHookActive = h
+                sHookActiveAt = android.os.SystemClock.elapsedRealtime()
                 return h
             }
         }
 
-        /** 非阻塞读 hook 激活缓存：null = 还没探测过（调用方按旧行为保守处理）。 */
+        /** 非阻塞读 hook 激活缓存：null = 还没探测过 / 负结果已过期（调用方按旧行为保守处理）。
+         *  负结果过期后返回 null 而不是 false，UI 会显示「检测中…」并触发重新探测，
+         *  而不是把过期的「未激活」一直挂在界面上。 */
         @JvmStatic
-        fun hookActiveCached(): Boolean? = sHookActive
+        fun hookActiveCached(): Boolean? {
+            val v = sHookActive ?: return null
+            if (v) return true
+            return if (negativeExpired()) null else false
+        }
 
         /** 清掉 hook 的负结果，下次调用重新 PING（用于用户显式「重新检测」）。 */
         @JvmStatic
         fun retryHookProbe() {
             synchronized(this) {
-                if (sHookActive != true) sHookActive = null
+                if (sHookActive != true) {
+                    sHookActive = null
+                    sHookActiveAt = 0L
+                }
             }
         }
 
         private fun pingHook(ctx: Context?): Boolean {
             if (ctx == null) return false
+            val t0 = android.os.SystemClock.elapsedRealtime()
             val got = AtomicBoolean(false)
             try {
                 val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -149,6 +182,7 @@ class EnvProbe private constructor() {
                     ping.setPackage(PKG_GMS)
                     ctx.sendBroadcast(ping)
                     android.util.Log.d("EnvProbe", "PING sent -> GMS")
+                    AppLog.i("EnvProbe", "PING sent -> GMS")
                     // 稍后自动注销，避免泄漏
                     main.postDelayed({
                         try { ctx.unregisterReceiver(r) } catch (_: Throwable) { }
@@ -164,7 +198,11 @@ class EnvProbe private constructor() {
             } catch (t: Throwable) {
                 android.util.Log.w("EnvProbe", "pingHook: " + t.message)
             }
-            android.util.Log.d("EnvProbe", "hook probe result: " + got.get())
+            val waited = android.os.SystemClock.elapsedRealtime() - t0
+            android.util.Log.d("EnvProbe", "hook probe result: " + got.get() + " (waited " + waited + "ms)")
+            // 写进应用日志：下次导出日志能直接看到 PING 发出时刻与实际等待时长，
+            // 不必再靠超时常量倒推（issue #10 的 8.4s 延迟就是这么推算出来的）。
+            AppLog.i("EnvProbe", "hook probe result=" + got.get() + " waited=" + waited + "ms")
             return got.get()
         }
 
