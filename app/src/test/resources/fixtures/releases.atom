@@ -4,7 +4,139 @@
   <link type="text/html" rel="alternate" href="https://github.com/bqj6666/FxxkMoondrop/releases"/>
   <link type="application/atom+xml" rel="self" href="https://github.com/bqj6666/FxxkMoondrop/releases.atom"/>
   <title>Release notes from FxxkMoondrop</title>
-  <updated>2026-09-28T05:45:54Z</updated>
+  <updated>2026-09-28T18:34:44Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/331-3.2.11</id>
+    <updated>2026-09-28T18:36:35Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/331-3.2.11"/>
+    <title>FxxkMoondrop 331-3.2.11</title>
+    <content type="html">&lt;div class=&quot;markdown-alert markdown-alert-warning&quot;&gt;&lt;p class=&quot;markdown-alert-title&quot;&gt;&lt;svg data-component=&quot;Octicon&quot; class=&quot;octicon octicon-alert mr-2&quot; viewBox=&quot;0 0 16 16&quot; version=&quot;1.1&quot; width=&quot;16&quot; height=&quot;16&quot; aria-hidden=&quot;true&quot;&gt;&lt;path d=&quot;M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z&quot;&gt;&lt;/path&gt;&lt;/svg&gt;Warning&lt;/p&gt;&lt;p&gt;&lt;strong&gt;仍在使用 3.2.8 及更早版本的用户请立即升级。&lt;/strong&gt;&lt;br&gt;
+那些版本存在恶性缺陷：用本模块连接耳机后，偶发导致耳机&lt;strong&gt;死机 / 自动关机 / 断开连接&lt;/strong&gt;。&lt;br&gt;
+缺陷取决于触发时序，所以表现为偶发；一旦触发，耳机即无响应或直接掉电关机。&lt;br&gt;
+该问题自 3.2.9 起已修复，但缺陷版本的用户不会收到任何提示，所以这条警示继续保留。&lt;/p&gt;
+&lt;/div&gt;
+&lt;blockquote&gt;
+&lt;p&gt;本版新增&lt;strong&gt;联网检查更新&lt;/strong&gt;（默认关闭），并把应用内的更新日志改为只从 GitHub 读取。&lt;br&gt;
+同时按 Material 3 规范修掉一批界面缺陷：弹窗按钮错位、弹窗标题居中、下拉菜单过窄等。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;hr&gt;
+&lt;h2&gt;正式发布 &lt;code&gt;331-3.2.11&lt;/code&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;8d0fe5d0158bb0df94ffd395463d2541c2468e96&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：tag &lt;code&gt;331-3.2.11&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（APK Signature Scheme v2）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;更新日志&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;自上个正式版 &lt;code&gt;330-3.2.10&lt;/code&gt; 以来的全部变更。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3&gt;3.2.11 (331)&lt;/h3&gt;
+&lt;h4&gt;新增：联网检查更新（默认关闭）&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;「设置 → 更新」：&lt;strong&gt;联网检查更新&lt;/strong&gt;开关（默认关）+ &lt;strong&gt;更新通道&lt;/strong&gt;（正式版 / 预发布）。&lt;/li&gt;
+&lt;li&gt;「关于 → 项目 → 检查更新」：手动检查；发现新版本可直接点「下载」交给系统浏览器。&lt;/li&gt;
+&lt;li&gt;「关于 → 项目 → 更新日志」：读取 GitHub 的发布说明，展示本版变更。&lt;/li&gt;
+&lt;li&gt;引导页新增「更新」一页，与设置页开关双向同步。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;默认关闭&lt;/strong&gt;。关闭时不建立任何网络连接 —— 不是「连了但不发数据」，是根本不连。&lt;/li&gt;
+&lt;li&gt;只访问 GitHub 公开接口，不发送任何设备信息、不收集数据、不带 token。&lt;/li&gt;
+&lt;li&gt;结果缓存 6 小时：未认证接口限流为每小时 60 次，缓存可避免反复请求撞上 403。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;变更：更新日志改为纯联网&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;移除应用内置的更新日志副本（&lt;code&gt;Changelog.kt&lt;/code&gt;）。它与仓库的 &lt;code&gt;CHANGELOG.md&lt;/code&gt; 是两份数据，&lt;br&gt;
+每次发版都要手工同步，长期必然漂移；现在只剩一个权威来源 —— GitHub 上的发布说明。&lt;/li&gt;
+&lt;li&gt;「检查更新」「更新日志」只在联网开关打开时显示。关闭时整个入口隐藏，&lt;br&gt;
+不再摆出「点下去必然失败」的按钮。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;修复：Material 3 规范与动效&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;弹窗按钮错位&lt;/strong&gt;：「检查更新」弹窗的「下载」按钮此前被追加到「关闭」的下一行，&lt;br&gt;
+两个动作被拆成上下两块。现收进同一行、右对齐、间距 8dp，确认动作在最右。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;弹窗标题居中&lt;/strong&gt;：标题居中而正文左对齐，两条起始线对不齐。改为与正文同一左边界。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;下拉菜单过窄&lt;/strong&gt;：选项文字很短时（如「正式版」「预发布」）菜单缩成一条窄缝。&lt;br&gt;
+现按 M3 规范补足最小宽度。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;下拉选中不刷新&lt;/strong&gt;：「更新通道」选完看不出任何变化，必须切换页面才更新。&lt;br&gt;
+根因在通用下拉行内部 —— 它只改了自己的局部状态，靠调用方各自刷新，&lt;br&gt;
+而调用方并非都刷新了。已收口到一处，所有下拉一并受益。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;行组显隐动画&lt;/strong&gt;：开关控制的行（更新通道）此前是硬切出现与消失，&lt;br&gt;
+现统一为淡入 + 上滑 8dp，与设置页既有做法共用同一组 Motion token。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;构建与发布&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;预发布改为手动触发&lt;/strong&gt;：此前任何一次 push 到 main（包括只改一行 README）都会自动创建&lt;br&gt;
+一个 &lt;code&gt;ci-N&lt;/code&gt; 预发布并同步镜像，Releases 列表很快被无意义的构建淹没。&lt;br&gt;
+现在 push main 仍会构建（编译坏了要立刻知道），但发预发布需要在 Actions 页手动 Run workflow。&lt;/li&gt;
+&lt;li&gt;正式版发布流程不变：push 版本号 tag 即发布。&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1339943709/ci-203</id>
+    <updated>2026-09-28T19:23:47Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-203"/>
+    <title>FxxkMoondrop CI build #203</title>
+    <content type="html">&lt;h2&gt;自动构建 &lt;code&gt;ci-203&lt;/code&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;提交：&lt;code&gt;ebf858c566a038f5de6d7c33851c4bfe5e8c4361&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;触发：手动（Run workflow）&lt;/li&gt;
+&lt;li&gt;性质：&lt;strong&gt;预发布&lt;/strong&gt;，由每次手动触发构建，可能包含尚未验证的改动&lt;/li&gt;
+&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
+&lt;li&gt;签名：CN=FxxkMoondrop（APK Signature Scheme v2）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;更新日志&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;自上个正式版 &lt;code&gt;331-3.2.11&lt;/code&gt; 以来的改动，尚未正式发布。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3&gt;3.2.12 (332)&lt;/h3&gt;
+&lt;blockquote&gt;
+&lt;p&gt;本版新增均衡器（预设可切换、参量均衡只读）、快捷设置磁贴与弹窗时机控制，&lt;br&gt;
+并把设置页按功能重新归类、全应用文案统一为系统设置风格。&lt;br&gt;
+&lt;strong&gt;未触碰蓝牙连接链路&lt;/strong&gt; —— 与 3.2.11 逐字节相同，3.2.9 的防死机修复完整保留。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h4&gt;新增：均衡器&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;概览页新增「均衡器」入口，仅在耳机提供 Moondrop 私有 9ECA 服务时出现。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;预设可切换&lt;/strong&gt;：读出耳机内置预设数量，点选即下发，失败自动回滚高亮。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;参量均衡只读&lt;/strong&gt;：读取 32 段参数，绘制频响曲线（对数频率轴），并列出增益非零的频点。&lt;/li&gt;
+&lt;li&gt;增益单位按协议中 &lt;code&gt;preGain&lt;/code&gt; 同族的 0.01 dB 解释。该单位尚未在真机逐档核对，&lt;br&gt;
+页面底部已注明 —— 本版只读不写，读错也不影响耳机现有设置。&lt;/li&gt;
+&lt;li&gt;预设&lt;strong&gt;只显示「预设 N」不显示名称&lt;/strong&gt;：设备只回下标不回报名称，名称表是各厂商自定义的。&lt;br&gt;
+官方 App 的图标名暗示了一组顺序，但无法从协议证实，猜错会让用户以为选了「流行」却听到别的。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;新增：快捷设置磁贴&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;下拉快捷面板新增「降噪」磁贴，一次点击循环切换降噪档位。&lt;/li&gt;
+&lt;li&gt;档位不硬编码，与通知栏、主界面、官方面板共用同一份能力判据；&lt;br&gt;
+耳机未连接时磁贴置灰，点它则打开应用。&lt;/li&gt;
+&lt;li&gt;档位变化时磁贴随之刷新，与通知栏挂在同一个刷新点上。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;新增：弹窗时机&lt;/h4&gt;
+&lt;p&gt;设置 → 功能 → 连接弹窗，总开关与四项时机收在一处：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;弹出时机&lt;/strong&gt;：等耳机就绪（读到左右耳电量）或连接后立即。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;延迟弹出&lt;/strong&gt;：不延迟 / 1 秒 / 2 秒 / 5 秒。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;锁屏时不弹&lt;/strong&gt;、&lt;strong&gt;横屏时不弹&lt;/strong&gt;。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;时机判据放在弹窗收口处而非触发处 —— 延迟期间熄屏或转屏时，出口处的判断才是真正生效的那次。&lt;/p&gt;
+&lt;h4&gt;变更：设置页归类与文案&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;「连接弹窗」总开关从「官方集成」移入独立的「连接弹窗」块，与四项时机同处一卡。&lt;/li&gt;
+&lt;li&gt;「显示抗风噪按钮」从「功能」末尾移入「自定义映射」—— 它管的是档位呈现，与那组同源。&lt;/li&gt;
+&lt;li&gt;全应用文案统一为系统设置风格：副标题只说明「这项是什么」，不再包含操作指导与条件句；&lt;br&gt;
+条目名称去掉第二人称与口语表达。中英文同步。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;变更：预发布附带更新日志&lt;/h4&gt;
+&lt;p&gt;预发布发布页此前只有一句提交链接，每次都要自己点进 commits 翻。&lt;br&gt;
+现在与正式版走同一个脚本：以最新正式版为基准，附上尚未发布的 CHANGELOG 段落。&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
   <entry>
     <id>tag:github.com,2008:Repository/1339943709/ci-199</id>
     <updated>2026-09-28T05:47:59Z</updated>
@@ -290,42 +422,6 @@ Activity 因切换主题 / AMOLED 重建时，系统的 view state 机制无从�
     <content type="html">&lt;h2&gt;自动构建发布（CI #194）&lt;/h2&gt;
 &lt;ul&gt;
 &lt;li&gt;提交：&lt;code&gt;735b92320c9092d8f26d5c6f3a7fa67154c0a437&lt;/code&gt;&lt;/li&gt;
-&lt;li&gt;触发：push main&lt;/li&gt;
-&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
-&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
-    <author>
-      <name>github-actions[bot]</name>
-    </author>
-    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
-  </entry>
-  <entry>
-    <id>tag:github.com,2008:Repository/1339943709/ci-193</id>
-    <updated>2026-09-27T16:03:13Z</updated>
-    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-193"/>
-    <title>FxxkMoondrop CI build</title>
-    <content type="html">&lt;h2&gt;自动构建发布（CI #193）&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;提交：&lt;code&gt;73861ab97bea6f69700000b100fbf164d25151b8&lt;/code&gt;&lt;/li&gt;
-&lt;li&gt;触发：push main&lt;/li&gt;
-&lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
-&lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;变更内容请查看 &lt;a href=&quot;https://github.com/bqj6666/FxxkMoondrop/commits/main&quot;&gt;Commits&lt;/a&gt;。&lt;/p&gt;</content>
-    <author>
-      <name>github-actions[bot]</name>
-    </author>
-    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
-  </entry>
-  <entry>
-    <id>tag:github.com,2008:Repository/1339943709/ci-192</id>
-    <updated>2026-09-27T11:16:52Z</updated>
-    <link rel="alternate" type="text/html" href="https://github.com/bqj6666/FxxkMoondrop/releases/tag/ci-192"/>
-    <title>FxxkMoondrop CI build</title>
-    <content type="html">&lt;h2&gt;自动构建发布（CI #192）&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;提交：&lt;code&gt;df0ec0c3c3e74ec03cbf952385de70c6a550cac0&lt;/code&gt;&lt;/li&gt;
 &lt;li&gt;触发：push main&lt;/li&gt;
 &lt;li&gt;构建方式：Release（作用域文件 &lt;code&gt;META-INF/xposed/*&lt;/code&gt; 由 AGP 打包时合并）&lt;/li&gt;
 &lt;li&gt;签名：CN=FxxkMoondrop（v2/v3）&lt;/li&gt;

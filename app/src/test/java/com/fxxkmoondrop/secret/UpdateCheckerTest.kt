@@ -163,4 +163,74 @@ class UpdateCheckerTest {
                 "<entry><id>tag:github.com,2008:Repository/1/ci-1</id></entry></feed>"
         assertNull(UpdateChecker.parseAtom(onlyCi, prerelease = false))
     }
+    // ── 3.2.12: 预发布说明裁剪（「更新日志」与「检查更新」分工后的配套）──
+
+    @Test
+    fun `预发布说明裁掉构建元信息，只留更新日志`() {
+        // CI 生成的预发布说明前半段是提交 / 触发 / 签名这些构建信息，读者不关心
+        val body = listOf(
+                "## 自动构建 `ci-203`",
+                "",
+                "- 提交：`ebf858c5`",
+                "- 触发：手动（Run workflow）",
+                "- 性质：**预发布**，可能包含尚未验证的改动",
+                "- 签名：CN=FxxkMoondrop",
+                "",
+                "## 更新日志",
+                "",
+                "> 自上个正式版 `331-3.2.11` 以来的改动。",
+                "",
+                "### 3.2.12 (332)",
+                "",
+                "- 新增均衡器。"
+        ).joinToString("\n")
+        val out = UpdateChecker.stripBuildMeta(body)!!
+        assertTrue("不应再出现构建元信息，实际=" + out, !out.contains("签名："))
+        assertTrue("不应再出现提交号", !out.contains("ebf858c5"))
+        assertTrue("应保留版本段落", out.contains("3.2.12 (332)"))
+        assertTrue("应保留正文条目", out.contains("新增均衡器"))
+    }
+
+    @Test
+    fun `旧格式的 CI 模板没有更新日志段，原样返回而不是清空`() {
+        // 3.2.11 之前的 ci-N 说明只有 CI 模板，裁不出 `## 更新日志`。
+        // 这时必须原样返回 —— 返回 null 会让「检查更新」显示「这一版没有提供更新说明」，
+        // 但实际是有一段模板文字的，说法不符。
+        val legacy = "## 自动构建发布（CI #199）\n\n- 提交：`a1750e0`\n- 触发：push main"
+        val out = UpdateChecker.stripBuildMeta(legacy)!!
+        assertTrue("应原样带回模板内容", out.contains("CI #199"))
+    }
+
+    @Test
+    fun `裁剪对空输入返回 null`() {
+        assertNull(UpdateChecker.stripBuildMeta(null))
+        assertNull(UpdateChecker.stripBuildMeta(""))
+        assertNull(UpdateChecker.stripBuildMeta("   \n  "))
+        // 只有标记、标记后没有内容 -> 没有可展示的东西
+        assertNull(UpdateChecker.stripBuildMeta("## 更新日志"))
+    }
+    // ── 3.2.12: atom 兜底（「更新日志」不能只靠 API，它会被限流打满）──
+
+    @Test
+    fun `HTML 正文转成纯文本，列表项之间不留空行`() {
+        val htmlBody = "<h2>标题</h2>\n<ul>\n<li>第一项</li>\n<li>第二项</li>\n</ul>\n<p>段落</p>"
+        val out = UpdateChecker.htmlToText(htmlBody)!!
+        assertTrue("标题应还原成 markdown 标题，实际=" + out, out.contains("## 标题"))
+        assertTrue("列表项应还原成 -，实际=" + out, out.contains("- 第一项"))
+        // 关键：`</li>\n<li>` 不能变成空行，否则短列表被拆得稀稀落落
+        assertTrue("列表项之间不应有空行，实际=\n" + out,
+                !out.contains("- 第一项\n\n- 第二项"))
+        assertTrue("段落应保留", out.contains("段落"))
+        assertTrue("不应残留标签", !out.contains("<"))
+    }
+
+    @Test
+    fun `实体解码时 amp 最后处理，避免二次解码`() {
+        // `&amp;lt;` 是「字面量 &lt;」，只应解成 `&lt;`。
+        // 若先把 &amp; 解掉就会得到 `<`，等于凭空造出一个标签
+        assertEquals("&lt;", UpdateChecker.decodeEntities("&amp;lt;"))
+        assertEquals("<", UpdateChecker.decodeEntities("&lt;"))
+        assertEquals("a & b", UpdateChecker.decodeEntities("a &amp; b"))
+    }
+
 }

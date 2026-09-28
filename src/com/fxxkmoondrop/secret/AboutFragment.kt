@@ -75,14 +75,15 @@ class AboutFragment : Fragment() {
     }
 
     /**
-     * 更新日志（3.2.11 起**纯联网**）。
+     * 更新日志（3.2.11 起联网；3.2.12 起**只显示当前这一版**）。
      *
-     * 数据源只有 GitHub release 的 body 一个。APK 内不再内置任何日志副本 ——
-     * 那份副本每次发版都要手工同步，迟早与仓库里的 CHANGELOG.md 对不上，
-     * 与其维护两份不如只留权威的那一份。
+     * 此前它显示的是「最新版」的内容 —— 与「检查更新」查出新版本后展示的东西完全重复，
+     * 而用户点「更新日志」想看的恰恰是「我装的这版改了什么」。现在按本机版本号
+     * 拼出正式版 tag（`331-3.2.11`），精确取那一次发布的说明。
      *
-     * 先摆一个 loading 占位，拿到结果后整体重排；内容少时贴合高度，
-     * 超上限才内部滚动 —— 不写死高度，避免短内容留大片空白。
+     * 预发布构建在本机版本号上与正式版相同，仓库里却没有对应的正式 tag，
+     * 因此拉取会失败 —— 这时如实说「取不到」，并给出仓库里的完整更新日志入口，
+     * 而不是悄悄回退去显示别的版本的内容。
      */
     private fun showChangelog() {
         val pal = ThemeUtil.Palette(requireContext())
@@ -125,81 +126,57 @@ class AboutFragment : Fragment() {
         body.addView(actions, LinearLayout.LayoutParams(-1, -2))
         dlg.show()
 
-        // 进弹窗自动查一次（走 6 小时缓存，不重复打网络）。
-        // 联网开关关闭时根本进不到这里 —— 入口行本身就不显示。
-        checkUpdate(force = false) { res ->
-            if (dlg.isShowing) renderRemoteNotes(content, contentSv, actions, res, availW, maxH, pal)
+        val tag = UpdateChecker.localStableTag(requireContext())
+        fetchReleaseBody(tag) { notes ->
+            if (!dlg.isShowing) return@fetchReleaseBody
+            renderChangelog(content, contentSv, notes, availW, maxH, pal)
         }
     }
 
+    /** 后台拉某个 tag 的发布说明，结果回主线程。 */
+    private fun fetchReleaseBody(tag: String?, onDone: (String?) -> Unit) {
+        val appCtx = requireContext().applicationContext
+        Thread {
+            val body = try {
+                UpdateChecker.releaseBody(appCtx, tag)
+            } catch (_: Throwable) {
+                null
+            }
+            activity?.runOnUiThread { if (isAdded) onDone(body) }
+        }.start()
+    }
+
     /**
-     * 把联网结果渲染进弹窗，并重算滚动高度。
+     * 渲染本版更新日志并重算滚动高度。
      *
      * 高度必须重算：初始高度是按 loading 占位量出来的，换成整篇日志后不重算，
      * 要么留一大片空白，要么内容被截断。
      */
-    private fun renderRemoteNotes(content: LinearLayout, sv: ScrollView, actions: LinearLayout,
-                                  res: UpdateChecker.Result,
-                                  availW: Int, maxH: Int, pal: ThemeUtil.Palette) {
+    private fun renderChangelog(content: LinearLayout, sv: ScrollView, notes: String?,
+                                availW: Int, maxH: Int, pal: ThemeUtil.Palette) {
         try {
             content.removeAllViews()
             val ctx = requireContext()
 
-            fun line(msg: String, color: Int, sizeF: Float): TextView {
+            if (notes.isNullOrBlank()) {
                 val t = TextView(ctx)
-                t.text = msg
-                t.textSize = sizeF
-                t.setTextColor(color)
+                t.text = Lang.t(
+                        "取不到本版的更新说明。\n\n仓库里没有与本机版本对应的正式版发布 —— " +
+                                "预发布构建属于这种情况。完整更新日志见 GitHub 上的 CHANGELOG.md。",
+                        "No release notes for this build.\n\nThe repository has no official release " +
+                                "matching this version \u2014 pre-release builds are the usual case. " +
+                                "See CHANGELOG.md on GitHub for the full history.")
+                t.textSize = 13f
+                t.setTextColor(pal.onVariant)
                 t.setLineSpacing(dp(2).toFloat(), 1.25f)
-                return t
-            }
-
-            fun notesBlock(notes: String?) {
-                content.addView(line(
-                        if (notes.isNullOrBlank())
-                            Lang.t("本版没有更新说明", "No release notes for this build")
-                        else prettyNotes(notes),
-                        pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
-            }
-
-            when (res) {
-                is UpdateChecker.Result.Disabled ->
-                    content.addView(line(Lang.t("联网检查更新已关闭，无法获取更新日志",
-                                    "Online update check is off; the changelog is unavailable"),
-                            pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
-
-                is UpdateChecker.Result.Failed ->
-                    content.addView(line(Lang.t("无法获取更新日志，请确认网络后重试",
-                                    "Could not fetch the changelog; verify your connection and try again"),
-                            pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
-
-                is UpdateChecker.Result.UpToDate -> {
-                    // 已是最新：远端 latest 就是本机这一版，它的说明正是「本版改了什么」
-                    content.addView(line(Lang.t("已是最新版本（" + res.currentLabel + "）",
-                                    "Up to date (" + res.currentLabel + ")"),
-                            pal.green, 13f), LinearLayout.LayoutParams(-1, -2))
-                    content.addView(spacer(dp(10)))
-                    notesBlock(res.notes)
-                }
-
-                is UpdateChecker.Result.Available -> {
-                    val label = res.info.versionName ?: res.info.tag
-                    val head = line(Lang.t("最新版 " + label + " 的更新内容",
-                            "What's new in " + label), pal.primary, 15f)
-                    head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                    content.addView(head, LinearLayout.LayoutParams(-1, -2))
-                    content.addView(spacer(dp(8)))
-                    notesBlock(res.info.notes)
-                    // 「下载」放弹窗底部的动作行，而不是塞进滚动内容里 ——
-                    // 塞进去要滚到最后才看得见，而且和「关闭」分处两地，姿势与
-                    // 「检查更新」弹窗也不一致。点它直接交给系统浏览器，不在应用内下载。
-                    val lp = LinearLayout.LayoutParams(-2, -2)
-                    lp.marginStart = dp(8)
-                    actions.addView(M3Ui.filledButton(requireActivity(), pal,
-                            Lang.t("下载 " + label, "Download " + label)) {
-                        openUrl(res.info.downloadUrl)
-                    }, lp)
-                }
+                content.addView(t, LinearLayout.LayoutParams(-1, -2))
+            } else {
+                val t = TextView(ctx)
+                t.text = prettyNotes(notes)
+                t.textSize = 13f
+                t.setTextColor(pal.onVariant)
+                t.setLineSpacing(dp(2).toFloat(), 1.25f)
+                content.addView(t, LinearLayout.LayoutParams(-1, -2))
             }
 
             // 与初次构建同一套测量方式，避免顺序不同造成高度跳变
@@ -258,8 +235,19 @@ class AboutFragment : Fragment() {
         msg.setTextColor(pal.onVariant)
         msg.setLineSpacing(dp(2).toFloat(), 1.25f)
         body.addView(msg, LinearLayout.LayoutParams(-1, -2))
-        body.addView(spacer(dp(16)))
 
+        // 有新版本时，这里显示**新版本**的更新内容 —— 这才是用户点「检查更新」
+        // 之后真正想看的东西。与「更新日志」（只讲本机这一版）各司其职、互不重复。
+        val notesBox = LinearLayout(requireContext())
+        notesBox.orientation = LinearLayout.VERTICAL
+        val availW = (resources.displayMetrics.widthPixels * 0.84f).toInt() - dp(48)
+        val maxH = (resources.displayMetrics.heightPixels * 0.42f).toInt()
+        val notesSv = ScrollView(requireContext())
+        notesSv.addView(notesBox)
+        notesSv.visibility = View.GONE
+        body.addView(notesSv, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        body.addView(spacer(dp(16)))
         val actions = LinearLayout(requireContext())
         actions.orientation = LinearLayout.HORIZONTAL
         actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
@@ -270,6 +258,7 @@ class AboutFragment : Fragment() {
         dlg.show()
 
         checkUpdate(force = true) { res ->
+            if (!dlg.isShowing) return@checkUpdate
             msg.text = when (res) {
                 is UpdateChecker.Result.Disabled ->
                     Lang.t("联网检查更新已关闭，可在「设置 → 更新」中开启",
@@ -285,6 +274,26 @@ class AboutFragment : Fragment() {
                             "Check failed; verify your connection and try again")
             }
             if (res is UpdateChecker.Result.Available) {
+                val text = res.info.notes
+                val tv = TextView(requireContext())
+                tv.text = if (text.isNullOrBlank())
+                    Lang.t("这一版没有提供更新说明。", "This release provides no notes.")
+                else prettyNotes(text)
+                tv.textSize = 13f
+                tv.setTextColor(pal.onVariant)
+                tv.setLineSpacing(dp(2).toFloat(), 1.25f)
+                notesBox.addView(tv, LinearLayout.LayoutParams(-1, -2))
+                // 量一次再决定要不要限高：短日志贴合高度，长日志内部滚动
+                notesBox.measure(
+                        View.MeasureSpec.makeMeasureSpec(availW, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                // body 是 LinearLayout，这里必须显式 new 一个带类型的 LayoutParams ——
+                // 就地改 layoutParams 的话拿到的是基类，没有 topMargin
+                notesSv.layoutParams = LinearLayout.LayoutParams(-1,
+                        if (notesBox.measuredHeight > maxH) maxH
+                        else LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }
+                notesSv.visibility = View.VISIBLE
+
                 // 插到动作行最右（「关闭」之后）—— 确认动作放最右是 M3 的规定顺序
                 val lp = LinearLayout.LayoutParams(-2, -2)
                 lp.marginStart = dp(8)

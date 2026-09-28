@@ -140,4 +140,28 @@ class UpdateCheckerFixtureTest {
         assertEquals("同版本不应报有新版本", false, remoteCode > remoteCode)
         assertTrue("更高 code 必须报有新版本", remoteCode + 1 > remoteCode)
     }
+    // ── 3.2.12: atom 兜底（「更新日志」不能只靠 API，它会被限流打满）──
+
+    @Test
+    fun `按 tag 从 atom 里取到指定发布的内容`() {
+        // API 那条路未认证配额 60 次/小时/IP，实测会被日常点击打满并返回 403；
+        // atom 不占该配额，所以必须有这条兜底
+        val r = UpdateChecker.parseAtomByTag(fixture("releases.atom"), "331-3.2.11")
+        assertNotNull("atom 第一条就是该版本，应当取到", r)
+        assertEquals("331-3.2.11", r!!.tag)
+        assertNotNull("正文不能为空", r.body)
+        assertTrue("应含正文内容，实际=" + r.body!!.take(80), r.body!!.length > 100)
+        assertTrue("不应残留 HTML 标签，实际=" + r.body!!.take(80), !r.body!!.contains("<h"))
+    }
+
+    @Test
+    fun `atom 里没有该 tag 时返回 null 而不是拿别的版本顶上`() {
+        // atom 只列最近 10 条，本机版本较旧时确实找不到。
+        // 这时必须如实返回 null（UI 会说明取不到），不能随手给一个别的版本 ——
+        // 「更新日志」显示的不是本机版本，正是这次要修掉的毛病
+        assertNull(UpdateChecker.parseAtomByTag(fixture("releases.atom"), "999-9.9.9"))
+        assertNull(UpdateChecker.parseAtomByTag(null, "331-3.2.11"))
+        assertNull(UpdateChecker.parseAtomByTag(fixture("releases.atom"), null))
+        assertNull(UpdateChecker.parseAtomByTag(fixture("releases.atom"), "  "))
+    }
 }

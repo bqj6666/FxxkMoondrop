@@ -20,6 +20,11 @@ import java.net.URL
  *   2. releases.atom   —— 兜底，不占 API 配额（实测 API 403 期间仍 200）
  *   3. null            —— 检查失败，UI 明确告知「无法获取」（3.2.11 起不再有内置日志兜底）
  *
+ * 两类调用方的分工（3.2.12 起明确）：
+ *   - 「检查更新」用 [check]：回答「有没有新版本」，有则展示**新版本**的说明；
+ *   - 「更新日志」用 [localStableTag] + [releaseBody]：回答「**本机这一版**改了什么」。
+ *   此前两者共用 [check]，于是「更新日志」显示的是最新版内容 —— 与本机版本无关。
+ *
  * 零新增依赖：只用系统自带的 HttpURLConnection 与 org.json。
  *
  * 硬要求：**联网失败绝不影响任何现有功能** —— 所有异常一律吞掉，
@@ -33,6 +38,9 @@ object UpdateChecker {
     private const val API_LATEST = "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases/latest"
     private const val API_LIST = "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases?per_page=30"
     private const val ATOM = "https://github.com/bqj6666/FxxkMoondrop/releases.atom"
+    /** 按 tag 精确取某一次发布（「更新日志」要的是当前已安装版本，不是最新版）。 */
+    private const val API_TAG =
+            "https://api.github.com/repos/bqj6666/FxxkMoondrop/releases/tags/"
 
     private const val ASSET = "app-release.apk"
 
@@ -179,14 +187,16 @@ object UpdateChecker {
         val entries = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
                 .findAll(xml).map { it.groupValues[1] }.toList()
 
-        fun tagOf(e: String) =
-                Regex("Repository/\\d+/([^<\\s]+)").find(e)?.groupValues?.get(1)
+        val tagOf: (String) -> String? =
+                { e -> Regex("Repository/\\d+/([^<\\s]+)").find(e)?.groupValues?.get(1) }
 
         fun releaseOf(e: String): RemoteRelease? {
             val tag = tagOf(e) ?: return null
             val content = Regex("<content[^>]*>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
                     .find(e)?.groupValues?.get(1)
-            return RemoteRelease(tag, content)
+            // atom 的 content 是渲染后的 HTML，转成与 release body 同形的纯文本，
+            // 两条来源才能共用同一个 prettyNotes 渲染
+            return RemoteRelease(tag, htmlToText(content))
         }
 
         // 预发布通道**优先**挑非正式版 tag（ci-N）。atom 按时间倒序，
@@ -268,8 +278,10 @@ object UpdateChecker {
                         versionName = null,
                         versionCode = null,
                         commitSha = rSha,
-                        // ci-N 的 body 是 CI 模板（只有 commit），不能当日志展示
-                        notes = null,
+                        // 3.2.12 起 ci-N 的说明由 release_notes.py 生成，已含 CHANGELOG 段落，
+                        // 所以能当日志展示（裁掉前面的构建元信息）。旧构建（`## 自动构建发布（CI #N）`
+                        // 那种纯模板）裁不出 `## 更新日志`，stripBuildMeta 会原样返回，不至于更差。
+                        notes = stripBuildMeta(remote.body),
                         downloadUrl = url,
                         hasUpdate = true,
                         fromCache = fromCache))
@@ -320,6 +332,147 @@ object UpdateChecker {
             found
         }
     } catch (_: Throwable) { null }
+
+    /**
+     * 本机已安装版本对应的正式版 tag（`331-3.2.11`）。
+     *
+     * 「更新日志」自 3.2.12 起只显示**当前这一版**的内容 —— 它要定位到本机装的到底是
+     * 哪一次发布，而不是最新一次。拿不到版本信息时返回 null。
+     */
+    @JvmStatic
+    fun localStableTag(ctx: Context): String? = try {
+        @Suppress("DEPRECATION")
+        val pi = ctx.applicationContext.packageManager
+                .getPackageInfo(ctx.applicationContext.packageName, 0)
+        val name = pi.versionName?.trim()
+        if (name.isNullOrEmpty()) null else pi.versionCode.toString() + "-" + name
+    } catch (_: Throwable) { null }
+
+    /**
+     * 拉指定 tag 的发布说明正文。
+     *
+     * 与 [check] 分开：那条链路回答「有没有新版本」，这条回答「某一版改了什么」。
+     * 混淆两者正是此前「更新日志显示的是最新版内容」的原因。
+     */
+    @JvmStatic
+    fun releaseBody(ctx: Context, tag: String?): String? {
+        if (tag.isNullOrBlank()) return null
+        val app = ctx.applicationContext
+
+        // 同一 tag 的说明不会变，缓存可以长期有效 —— 这也是躲开 API 限流的主力：
+        // 看过一次之后再怎么点都不打网络。
+        readBodyCache(app, tag)?.let { return it }
+
+        // API 优先（Markdown 原文，格式最好）
+        val viaApi = try {
+            JSONObject(httpGet(API_TAG + tag) ?: "").optString("body").ifBlank { null }
+        } catch (t: Throwable) {
+            Log.d(TAG, "releaseBody api failed: " + t)
+            null
+        }
+        // atom 兜底：不占 API 配额（该配额实测会被日常点击打满）
+        val body = viaApi ?: try {
+            parseAtomByTag(httpGet(ATOM), tag)?.body
+        } catch (t: Throwable) {
+            Log.d(TAG, "releaseBody atom fallback failed: " + t)
+            null
+        }
+
+        if (!body.isNullOrBlank()) writeBodyCache(app, tag, body)
+        return body
+    }
+
+    private fun bodyCacheKey(tag: String) = "release_body_" + tag
+
+    private fun readBodyCache(app: Context, tag: String): String? = try {
+        prefs(app).getString(bodyCacheKey(tag), null)?.ifBlank { null }
+    } catch (_: Throwable) { null }
+
+    private fun writeBodyCache(app: Context, tag: String, body: String) {
+        try {
+            prefs(app).edit().putString(bodyCacheKey(tag), body).apply()
+        } catch (_: Throwable) { }
+    }
+
+    /** HTML 实体解码。`&amp;` 必须最后处理，否则 `&amp;lt;` 会被解成 `<`。 */
+    @JvmStatic
+    fun decodeEntities(s: String): String = s
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+
+    /**
+     * 把 atom 里的 HTML 正文转成纯文本。
+     *
+     * atom 与 API 是两条来源：API 给的是 Markdown 原文，atom 给的是渲染后的 HTML。
+     * 下游只有一个渲染函数，所以这里把 HTML 压成同形的纯文本 ——
+     * 标题还原成 `## `、列表项还原成 `- `，其余标签剥掉。
+     *
+     * 顺序不能颠倒：**先解码实体再剥标签**。反过来 `&lt;code&gt;` 不会被识别成标签，
+     * 解码后又已经错过了剥离时机，结果是把标签文字留在正文里。
+     */
+    @JvmStatic
+    fun htmlToText(html: String?): String? {
+        if (html.isNullOrBlank()) return null
+        var s = decodeEntities(html)
+        s = Regex("(?i)<br\\s*/?>").replace(s, "\n")
+        // 连 `<li>` 前面的换行一起吃进来，否则 `</li>\n<li>` 会留下一个空行，
+        // 短列表被拆得稀稀落落
+        s = Regex("(?i)\\n*<li[^>]*>").replace(s, "\n- ")
+        s = Regex("(?i)<h[1-6][^>]*>").replace(s, "\n## ")
+        s = Regex("(?i)</(p|div|ul|ol|h[1-6]|blockquote|tr)\\s*>").replace(s, "\n")
+        s = Regex("(?i)<blockquote[^>]*>").replace(s, "\n> ")
+        s = Regex("<[^>]*>").replace(s, "")
+        s = Regex("[ \\t]+\\n").replace(s, "\n")
+        s = Regex("\\n{3,}").replace(s, "\n\n")
+        return s.trim().ifBlank { null }
+    }
+
+    /**
+     * 从 atom 里找**指定 tag** 的那一条。
+     *
+     * 为什么需要：`releases/tags/{tag}` 走 api.github.com，未认证配额只有 60 次/小时/IP，
+     * 而「更新日志」正是按 tag 取当前版本的说明 —— 实测很容易撞上 403，
+     * 页面就变成「取不到本版更新说明」。atom 不占该配额，用它兜底。
+     *
+     * 代价：atom 只列最近 10 条，本机版本较旧时会找不到 —— 那时如实返回 null。
+     */
+    @JvmStatic
+    fun parseAtomByTag(xml: String?, tag: String?): RemoteRelease? {
+        if (xml.isNullOrBlank() || tag.isNullOrBlank()) return null
+        for (e in Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(xml).map { it.groupValues[1] }) {
+            val t = Regex("Repository/\\d+/([^<\\s]+)").find(e)?.groupValues?.get(1) ?: continue
+            if (!t.equals(tag.trim(), ignoreCase = true)) continue
+            val content = Regex("<content[^>]*>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
+                    .find(e)?.groupValues?.get(1)
+            return RemoteRelease(t, htmlToText(content))
+        }
+        return null
+    }
+
+    /**
+     * 去掉预发布说明里的构建元信息。
+     *
+     * CI 生成的预发布说明前半段是「提交 / 触发 / 性质 / 构建方式 / 签名」，
+     * 真正的日志在 `## 更新日志` 之后 —— 前面那些对读者没有意义。
+     *
+     * **只用于预发布**：正式版说明里同样有 `## 更新日志`，但它前面是置顶的
+     * 恶性缺陷警示（`> [!WARNING]`），那是必须让人看到的内容，裁掉就是事故。
+     * 由调用方按 tag 前缀区分。
+     */
+    @JvmStatic
+    fun stripBuildMeta(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        val marker = "## 更新日志"
+        val i = body.indexOf(marker)
+        val out = if (i >= 0) body.substring(i + marker.length) else body
+        return out.trim().ifBlank { null }
+    }
 
     /** API 主路径 -> atom 兜底 -> null。 */
     private fun fetchRemote(ch: Channel): RemoteRelease? {
