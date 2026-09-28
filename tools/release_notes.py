@@ -89,6 +89,25 @@ def prev_official_tag(tag, tags):
     return best[1] if best else None
 
 
+def latest_official_tag(tags):
+    """全局最新的正式版 tag（按 versionCode 最大）。
+
+    预发布（`ci-N`）没有版本号，无法用「比当前小的最大官方 tag」定位基准，
+    只能取**已经发布过的最新正式版** —— 它的 CHANGELOG 段落之上的内容，
+    就是尚未发布的改动。
+    """
+    best = None
+    for t in tags:
+        if t.startswith("ci-"):
+            continue
+        p = parse_tag(t)
+        if not p:
+            continue
+        if best is None or p[0] > best[0]:
+            best = (p[0], t)
+    return best[1] if best else None
+
+
 def split_sections(text):
     """切成 [(version, block)]，block 含标题行，保持文件顺序（新 -> 旧）。"""
     starts = [m.start() for m in re.finditer(r"^##\s", text, flags=re.M)]
@@ -147,10 +166,62 @@ def demote(block):
     return re.sub(r"^(#+)", lambda m: m.group(1) + "#", block, flags=re.M)
 
 
-def build_body(tag, sha, repo, changelog_text, tags, prev_override):
+def build_body(tag, sha, repo, changelog_text, tags, prev_override, prerelease=False):
     """返回 (body, 说明信息)。"""
     cur = parse_tag(tag)
     cur_ver = cur[1] if cur else tag
+
+    # ── 预发布（ci-N）：带上一段「尚未发布的改动」 ──
+    # 原先 ci-N 走正式版那条路径，找不到同名 CHANGELOG 段落，发布页只剩一句提交链接，
+    # 每次预发布都得自己点进去翻 commits。现在改成：以最新正式版为基准，
+    # 取它之上的全部段落 —— 也就是这批尚未发布的改动。
+    if prerelease and cur is None:
+        base_tag = prev_override or latest_official_tag(tags)
+        base_parsed = parse_tag(base_tag) if base_tag else None
+        base_ver = base_parsed[1] if base_parsed else None
+        sections = split_sections(changelog_text)
+        base_i = next((i for i, (v, _) in enumerate(sections) if base_ver and v == base_ver), None)
+        # 基准段落不在 CHANGELOG 里（CHANGELOG 落后于发布）时宁可不给，也不贴错内容
+        picked = [clean(b) for _, b in (sections[:base_i] if base_i is not None else []) if b.strip()]
+        note = ""
+        if base_ver and base_i is None:
+            note = "CHANGELOG.md 中找不到基准版本 %s 的段落，预发布说明不含更新日志。" % base_ver
+        elif not picked:
+            note = "自最新正式版 %s 以来没有新的更新日志条目。" % (base_tag or "（未知）")
+
+        banner = ""
+        if picked:
+            banner, picked[0] = take_alert(picked[0])
+            if not picked[0].strip():
+                picked.pop(0)
+
+        lines = ["## 自动构建 `%s`" % tag, ""]
+        if sha:
+            lines.append("- 提交：`%s`" % sha)
+        lines.append("- 触发：手动（Run workflow）")
+        lines.append("- 性质：**预发布**，由每次手动触发构建，可能包含尚未验证的改动")
+        lines.append(
+            "- 构建方式：Release（作用域文件 `META-INF/xposed/*` 由 AGP 打包时合并）")
+        lines.append("- 签名：CN=FxxkMoondrop（APK Signature Scheme v2）")
+        lines += ["", "## 更新日志", ""]
+        if picked:
+            lines.append("> 自上个正式版 `%s` 以来的改动，尚未正式发布。" % base_tag)
+            lines.append("")
+            lines.append("\n\n".join(demote(b) for b in picked))
+        else:
+            link = "https://github.com/%s/commits/main" % repo if repo else "仓库 commits"
+            if base_tag:
+                lines.append("> 自上个正式版 `%s` 以来暂无更新日志条目。" % base_tag)
+            else:
+                lines.append("> 暂无更新日志条目。")
+            lines.append("")
+            lines.append("详见 [Commits](%s)。" % link)
+        lines.append("")
+
+        body = "\n".join(lines)
+        if banner:
+            body = banner + "\n\n---\n\n" + body
+        return body, note
 
     prev_tag = prev_override or prev_official_tag(tag, tags)
     prev_parsed = parse_tag(prev_tag) if prev_tag else None
@@ -232,6 +303,7 @@ def main():
         changelog_text=path.read_text(encoding="utf-8"),
         tags=git_tags(),
         prev_override=args.prev,
+        prerelease=args.prerelease == "true",
     )
 
     if args.output:

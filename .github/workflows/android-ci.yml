@@ -106,21 +106,29 @@ jobs:
             app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
+      # 预发布此前只有一句提交链接，每次都得自己点进去翻 commits。
+      # 现在与正式版走同一个脚本：以最新正式版为基准，附上尚未发布的 CHANGELOG 段落。
+      - name: 生成预发布说明（含更新日志）
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          python3 tools/release_notes.py \
+            --tag "ci-${{ github.run_number }}" \
+            --sha "${{ github.sha }}" \
+            --repo "$REPO_SLUG" \
+            --prerelease true \
+            --output ci_body.md
+          echo "----- 预发布说明预览（前 25 行）-----"
+          head -25 ci_body.md
+
       - name: 发布 GitHub Release（手动触发 -> ci-N 预发布）
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ci-${{ github.run_number }}
           name: FxxkMoondrop CI build #${{ github.run_number }}
-          body: |
-            ## 自动构建发布（CI #${{ github.run_number }}）
-
-            - 提交：`${{ github.sha }}`
-            - 触发：手动（Run workflow）
-            - 构建方式：Release（作用域文件 `META-INF/xposed/*` 由 AGP 打包时合并）
-            - 签名：CN=FxxkMoondrop（v2/v3）
-
-            变更内容请查看 [Commits](https://github.com/bqj6666/FxxkMoondrop/commits/main)。
+          body_path: ci_body.md
           files: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
