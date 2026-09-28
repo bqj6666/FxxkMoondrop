@@ -385,8 +385,8 @@ class SettingsFragment : Fragment() {
         val swSkipLock = makeTintedSwitch()
         swSkipLock.isChecked = PopupGate.skipLocked(requireContext())
         val rowSkipLock = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_devices,
-                Lang.t("锁屏时不弹", "Skip on the lock screen"),
-                Lang.t("锁屏时不显示", "Do not show while the screen is locked"),
+                Lang.t("锁屏时不弹出", "Skip on the lock screen"),
+                Lang.t("锁屏时不显示弹窗", "Do not show the popup while the screen is locked"),
                 swSkipLock, null)
         swSkipLock.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("popup_skip_locked", checked).commit()
@@ -395,8 +395,8 @@ class SettingsFragment : Fragment() {
         val swSkipLand = makeTintedSwitch()
         swSkipLand.isChecked = PopupGate.skipLandscape(requireContext())
         val rowSkipLand = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_devices,
-                Lang.t("横屏时不弹", "Skip in landscape"),
-                Lang.t("横屏时不显示", "Do not show in landscape"),
+                Lang.t("横屏时不弹出", "Skip in landscape"),
+                Lang.t("横屏时不显示弹窗", "Do not show the popup in landscape"),
                 swSkipLand, null)
         swSkipLand.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("popup_skip_landscape", checked).commit()
@@ -406,10 +406,22 @@ class SettingsFragment : Fragment() {
         // （总开关关掉（用户偏好）时刻意不灰：先配好时机再开总开关是正常用法；
         //   而模块未激活是环境问题，灰掉才如实反映「这几项现在不起作用」。）
         if (hookOff) {
-            for (r in arrayOf(rowTiming, rowDelay, rowSkipLock, rowSkipLand)) {
+            // 两行下拉：监听挂在行上，置空即可
+            for (r in arrayOf(rowTiming, rowDelay)) {
                 r.isEnabled = false
                 r.alpha = 0.4f
                 r.setOnClickListener(null)
+            }
+            // 两行开关：**开关是作为 trailing 塞进行里的独立控件**，
+            // row.isEnabled = false 传不过去 —— 只灰行的话，开关照样能拨动，
+            // 在无模块环境里表现为「显示已禁用却还能点」。必须禁用开关自身。
+            for (r in arrayOf(rowSkipLock, rowSkipLand)) {
+                r.isEnabled = false
+                r.alpha = 0.4f
+            }
+            for (sw in arrayOf(swSkipLock, swSkipLand)) {
+                sw.isEnabled = false
+                sw.isClickable = false
             }
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal,

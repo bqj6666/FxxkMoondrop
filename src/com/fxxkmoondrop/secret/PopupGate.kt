@@ -49,13 +49,19 @@ class PopupGate {
         @JvmStatic
         fun delaySec(c: Context?): Int = cfg(c)?.getInt("popup_delay_sec", 0) ?: 0
 
-        /** 锁屏时是否不弹。缺省 true。 */
+        /**
+         * 锁屏时是否不弹。**缺省 false**。
+         *
+         * 默认值一律取「与加这些开关之前的行为一致」：3.2.11 没有任何时机判断，
+         * 连上就弹。把跳过项默认打开等于悄悄改了老用户看到的行为，
+         * 而这类限制应当是用户主动去开的。
+         */
         @JvmStatic
-        fun skipLocked(c: Context?): Boolean = cfg(c)?.getBoolean("popup_skip_locked", true) ?: true
+        fun skipLocked(c: Context?): Boolean = cfg(c)?.getBoolean("popup_skip_locked", false) ?: false
 
-        /** 横屏时是否不弹。缺省 true。 */
+        /** 横屏时是否不弹。**缺省 false**，理由同 [skipLocked]。 */
         @JvmStatic
-        fun skipLandscape(c: Context?): Boolean = cfg(c)?.getBoolean("popup_skip_landscape", true) ?: true
+        fun skipLandscape(c: Context?): Boolean = cfg(c)?.getBoolean("popup_skip_landscape", false) ?: false
 
         private fun cfg(c: Context?): android.content.SharedPreferences? = try {
             c?.applicationContext?.getSharedPreferences("cfg", Context.MODE_PRIVATE)
