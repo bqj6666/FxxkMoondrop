@@ -6,6 +6,11 @@ on:
     tags: ['*']
   pull_request:
     branches: [main]
+  # 预发布改为**手动触发**（Actions 页面 -> Run workflow）。
+  # 原先 push main 就自动发 ci-N：改一行 README 也会多出一个 Release 和一次镜像同步，
+  # Releases 列表很快被无意义的构建淹没，真正的改动反而不好找。
+  # push main 仍然跑构建（编译坏了要立刻知道），只是不再自动发 Release。
+  workflow_dispatch:
 
 jobs:
   build:
@@ -101,8 +106,8 @@ jobs:
             app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
-      - name: 发布 GitHub Release（push main -> ci-N 预发布）
-        if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref == 'refs/heads/main'
+      - name: 发布 GitHub Release（手动触发 -> ci-N 预发布）
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ci-${{ github.run_number }}
@@ -111,7 +116,7 @@ jobs:
             ## 自动构建发布（CI #${{ github.run_number }}）
 
             - 提交：`${{ github.sha }}`
-            - 触发：push main
+            - 触发：手动（Run workflow）
             - 构建方式：Release（作用域文件 `META-INF/xposed/*` 由 AGP 打包时合并）
             - 签名：CN=FxxkMoondrop（v2/v3）
 
@@ -124,7 +129,7 @@ jobs:
           generate_release_notes: false
 
       - name: 触发模块镜像同步（ci 预发布）
-        if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run sync-module-release.yml -f tag="ci-${{ github.run_number }}" || true
