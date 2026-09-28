@@ -95,6 +95,9 @@ class AncBridge {
                 // 走 AncBridge 内部回调（fetchAncMode / setAncMode 的 callback），
                 // 外层 callback 不一定被触发，挂外层会漏刷新。
                 sCtx?.let { DeviceNotif.refreshAnc(it) }
+                // 3.2.12: 磁贴也挂这里 —— 它与通知栏是同一份「当前档位」的两种呈现，
+                // 挂在同一个点上才不会出现「通知栏已变、磁贴还是旧档位」
+                AncTileService.refreshAll(sCtx)
             }
         }
 

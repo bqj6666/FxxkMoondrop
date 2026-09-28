@@ -157,20 +157,20 @@ class AboutFragment : Fragment() {
             fun notesBlock(notes: String?) {
                 content.addView(line(
                         if (notes.isNullOrBlank())
-                            Lang.t("这一版没有单独的更新说明。", "This build has no release notes.")
+                            Lang.t("本版没有更新说明", "No release notes for this build")
                         else prettyNotes(notes),
                         pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
             }
 
             when (res) {
                 is UpdateChecker.Result.Disabled ->
-                    content.addView(line(Lang.t("联网检查更新已关闭，无法获取更新日志。",
-                                    "Online update check is off; the changelog is unavailable."),
+                    content.addView(line(Lang.t("联网检查更新已关闭，无法获取更新日志",
+                                    "Online update check is off; the changelog is unavailable"),
                             pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
 
                 is UpdateChecker.Result.Failed ->
-                    content.addView(line(Lang.t("无法获取更新日志，请确认网络可用后重试。",
-                                    "Could not fetch the changelog. Check your connection and try again."),
+                    content.addView(line(Lang.t("无法获取更新日志，请确认网络后重试",
+                                    "Could not fetch the changelog; verify your connection and try again"),
                             pal.onVariant, 13f), LinearLayout.LayoutParams(-1, -2))
 
                 is UpdateChecker.Result.UpToDate -> {
@@ -272,8 +272,8 @@ class AboutFragment : Fragment() {
         checkUpdate(force = true) { res ->
             msg.text = when (res) {
                 is UpdateChecker.Result.Disabled ->
-                    Lang.t("联网检查更新已关闭。可在「设置 → 更新」中开启。",
-                            "Online update check is off. Enable it in Settings → Updates.")
+                    Lang.t("联网检查更新已关闭，可在「设置 → 更新」中开启",
+                            "Online update check is off; enable it in Settings → Updates")
                 is UpdateChecker.Result.UpToDate ->
                     Lang.t("已是最新版本（" + res.currentLabel + "）",
                             "You are up to date (" + res.currentLabel + ")")
@@ -281,8 +281,8 @@ class AboutFragment : Fragment() {
                     Lang.t("发现新版本 " + (res.info.versionName ?: res.info.tag),
                             "New version available: " + (res.info.versionName ?: res.info.tag))
                 is UpdateChecker.Result.Failed ->
-                    Lang.t("检查失败。请确认网络可用，或稍后重试。",
-                            "Check failed. Make sure you are online, or try again later.")
+                    Lang.t("检查失败，请确认网络后重试",
+                            "Check failed; verify your connection and try again")
             }
             if (res is UpdateChecker.Result.Available) {
                 // 插到动作行最右（「关闭」之后）—— 确认动作放最右是 M3 的规定顺序
@@ -393,11 +393,11 @@ class AboutFragment : Fragment() {
         if (UpdateChecker.isEnabled(requireContext())) {
             projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_refresh,
                     Lang.t("检查更新", "Check for updates"),
-                    Lang.t("联网查询是否有新版本", "Query online for a newer version"),
+                    Lang.t("查询是否有新版本", "Query for a newer version"),
                     M3Ui.chevron(act, pal.onVariant)) { manualCheckUpdate() })
             projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_description,
                     Lang.t("更新日志", "Changelog"),
-                    Lang.t("本版修复与变更", "Fixes and changes in this build"),
+                    Lang.t("本版变更", "Changes in this build"),
                     M3Ui.chevron(act, pal.onVariant)) { showChangelog() })
         }
         projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_code,
@@ -406,7 +406,7 @@ class AboutFragment : Fragment() {
                 M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl) })
         projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_bug_report,
                 Lang.t("反馈问题", "Report an issue"),
-                Lang.t("提交设备适配问题与日志", "Submit device issue with logs"),
+                Lang.t("提交适配问题与日志", "Submit an issue with logs"),
                 M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl + "/issues") })
         projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_person,
                 Lang.t("作者", "Author"), "bqj6666", null, null))
@@ -450,8 +450,8 @@ class AboutFragment : Fragment() {
                 arrayOf(
                         Lang.t("自定义映射", "Custom mapping"),
                         Lang.t("可逐档指定发给耳机的设备码，并自定义空间音频追踪标签。" +
-                                "未手动修改的档位一律跟随型号档案，随时可一键重置。",
-                                "Pick the device code each level sends, and rename the spatial-audio tracking labels. Untouched levels follow the device profile, and everything resets in one tap.")),
+                                "未手动修改的档位跟随型号档案，可一键重置。",
+                                "Pick the device code each level sends, and rename the spatial-audio tracking labels. Untouched levels follow the device profile; everything resets in one tap.")),
                 arrayOf(
                         Lang.t("外观与语言", "Appearance and language"),
                         Lang.t("跟随系统 / 浅色 / 深色、动态取色、AMOLED 纯黑、种子颜色，" +

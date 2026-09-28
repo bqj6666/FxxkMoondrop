@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 快捷设置磁贴的默认名。只要清单里引用，应用内显示名由
+         Lang.t 在运行时按中英文切换，不读这里。 -->
+    <string name="qs_tile_label">降噪</string>
+</resources>

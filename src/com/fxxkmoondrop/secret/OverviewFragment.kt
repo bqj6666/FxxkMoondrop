@@ -84,6 +84,7 @@ class OverviewFragment : Fragment() {
     private var battRowShown = false // alpha2.8: 电量行当前视觉状态（驱动出现/消失动画）
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
+    private var eqRow: View? = null   // 3.2.12: 均衡器入口行（按 9ECA 服务能力显隐）
     private var ancWindCol: View? = null
     /** 3.0.5: 自适应(4) 列。只有设备能力确证支持时显示（与设备详情页同规则）。 */
     private var ancAdaptCol: View? = null
@@ -343,6 +344,26 @@ class OverviewFragment : Fragment() {
                 .getBoolean("show_wind", true)
         ancWindCol?.visibility = if (showWindInit) View.VISIBLE else View.GONE
         ancAdaptCol?.visibility = View.GONE // 3.0.5: 等能力上报再决定
+
+        root.addView(spacer(dp(8)))
+
+        // ── 3.2.12: 均衡器入口 ──
+        // 均衡器走 9ECA 私有协议，只有蓝讯 / 中科系主控的型号才提供该服务（高通 GAIA 系没有）。
+        // 与降噪区块同一条规则：能力不确证就整行隐藏 —— 摆一个点进去说「不支持」的入口，
+        // 不如干脆不显示。显隐由 updateAncStatus 里的 refreshEqEntry 决定，这里先建好藏着。
+        val eqBox = LinearLayout(requireContext())
+        eqBox.orientation = LinearLayout.VERTICAL
+        eqBox.addView(M3Ui.groupCard(requireActivity(), pal0,
+                M3Ui.listRow(requireActivity(), pal0, R.drawable.ic_anc_on,
+                        Lang.t("均衡器", "Equalizer"),
+                        Lang.t("切换耳机内置预设并查看参量均衡曲线",
+                                "Switch the headset's built-in presets and view the parametric EQ curve"),
+                        M3Ui.chevron(requireContext(), pal0.onVariant)) {
+                    startActivity(Intent(requireContext(), EqActivity::class.java))
+                }), LinearLayout.LayoutParams(-1, -2))
+        eqBox.visibility = View.GONE
+        eqRow = eqBox
+        root.addView(eqRow, lp(false))
 
         root.addView(spacer(dp(8)))
 
@@ -1141,8 +1162,8 @@ class OverviewFragment : Fragment() {
         cardBody.addView(spacer(dp(10)))
 
         val items = if (custom) arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"), Lang.t("🧹  恢复默认图标", "🧹  Restore default icon")) else arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"))
-        val subs = if (custom) arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"), Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"))
-        else arrayOf(Lang.t("选择一张图片，替换 Google 弹窗显示的耳机图标", "Choose an image to replace the earbud icon in the Google popup"))
+        val subs = if (custom) arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"), Lang.t("恢复软件默认图标", "Restore the built-in default icon"))
+        else arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"))
         for (i in items.indices) {
             val which = i
             val row = LinearLayout(requireContext())
@@ -1177,7 +1198,7 @@ class OverviewFragment : Fragment() {
                     try {
                         iconPicker.launch("image/*")
                     } catch (t: Throwable) {
-                        toast(Lang.t("无法打开选择器: ", "Cannot open picker: ") + t.message)
+                        toast(Lang.t("无法打开选择器：", "Cannot open picker: ") + t.message)
                     }
                 } else {
                     resetCustomIcon()
@@ -1241,7 +1262,7 @@ class OverviewFragment : Fragment() {
                 }
                 val size = out.length()
                 if (size > 1024 * 1024) {
-                    requireActivity().runOnUiThread { toast(Lang.t("图片仍超 1MB，请换小图", "Image still over 1MB, please pick a smaller one")) }
+                    requireActivity().runOnUiThread { toast(Lang.t("图片超过 1 MB", "Image exceeds 1 MB")) }
                     return@Thread
                 }
                 // 3.0.5: 写本应用 filesDir（无需 Root），GMS 侧 Hook 经 ContentProvider 读取
@@ -1466,6 +1487,15 @@ class OverviewFragment : Fragment() {
             it.alpha = if (ancEnabled) 1f else 0.45f
         }
         ancBtnRow?.let { it.visibility = if (showAncBlock) View.VISIBLE else View.GONE }
+        // 3.2.12: 均衡器入口只在设备确实提供 9ECA 服务时出现
+        eqRow?.let {
+            val hasEq = try {
+                GaiaBleClient.getInstance().hasSrcService()
+            } catch (_: Throwable) {
+                false
+            }
+            it.visibility = if (hasEq) View.VISIBLE else View.GONE
+        }
         // 3.0.5: 自适应(4) 列只在设备能力确证支持时出现；能力未知/不支持一律隐藏。
         // 只门控这一档：其余 0..3 维持既有行为，不改动现有设备的表现。
         ancAdaptCol?.let { col ->

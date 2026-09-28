@@ -329,8 +329,8 @@ class OnboardingActivity : Activity() {
         permBox = LinearLayout(this)
         permBox.orientation = LinearLayout.VERTICAL
         val page = buildPage(Lang.t(this, "权限申请", "Permissions"),
-                Lang.t(this, "以下为功能运行所需的权限与环境检查项，缺失时点击相应条目完成授权；必要项缺失会直接影响使用，可选项仅影响增强功能。",
-                        "Permissions and environment checks the app relies on. Tap a pending item to grant it; missing required items directly affect usage, optional ones only affect enhancements."),
+                Lang.t(this, "点击缺失项可前往授权；必要项影响主体功能，可选项仅影响增强功能。",
+                        "Tap a missing item to authorize it. Required items affect core use; optional ones only affect extras."),
                 R.drawable.ic_shield, permBox)
         permScroll = page as? ScrollView
         return page
@@ -470,8 +470,8 @@ class OnboardingActivity : Activity() {
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_sensors,
                 Lang.t(this, "后台监听（总开关）", "Background monitor (master)"),
                 Lang.t(this,
-                        "开启后立即开始监听，并在启动应用与开机时自动恢复；耳机连接后直连 GAIA，读取电量并控制降噪。",
-                        "Starts monitoring immediately and resumes automatically on launch and boot; connects to GAIA on earbud connect for battery and noise control."),
+                        "开启后立即开始监听，启动与开机时自动恢复；连接耳机后直连 GAIA。",
+                        "Start monitoring immediately; resume on launch and boot; connect to GAIA when a headset is present."),
                 swAuto, null))
         swAuto.setOnCheckedChangeListener { _, checked ->
             // 两个偏好键始终同步写入（与设置页一致）；关闭时真正停止服务并取消看门狗。
@@ -490,8 +490,8 @@ class OnboardingActivity : Activity() {
         swBatt.isChecked = sp().getBoolean("feat_notif_battery", true)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_battery_full,
                 Lang.t(this, "电量通知", "Battery notification"),
-                Lang.t(this, "耳机连接后显示常驻通知，呈现左右耳电量（不含充电盒）。",
-                        "Shows a persistent notification with left and right battery level after connection (charging case excluded)."),
+                Lang.t(this, "常驻通知显示左右耳电量。",
+                        "Persistent notification with left and right battery levels."),
                 swBatt, null))
         swBatt.setOnCheckedChangeListener { _, checked ->
             sp().edit().putBoolean("feat_notif_battery", checked).apply()
@@ -503,8 +503,8 @@ class OnboardingActivity : Activity() {
         swBg.isChecked = sp().getBoolean("bg_hide", false)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_visibility_off,
                 Lang.t(this, "后台隐藏", "Hide in background"),
-                Lang.t(this, "切到后台时隐藏主界面，不在最近任务中保留；应用内跳转与授权流程不受影响。",
-                        "Hides the main UI when moved to the background and keeps it out of recents; in-app navigation and permission flows are unaffected."),
+                Lang.t(this, "切到后台时隐藏主界面。",
+                        "Hide the main UI when the app goes to the background."),
                 swBg, null))
         swBg.setOnCheckedChangeListener { _, checked ->
             sp().edit().putBoolean("bg_hide", checked).apply()
@@ -535,8 +535,8 @@ class OnboardingActivity : Activity() {
         swOfficial.isChecked = !hookOff && sp().getBoolean("feat_official_panel", true)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_headphones,
                 Lang.t(this, "官方降噪面板", "Official noise-control panel"),
-                Lang.t(this, "将耳机状态接入 Google 官方降噪面板（音量面板与提示音和振动面板）。",
-                        "Feeds headset state into Google's official noise-control panel (volume and sound panels)."),
+                Lang.t(this, "把耳机状态接入 Google 官方降噪面板。",
+                        "Feed headset state into Google's official noise-control panel."),
                 swOfficial, null))
         if (!hookOff) swOfficial.setOnCheckedChangeListener { _, c ->
             sp().edit().putBoolean("feat_official_panel", c).apply()
@@ -546,8 +546,8 @@ class OnboardingActivity : Activity() {
         swDetail.isChecked = !hookOff && sp().getBoolean("feat_detail_panel", true)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_tune,
                 Lang.t(this, "蓝牙详情页面板", "Bluetooth details panel"),
-                Lang.t(this, "在系统蓝牙设备详情页注入降噪与功能控制卡片；未连接时整块收起，耳机未就绪时以官方加载行占位。",
-                        "Injects the control card into the system device-details page; it collapses while disconnected and holds place with the official loading row until the headset is ready."),
+                Lang.t(this, "在系统蓝牙设备详情页注入降噪与功能控制卡片。",
+                        "Inject the control card into the system Bluetooth device details page."),
                 swDetail, null))
         if (!hookOff) swDetail.setOnCheckedChangeListener { _, c ->
             sp().edit().putBoolean("feat_detail_panel", c).apply()
@@ -557,8 +557,8 @@ class OnboardingActivity : Activity() {
         swNotifAnc.isChecked = sp().getBoolean("feat_notif_anc", true)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_anc_on,
                 Lang.t(this, "通知内降噪控制", "Noise control in notification"),
-                Lang.t(this, "在通知栏提供降噪档位按钮，按钮按本机支持的档位生成。",
-                        "Adds noise-control buttons to the notification shade, built from the levels this device supports."),
+                Lang.t(this, "在通知栏提供降噪档位按钮。",
+                        "Noise-control buttons in the notification shade."),
                 swNotifAnc, null))
         swNotifAnc.setOnCheckedChangeListener { _, c ->
             sp().edit().putBoolean("feat_notif_anc", c).apply()
@@ -569,8 +569,8 @@ class OnboardingActivity : Activity() {
         swWind.isChecked = sp().getBoolean("show_wind", true)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_air,
                 Lang.t(this, "抗风噪按钮", "Wind-noise button"),
-                Lang.t(this, "抗风为降噪的加强档。详情页快捷开关仅在耳机处于降噪或抗风档时出现；关闭本项后弹窗、主界面与详情页均不再提供抗风。",
-                        "Wind is the boosted noise-control level. Its quick switch appears only while the earbuds are on ANC or Wind; turning this off removes Wind from the popup, the main screen and the details page."),
+                Lang.t(this, "控制抗风档在各界面是否出现。",
+                        "Whether the wind-noise level appears in the app and system UI."),
                 swWind, null))
         swWind.setOnCheckedChangeListener { _, c -> sp().edit().putBoolean("show_wind", c).apply() }
 
@@ -610,8 +610,8 @@ class OnboardingActivity : Activity() {
         swNet.isChecked = UpdateChecker.isEnabled(this)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_settings_ethernet,
                 Lang.t(this, "联网检查更新", "Check for updates online"),
-                Lang.t(this, "查询 GitHub 公开接口获知新版本；可随时在设置页关闭",
-                        "Queries GitHub's public API for new versions; can be turned off in Settings"),
+                Lang.t(this, "查询 GitHub 公开接口以获知新版本",
+                        "Query GitHub's public API for new versions"),
                 swNet, null))
         wrap.addView(M3Ui.groupCard(this, pal, *rows.toTypedArray()))
 
@@ -642,14 +642,12 @@ class OnboardingActivity : Activity() {
         wrap.addView(chanHolder, LinearLayout.LayoutParams(-1, -2))
         wrap.addView(spacer(dp(12)))
         wrap.addView(hint(Lang.t(this,
-                "开启后应用只会访问 GitHub 的公开接口查询版本号与更新说明，" +
-                        "不发送任何设备信息、不收集数据；拒绝也不影响其它功能。",
-                "When enabled, the app only queries GitHub's public API for version info and " +
-                        "release notes. No device information is sent and nothing is collected. " +
-                        "Declining does not affect any other feature.")))
+                "应用只访问 GitHub 公开接口查询版本与更新说明，不发送设备信息，也不收集数据。",
+                "The app only queries GitHub's public API for version and release information. No device information is sent and nothing is collected." +
+                        "No device information is sent and nothing is collected.")))
         return buildPage(Lang.t(this, "更新", "Updates"),
-                Lang.t(this, "是否让应用联网查询新版本，以及跟哪条更新通道。",
-                        "Whether the app may check online for new versions, and which channel to follow."),
+                Lang.t(this, "联网查询新版本与更新通道。",
+                        "Online update checks and the update channel."),
                 R.drawable.ic_refresh, wrap)
     }
 
@@ -694,13 +692,13 @@ class OnboardingActivity : Activity() {
         val rows = arrayOf(
                 M3Ui.listRow(this, pal, R.drawable.ic_tune,
                         Lang.t(this, "自定义映射", "Custom mapping"),
-                        Lang.t(this, "设置各降噪档位与增益档位发送的设备码，以及三档追踪模式的显示名称。",
-                                "Sets the device code each noise-control and gain level sends, plus the display names of the three tracking modes."),
+                        Lang.t(this, "设置各档位发送的设备码与追踪模式显示名称。",
+                                "Set the device code each level sends and the tracking-mode display names."),
                         null, null),
                 M3Ui.listRow(this, pal, R.drawable.ic_image,
                         Lang.t(this, "弹窗图标", "Popup icon"),
-                        Lang.t(this, "替换 Google 快速配对弹窗中显示的耳机图标，可从相册选择或恢复默认。",
-                                "Replaces the earbud icon shown in the Google Fast Pair popup; pick one from the gallery or restore the default."),
+                        Lang.t(this, "替换 Google 快速配对弹窗中显示的耳机图标。",
+                                "Replace the earbud icon shown in the Google Fast Pair popup."),
                         null, null),
                 M3Ui.listRow(this, pal, R.drawable.ic_shield,
                         Lang.t(this, "权限检测", "Permission check"),
@@ -709,8 +707,8 @@ class OnboardingActivity : Activity() {
                         null, null),
                 M3Ui.listRow(this, pal, R.drawable.ic_description,
                         Lang.t(this, "日志抓取", "Log capture"),
-                        Lang.t(this, "收集设备信息与运行日志并导出压缩包，用于机型适配分析。",
-                                "Collects device information and runtime logs into a ZIP for device-adaptation analysis."),
+                        Lang.t(this, "收集设备信息与运行日志并导出压缩包。",
+                                "Collect device information and runtime logs into an archive."),
                         null, null))
         return buildPage(Lang.t(this, "适配与诊断", "Adaptation and diagnostics"),
                 Lang.t(this, "面向机型适配与问题排查的工具。",
@@ -724,7 +722,7 @@ class OnboardingActivity : Activity() {
         welcomeBox = LinearLayout(this)
         welcomeBox.orientation = LinearLayout.VERTICAL
         val page = buildPage(Lang.t(this, "欢迎使用", "Welcome"),
-                Lang.t(this, "引导到此结束，以下为当前环境状态，可以开始使用了。",
+                Lang.t(this, "以下为当前环境状态。",
                         "That is the whole tour. Below is the current environment status — you are good to go."),
                 R.drawable.ic_check, welcomeBox)
         welcomeScroll = page as? ScrollView

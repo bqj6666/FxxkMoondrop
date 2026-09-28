@@ -8,7 +8,7 @@
      - 移除 .PopupActivity 声明：该类在源码中不存在、全仓零引用、无 intent-filter、
        exported=false，永远不会被启动。 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    android:versionCode="329"
+    android:versionCode="331"
     android:versionName="3.2.11">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
@@ -38,6 +38,8 @@
         android:allowBackup="false">
 
         <activity android:name=".PermissionActivity" android:exported="false" />
+        <!-- 3.2.12: 均衡器（预设可切 + 参量均衡只读）。不对外暴露，只能从应用内进入。 -->
+        <activity android:name=".EqActivity" android:exported="false" />
 
 
         <activity android:name=".MainActivity" android:exported="true">
@@ -59,6 +61,21 @@
         <service
             android:name=".HeadsetDetectService"
             android:exported="false" />
+
+        <!-- 3.2.12: 快捷设置磁贴 —— 下拉面板一键切降噪档位。
+             exported 必须为 true（否则系统绑不上），但权限限定为
+             BIND_QUICK_SETTINGS_TILE：只有持有该权限的系统服务能绑定，
+             第三方应用绑不了。不涉及 SYSTEM_ALERT_WINDOW 或悬浮窗。 -->
+        <service
+            android:name=".AncTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_anc_on"
+            android:label="@string/qs_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
