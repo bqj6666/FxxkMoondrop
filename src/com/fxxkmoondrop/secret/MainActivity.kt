@@ -92,11 +92,11 @@ class MainActivity : FragmentActivity() {
         // 删掉整个 ui/miuix 目录 + 这个 if 即可回到纯 Material。
         val miuix = MiuixSurface.enabled(this)
         val f: Fragment = when (id) {
-            2 -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.SETTINGS)
+            2 -> if (miuix) MiuixHostFragment.newInstance(MiuixHostFragment.Screen.SETTINGS)
                  else SettingsFragment()
-            3 -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.ABOUT)
+            3 -> if (miuix) MiuixHostFragment.newInstance(MiuixHostFragment.Screen.ABOUT)
                  else AboutFragment()
-            else -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.OVERVIEW)
+            else -> if (miuix) MiuixHostFragment.newInstance(MiuixHostFragment.Screen.OVERVIEW)
                     else OverviewFragment()
         }
         val ft: FragmentTransaction = supportFragmentManager.beginTransaction()

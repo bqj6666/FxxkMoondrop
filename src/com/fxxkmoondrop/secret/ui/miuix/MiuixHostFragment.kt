@@ -40,12 +40,44 @@ import com.fxxkmoondrop.secret.UiStyle
  * 刻意不用 `DisposeOnDetachedFromWindow`：Fragment 的 view 可能被复用
  * （放进返回栈再回来），那时还没 detach，Composition 会残留。
  */
-class MiuixHostFragment(
-    private val screen: Screen,
-) : Fragment() {
+class MiuixHostFragment : Fragment() {
 
     /** Miuix 轨的页面枚举。 */
     enum class Screen { OVERVIEW, SETTINGS, ABOUT }
+
+    private val screen: Screen
+        get() = Screen.valueOf(arguments?.getString(ARG_SCREEN) ?: Screen.OVERVIEW.name)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // 3.2.13: 崩溃修复。
+        //
+        // 原实现是 `class MiuixHostFragment(private val screen: Screen)` ——
+        // 带参构造。首次由 MainActivity 直接 new 没问题，但 `recreate()` 时
+        // FragmentManager 要**自己**重建 Fragment，它只认无参构造：
+        //
+        //   Unable to instantiate fragment sp0: could not find Fragment constructor
+        //   Caused by: java.lang.NoSuchMethodException: sp0.<init> []
+        //
+        // 这就是「从 Miuix 切回 Material 会闪退」的确切原因：
+        // 关于页点了「切回 Material You」→ recreate() → 系统按无参构造重建
+        // 上一瞬间的 MiuixHostFragment → 找不到构造器 → FATAL。
+        //
+        // 参数必须走 arguments（会被 FragmentManager 保存与恢复），
+        // 字段只在 onCreate 后读取。
+        if (arguments == null) {
+            arguments = Bundle().apply { putString(ARG_SCREEN, Screen.OVERVIEW.name) }
+        }
+    }
+
+    companion object {
+        private const val ARG_SCREEN = "miuix_screen"
+
+        /** 工厂：带页面的 Fragment 必须用这个创建，不能用构造参数。 */
+        fun newInstance(screen: Screen): MiuixHostFragment = MiuixHostFragment().apply {
+            arguments = Bundle().apply { putString(ARG_SCREEN, screen.name) }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
