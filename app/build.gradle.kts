@@ -192,55 +192,23 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
 }
 
-// —— LSPosed 推荐作用域 EDF 注入（构建后处理：注入 scope.list/ascope.list + 重签）——
-// AGP 8.x 签名内嵌 packageRelease，无 signRelease 任务；zip 追加会破坏 v2/v3，故 assemble 后重签。
-val postEdf by tasks.registering(Exec::class) {
-    group = "build"
-    description = "注入 META-INF/xposed/* + 重签（LSPosed 推荐作用域 EDF）"
-    val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
-    val edfDir = file("src/main/resources/META-INF/xposed")
-    val ksPass = providers.environmentVariable("FXXK_KEYPASS")
-        .orElse(providers.gradleProperty("fxxkKeypass")).getOrElse("")
-    doFirst {
-        // 动态解析 apksigner：优先 ANDROID_HOME / ANDROID_SDK_ROOT，其次 local.properties 的 sdk.dir，最后 fallback
-        val androidSdk = System.getenv("ANDROID_HOME")
-            ?: System.getenv("ANDROID_SDK_ROOT")
-            ?: run {
-                val lp = rootProject.file("local.properties")
-                if (lp.exists()) lp.readLines()
-                    .map { it.trim() }
-                    .firstOrNull { it.startsWith("sdk.dir=") }
-                    ?.substringAfter("sdk.dir=") else null
-            }
-        // 3.2.13: 不再硬编码 build-tools 34.0.0（compileSdk 已升到 37，CI 装的是 36.0.0）。
-        // 改为按版本号倒序探测：取**最新的** build-tools 里那个可用的 apksigner。
-        // 硬编码版本号在 SDK 升级时必然失效，而这里失效的表现是构建莫名中断。
-        val sdkRoot = androidSdk ?: "/workspace/sdk"
-        val btRoot = file("$sdkRoot/build-tools")
-        val candidates = (btRoot.listFiles()?.toList() ?: emptyList())
-            .filter { it.isDirectory && File(it, "apksigner").exists() }
-            .sortedByDescending { it.name }   // 版本号字符串倒序：36 > 35 > 34
-        // 注意：AGP 9 的 file(File, String) 重载已移除（第二参要 PathValidation），
-        // 这里直接用 java.io.File 拼接，避免踩这层 API 变化。
-        val apksigner = candidates.firstOrNull()?.let { File(it, "apksigner") }
-            ?: throw GradleException(
-                "apksigner not found under $btRoot（请确认已安装 build-tools，" +
-                "且 ANDROID_HOME / local.properties 的 sdk.dir 指向正确；" +
-                "已装版本：" + (btRoot.list()?.toList()?.joinToString() ?: "无")
-            )
-        commandLine(
-            "python3", "$rootDir/tools/post_edf.py",
-            apk.get().asFile.absolutePath,
-            "$edfDir/scope.list", "$edfDir/ascope.list",
-            "$rootDir/app2.keystore", ksPass,
-            apksigner.absolutePath
-        )
-    }
-}
-tasks.configureEach {
-    if (name == "assembleRelease") {
-    }
-}
+// 3.2.13: 删除 postEdf（EDF 作用域注入 + 重签）整段。
+//
+// 查证结论：这个任务**从未被执行过**，而且执行了也没意义。
+//   - 它注册于 768d9db，但同一次提交里 `tasks.configureEach` 只留了空壳
+//     （`if (name == "assembleRelease") { }`），没有任何 dependsOn/ finalizedBy，
+//     所以 postEdf 一直是「注册了但没人调用」的死代码。
+//   - 它唯一比 packaging 多做的事是注入 `ascope.list`，而该文件
+//     `git log --all` 查不到任何记录 —— 从未存在过，post_edf.py 会直接 skip。
+//   - `scope.list` 早由 packaging.resources.merges = "META-INF/xposed/*"
+//     自动合入 APK（已下载 ci-209 产物核实：META-INF/xposed/ 下
+//     java_init.list / module.prop / scope.list 三者俱全）。
+//
+// 即：功能由 packaging 完整覆盖，postEdf 纯属冗余。留着它有两个害处：
+// 一是让后来人误以为「作用域靠它注入」，二是 build-tools 探测失败会让
+// 构建莫名中断。ponytail 原则：删掉比留着当陷阱好。
+//
+// tools/post_edf.py 同步删除。
 
 kotlin {
     compilerOptions {

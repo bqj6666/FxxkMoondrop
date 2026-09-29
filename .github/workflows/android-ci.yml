@@ -93,6 +93,16 @@ jobs:
             echo "未配置 KEYSTORE_B64，跳过（构建将降级为 Debug）"
           fi
 
+      # 3.2.13: 此前 CI 只跑 assemble*，131 项单元测试从未在 CI 执行过，
+      # 仅靠本机手动跑。测试覆盖 GaiaCommands 帧构造、载体 ID 映射、
+      # 小米检测门禁等**发布产物的正确性**，漏跑等于这些保护形同虚设。
+      # 用 testDebugUnitTest（单变体）而不是 check —— check 会连带跑 lint，
+      # 而本项目刻意设了 abortOnError=false，跑了也不拦错误，纯属浪费时间。
+      - name: 单元测试（单变体 testDebugUnitTest）
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest
+
       - name: Gradle 构建（有密钥=Release；无密钥=Debug 降级）
         env:
           FXXK_KEYPASS: ${{ secrets.FXXK_KEYPASS }}
