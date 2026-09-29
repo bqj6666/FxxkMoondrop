@@ -793,3 +793,50 @@ IllegalArgumentException: maxWidth must be >= than minWidth
 | `Popup` 参数名 | `popupPositionProvider` |
 
 **当前测试数：135 项**
+
+## 2026-09-29 下拉菜单第五轮：改用 MIUI 官方组件（零崩溃）
+
+用户要求「按 MIUI 官方的用法和规范，连排版和大小都要按官方的来」。
+
+### 官方用法（查 OppoPods，miuix 0.9.2 同版本）
+
+`miuix-preference` 的 `OverlayDropdownPreference` / `WindowDropdownMenu`：
+`title / summary / items / selectedIndex / onSelectedIndexChange`。
+
+新增依赖 `top.yukonga.miuix.kmp:miuix-preference-android:0.9.2`。
+
+### ⛔ 真正的拦路虎：LocalWindowInfo
+
+所有 Miuix 弹层都读 Compose 的 `LocalWindowInfo.current`，
+它要求宿主 Activity 实现 `NavigationEventDispatcherOwner`。
+`ComponentActivity` **只在 androidx.navigation 在 classpath 里时**才实现。
+
+解法（最小侵入，不引 NavHost/NavController）：
+
+```kotlin
+class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
+    override val navigationEventDispatcher: NavigationEventDispatcher by lazy {
+        NavigationEventDispatcher()
+    }
+}
+```
+
+⚠️ 必须写 `override val`，不是 `override fun getNavigationEventDispatcher()`。
+依赖坐标：`navigationevent-android:1.1.1`（**没有** `-runtime` 那个坐标，
+`Could not find androidx.navigationevent:navigationevent-runtime:1.1.1`）。
+
+### 五轮返工总表
+
+| 轮 | 做法 | 结果 |
+|---|---|---|
+| 1 | 自创 Popup | 关不掉、宽度失控、无动画 |
+| 2 | OverlayListPopup | 菜单不弹（缺 LocalPopupStates） |
+| 3 | 补 Miuix Scaffold | 崩（缺 NavigationEventDispatcherOwner） |
+| 4 | Popup+ListPopupContent+IntrinsicSize.Min | 崩（maxWidth/maxHeight 冲突） |
+| 5 | **WindowDropdownMenu + 实现 Owner 接口** | ✅ 零崩溃 |
+
+第 4 轮那个 `IllegalArgumentException` 其实同时报了三条
+（maxWidth / maxHeight / minWidth and minHeight must be >= 0），
+共同根因都是 `Column(IntrinsicSize.Min)` 与 `BasicComponent` 高度不定冲突。
+
+体积 4.7M（加依赖前后无变化，R8 裁掉未用部分）。**测试数：135 项。**
