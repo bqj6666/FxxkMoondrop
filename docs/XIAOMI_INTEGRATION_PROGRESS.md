@@ -539,3 +539,45 @@ java -Djava.io.tmpdir=/dev/gtmp2 -cp <gradle-launcher.jar>      org.gradle.launc
    那是错的 —— scope.list 一直在包里，只是走 packaging 而非 postEdf。
 
    回归验证：删除后 APK 里三个 xposed 文件仍完整。
+
+## 2026-09-29 修 aapt2 静默产物损坏（严重，已装机验证）
+
+**症状**：`assembleRelease` 每步 BUILD SUCCESSFUL，产物 1.9M、签名正常、
+dex 正常，但 APK **缺 AndroidManifest.xml 与整个 res/**，装不上。
+
+**根因**：`gradle.properties` 的 `android.aapt2FromMavenOverride` 指向
+aapt2-861（**AGP 8.6.1 专用**），AGP 升到 9.4.1 后失配，资源打包静默失败。
+CI 没事是因为 workflow 有 `sed -i '/aapt2FromMavenOverride/d'` 删掉这行
+改用原生 aapt2（CI 是 x86_64）。本机 aarch64 **不能照抄**，必须用 qemu 包装。
+
+**我犯的错**：第一反应是照抄 CI 删掉 override，结果 aarch64 上直接报
+`AAPT2 Daemon startup failed`。正确做法是下载 AGP 9.4.1 匹配的 aapt2
+（9.4.1-15978811 / 2.20-15978811）做新包装 `/workspace/tools/aapt2-941/`。
+
+**教训：构建成功 ≠ 产物可用**。若当时只看「1.9M，R8 真棒」就放过这个 bug。
+以后验产物至少四项：manifest 存在 + res/ 非空 + META-INF/xposed 完整 + 签名证书正确。
+
+**装机验证**：4.0M，四项体检全过，`pm install -r -d` Success。
+
+## 双主题架构（用户确认：两套并存，Material 一行不改）
+
+设计文档：`docs/superpowers/specs/2026-09-29-dual-theme-design.md`
+
+分派点唯一：`MainActivity.showTab()` 的 `when` 里按 `MiuixSurface.enabled()` 分派。
+Miuix 轨全部代码集中在 `src/.../ui/miuix/`，删目录即回退。
+
+### 步骤进度
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+| 1 | 基础控件库 `MiuixComponents.kt` | ✅ 已完成并装机 |
+| 2 | `MiuixScreen` + `MiuixHostFragment` 骨架 | ⏳ 下一步 |
+| 3 | 概览页 | ⏳ |
+| 4 | 关于页（最简单） | ⏳ |
+| 5 | 设置页（最复杂） | ⏳ |
+| 6 | 弹窗（跨进程，独立路径，风险最高） | ⏳ |
+
+**第 1 步要点**：控件规格刻意对齐 M3Ui（圆角 20 / 行高 56 / 内边距 16 /
+卡片间距 12），两套主题要像同一款应用的两个皮肤。
+`MiuixSwitchRow` 复用了 3.2.12 的 MaterialSwitch 教训 ——
+置灰必须同时作用在视觉（alpha）与交互（回调传 null），否则是同一个 bug。
