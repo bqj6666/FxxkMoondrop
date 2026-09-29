@@ -740,3 +740,56 @@ material3 的 `DropdownMenu` 容器色在深色主题下仍是浅色（用户截
 改用 **`uiautomator dump` 拿无障碍节点坐标** + `screencap` 看渲染。
 之前 `input tap 602 2530` 是瞎猜的；现在 dump 出
 「界面风格」bounds `[96,1103][288,1173]` 后精确定点。
+
+## 2026-09-29 下拉菜单改用 Miuix 原生控件（三轮返工）
+
+用户指出四点：点哪都关不掉、宽度太长（口误）、**应该用 Miuix 原生控件
+不要自创**、选项背景消失。
+
+⛔ 教训：Miuix 源码 jar 里有 `OverlayListPopup` / `ListPopupContent` /
+`BasicComponent` 等原生组件，**动手写之前应该先查**。
+
+### 三轮返工
+
+1. 自创 Popup → 关不掉、宽度失控、底色丢失
+2. 换 `OverlayListPopup` → 菜单不弹（`LocalPopupStates` 只由 Miuix `Scaffold`
+   提供）；补 Scaffold 后崩（`No NavigationEventDispatcher`，需 androidx.navigation，
+   `ComponentActivity` 不实现）
+3. **最终**：androidx `Popup` 管窗口与关闭行为 + Miuix `ListPopupContent`
+   管视觉（surfaceContainer 底色 / 16dp 圆角 / squircle 裁切）+
+   Miuix `BasicComponent` 管列表项
+
+### Miuix 自身的边界 bug（0.9.2）
+
+```
+IllegalArgumentException: maxWidth must be >= than minWidth
+```
+
+`ListPopupColumn` 的 MeasurePolicy：
+`upper = maxOf(288.dp, parentMin).coerceAtMost(parentMax)`，
+当父约束 maxWidth < 288dp 时 upper < lower，`coerceIn` 抛异常。
+无法从调用侧规避 → 弃用 `ListPopupColumn`，保留视觉层，
+宽度改由 `Column(IntrinsicSize.Min).widthIn(max=240.dp)` 自适应。
+
+### 配色不再自创
+
+用户原话：「配色的话不可以用 miuix 的吗？两个主题组件不应该是完全分开的吗？」
+
+之前自写 `elevatedSurface()` 是错的 —— 绕过 Miuix 整套 HCT 色轮。
+正解：把既有种子色（`ThemeUtil.seedColor`，与 Material 轨共用同一偏好）
+作为 `ThemeController` 的 `keyColor`，由 Miuix 自己算 surface 三档
+与 `windowDimming`。
+
+### Miuix API 坑表（读源码确认，勿凭印象）
+
+| 坑 | 正确写法 |
+|---|---|
+| `BasicComponent.titleColor` | `BasicComponentColors(color, disabledColor)` |
+| 右侧插槽 | `endActions`（不是 `trailingIcon`） |
+| `onClick` | `BasicComponent` 自带 |
+| `PopupLayoutPosition` | data class，构造用 `showBelow=/showAbove=/isRightAligned=`，无 `Below` 常量 |
+| `PopupPositionProvider` | androidx 与 Miuix 各一套，签名不同 |
+| `Image` 着色 | `colorFilter = ColorFilter.tint(...)` |
+| `Popup` 参数名 | `popupPositionProvider` |
+
+**当前测试数：135 项**
