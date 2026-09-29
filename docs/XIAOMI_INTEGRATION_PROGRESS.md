@@ -618,3 +618,46 @@ Material 轨三个 Fragment **一行未改**。删掉 `ui/miuix/` 目录 + 这�
 我读不到 `/data/user/0/...`（应用数据隔离），无法代为切换主题。
 请手动验证：设置 → 外观 → 界面风格 → HyperOS (Miuix) → 看「关于」页
 是否变为 Miuix 观感；再切回 Material You 确认原界面完好。
+
+## 2026-09-29 Miuix 轨用户实测：3 个 bug 全部修复
+
+用户反馈（切到 Miuix 轨后）：
+1. ❌ 切回 Material 似乎没有入口 → 关于页那行**没传 onClick**，是静态行
+2. ❌ 开关能点但状态不变 → `onCheckedChange = { }` **空回调**
+3. ❌ 从 Miuix 切回 Material **会闪退**
+
+### 崩溃根因（真实堆栈）
+
+```
+FATAL EXCEPTION: main
+Caused by: Unable to instantiate fragment sp0: could not find Fragment constructor
+Caused by: java.lang.NoSuchMethodException: sp0.<init> []
+    at com.fxxkmoondrop.secret.MainActivity.onCreate
+    at android.app.ActivityThread.handleRelaunchActivityLocally
+```
+
+`MiuixHostFragment` 写成了**带参构造**。首次 `new` 没问题，但 `recreate()` 时：
+
+1. `savedInstanceState != null` → `if (savedInstanceState == null) showTab(curTab)` **不执行**
+2. `FragmentManager` 用保存的 state **自己重建** Fragment
+3. 反射路径 `clazz.getConstructor().newInstance()` **只认无参构造**
+4. 找不到 → FATAL
+
+⛔ 教训：给 Xposed 模块写 Fragment，**永远用无参构造 + arguments**。
+带参构造只在「永远不 recreate」时才安全，而 Activity.recreate() 是常态。
+
+### 已加测试钉死这个约束
+
+`MiuixHostFragmentConstructorTest`（4 项），其中「只允许一个无参构造」
+专门防止有人为「传参方便」改回去。
+
+**已验证测试有效**：临时改成 `MiuixHostFragment(private val dummy: Int = 0)`
+后该测试立刻 FAILED，恢复后全绿。
+
+### 排版已对齐 OppoPods
+
+`MiuixPage` 升级为「大标题 + 可垂直滚动 + 卡片分组」，
+参考 OppoPods 的 `MainTabs.kt` / `EarphonesTabPage.kt`。
+标题暂不随滚动收缩（需嵌套滚动协作，留到第 3 步与概览页一起做）。
+
+**当前测试数：135 项**（131 + Miuix 4）
