@@ -7,7 +7,7 @@ org.gradle.caching=true
 android.useAndroidX=true
 
 # ARM64 Linux 上官方 aapt2 为 x86_64：经 qemu-x86_64 包装执行。
-# 版本须与 AGP 严格匹配。本项目现为 AGP 9.4.1 -> aapt2 9.4.1-15978811（2.20-15978811），
+# 版本须与 AGP 匹配。本项目现为 AGP 9.4.1 -> aapt2 9.4.1-15978811（2.20-15978811），
 # 包装脚本见 /workspace/tools/aapt2-941/aapt2（真实二进制在 bin/）。
 #
 # ⚠️ 3.2.13 踩过的坑：AGP 从 8.6.1 升到 9.4.1 后，这里若仍指向 aapt2-861

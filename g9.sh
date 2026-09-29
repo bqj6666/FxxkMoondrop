@@ -14,9 +14,17 @@
 #
 # ⚠️ /dev 是 tmpfs，重启即失。缓存没了就重新执行 setup 段。
 #
+# ⚠️ gradle.properties 里的 aapt2FromMavenOverride **必须保留**。
+#    本机是 aarch64，官方 aapt2 是 x86_64 二进制，必须经 qemu 包装才能跑；
+#    删掉它会报 "AAPT2 Daemon startup failed"。
+#    该行必须与 AGP 版本严格同步 —— AGP 8.6.1 时它指向 aapt2-861，
+#    升到 9.4.1 后若不更新，资源打包会**静默失败**：
+#    assembleRelease 每一步都报成功，产物却缺 AndroidManifest.xml 与整个 res/。
+#    详见 gradle.properties 里的注释。
+#
 # 用法：./g9.sh assembleDebug
 #      ./g9.sh testDebugUnitTest
-#      ./g9.sh :app:assembleRelease
+#      ./g9.sh :app:assembleRelease -PfxxkKeypass=...
 
 set -e
 
