@@ -5,11 +5,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import com.fxxkmoondrop.secret.MiuixSurface
+import com.fxxkmoondrop.secret.ThemeUtil
 
 /**
  * HyperOS 轨的宿主 Fragment。
@@ -90,7 +92,12 @@ class MiuixHostFragment : Fragment() {
         view.setContent {
             // 亮暗沿用既有的 ThemeUtil（theme_mode 0/1/2），
             // 与 Material 轨共用同一份偏好，两套主题的明暗始终一致。
-            MiuixSurface(colorSchemeMode = MiuixSurface.colorSchemeMode(ctx)) {
+            MiuixSurface(
+                colorSchemeMode = MiuixSurface.colorSchemeMode(ctx),
+                // 种子色与 Material 轨共用同一份偏好（ThemeUtil.seedColor），
+                // 由 Miuix 自己按 HCT 色轮算出整套 surface 层级色。
+                keyColor = Color(ThemeUtil.seedColor(ctx)),
+            ) {
                 when (screen) {
                     Screen.OVERVIEW -> MiuixOverviewScreen()
                     Screen.SETTINGS -> MiuixSettingsScreen()

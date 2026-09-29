@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Card
@@ -106,19 +107,30 @@ object MiuixSurface {
 @Composable
 internal fun MiuixSurface(
     colorSchemeMode: ColorSchemeMode,
+    keyColor: Color,
     content: @Composable () -> Unit,
 ) {
     // ⚠️ Miuix 0.9.2 的 MiuixTheme 第一重载只接受 ThemeController，
     // 没有「直接传 colorSchemeMode + isDynamicColor」的便捷重载 ——
-    // 这一点是读 miuix-ui-android-0.9.2-sources.jar 的 MiuixTheme.kt 确认的，
-    // 不要凭印象改回 colorSchemeMode = ... 的写法。
+    // 这一点是读 miuix-ui-android-0.9.2-sources.jar 的 MiuixTheme.kt 确认的。
     //
-    // keyColor 传 null：让 Miuix 用自己的默认配色。动态取色（壁纸取色）由我们
-    // 既有的 ThemeUtil 管理（种子色 + 动态取色开关），与 Miuix 的 Monet 系是两套
-    // 机制，两套同时生效会互相覆盖。
+    // ## keyColor 必须传我们自己的种子色（3.2.13 实测踩出来的）
+    //
+    // 早先传 `keyColor = null`（Miuix 默认）时，实机截图显示卡片
+    // `surfaceContainer` / `surfaceContainerHigh` 与 `background`
+    // **亮度差极小，卡片完全看不见**，整页像一堆浮空的文字。
+    // 于是我一度自己写了个 `elevatedSurface()` 手工算抬升色 ——
+    // 那是**错的**：自己造色轮违背了「用 Miuix 观感」的初衷，
+    // 也会让 Miuix 的 surface 三档 / windowDimming 等整套层级色失去意义。
+    //
+    // 正确做法：把我们既有的种子色（`ThemeUtil.seedColor`，与 Material 轨
+    // 「设置 → 外观 → 种子颜色」是同一份偏好）作为 keyColor 交给 Miuix，
+    // 由 **Miuix 自己**按 HCT 色轮算出完整的 surface 层级与 windowDimming。
+    // 这样两套主题各用各的组件与配色体系，互不干涉。
     MiuixTheme(
         controller = ThemeController(
             colorSchemeMode = colorSchemeMode,
+            keyColor = keyColor,
             colorSpec = ThemeColorSpec.Spec2021,
         )
     ) {

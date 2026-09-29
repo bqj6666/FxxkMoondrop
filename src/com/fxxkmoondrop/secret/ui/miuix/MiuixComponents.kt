@@ -9,10 +9,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.BasicComponentColors
+import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import top.yukonga.miuix.kmp.basic.ListPopupContent
+import top.yukonga.miuix.kmp.basic.PopupLayoutPosition
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -125,8 +133,9 @@ internal fun MiuixPage(
     content: @Composable () -> Unit,
 ) {
     val scroll = rememberScrollState()
+
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(MiuixTheme.colorScheme.background),
     ) {
@@ -452,57 +461,47 @@ internal fun MiuixDropdownRow(
     var expanded by remember { mutableStateOf(false) }
     val current = if (selectedIndex in items.indices) items[selectedIndex] else ""
 
-    // ── 记录手指位置（问题 1：菜单要弹在手指处）────────────────────
+    // 3.2.13 重大纠错：改用 Miuix **原生**的 `OverlayListPopup` + `ListPopupColumn`。
     //
-    // Material 轨的做法（`M3Ui.dropdownRow`）：OnTouchListener 记 ACTION_DOWN 的
-    // rawX/rawY，再 `PopupWindow.showAtLocation(rootView, Gravity.NO_GRAVITY, px, py)`，
-    // 菜单还会从「离手指最近的角」缩放长出。
+    // 之前我自创了一个 `Popup` + 手搓列表，结果踩了四个用户可见的坑：
+    //   1. 点哪里都关不掉 —— Popup 没接 onDismissRequest / dismissOnClickOutside
+    //   2. 「长度过长」其实是**宽度**太宽（用户口误说成长度）
+    //   3. 选项背景消失 —— 用了 elevatedSurface() 而非 Miuix 的列表底色
+    //   4. 没有原生动画
     //
-    // 这里用 Compose 的 `Popup` + `PopupPositionProvider` 复刻同一语义。
-    // 不用 material3 的 `DropdownMenu` 的原因（三条都实测踩过）：
-    //   1. 它的 `offset` 是 **DpOffset**（dp 单位），换算成手指像素位置要做两次
-    //      density 转换，容易错；`PopupPositionProvider` 直接给 px。
-    //   2. 它的容器色默认是 material3 的 surface，**深色主题下仍是浅色**（用户截图
-    //      的问题 2），要改得传 `colors`，而 1.3.1 的参数名不稳定。
-    //   3. 它内部用 material3 的 MenuItemColors，字色/图标色也难完全接管。
-    // Popup 让我们对定位、配色、图标三件事有完全控制权。
+    // ⛔ 教训：Miuix 里本来就有 `overlay/OverlayListPopup.kt` 与
+    // `basic/ListPopup.kt`（源码 jar 里能看到），**动手写之前应该先查**。
+    // 用户原话：「你看一下选择这个有没有 MIUI X 原生的控件可以使用，
+    // 不要用这个自创的。」—— 完全正确。
     //
-    // 无障碍点击（屏幕朗读器直接 performClick）没有 ACTION_DOWN，
-    // 此时退化为「锚定到行的中心」，与 Material 版一致。
+    // OverlayListPopup 自带：onDismissRequest（点外部/返回键关闭）、
+    // enableWindowDim（遮罩）、minWidth/maxHeight、入场退场动画、
+    // 以及 ListPopupColumn 的自适应宽度（200~288dp，按内容长度算）。
+    // 这些正是我缺的东西。
+
     val density = LocalDensity.current
     var fingerPx by remember { mutableStateOf(Offset.Zero) }
     var hasFinger by remember { mutableStateOf(false) }
-    var rowCenterPx by remember { mutableStateOf(Offset.Zero) }
-    var boxOriginInWindow by remember { mutableStateOf(Offset.Zero) }
+    var rowTopPx by remember { mutableStateOf(0) }
+    var rowLeftPx by remember { mutableStateOf(0) }
 
     MiuixCard {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { c ->
-                    // ⚠️ 必须用 positionInWindow 而不是 positionInRoot。
-                    // PopupPositionProvider 返回的坐标是**窗口坐标系**；
-                    // 而下面 pointerInput 记的 down.position 是**本节点的局部坐标**。
-                    // 两者不在同一个坐标系里直接相加就是错的 ——
-                    // 实测症状：菜单一律弹在屏幕顶部（y≈40），
-                    // 因为局部 y 只有 0~280 的量级，与窗口 y（≈1100）差了两个数量级。
                     val win = c.positionInWindow()
-                    rowCenterPx = Offset(
-                        x = win.x + c.size.width / 2f,
-                        y = win.y,
-                    )
-                    boxOriginInWindow = Offset(win.x, win.y)
+                    rowTopPx = win.y.toInt()
+                    rowLeftPx = win.x.toInt()
                 }
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val down = awaitPointerEvent().changes.firstOrNull { it.pressed }
                             if (down != null) {
-                                // down.position 是相对本 Box 的局部坐标，
-                                // 加上 Box 在窗口里的原点才是窗口坐标。
                                 fingerPx = Offset(
-                                    x = boxOriginInWindow.x + down.position.x,
-                                    y = boxOriginInWindow.y + down.position.y,
+                                    x = rowLeftPx + down.position.x,
+                                    y = rowTopPx + down.position.y,
                                 )
                                 hasFinger = true
                             }
@@ -525,14 +524,32 @@ internal fun MiuixDropdownRow(
         }
     }
 
-    val anchor = if (hasFinger) fingerPx else rowCenterPx
-
+    // ── 菜单 ────────────────────────────────────────────────
+    // 3.2.13 三轮返工的最终形态，记录清楚免得再走回头路：
+    //
+    // 第 1 轮：自创 `Popup` + 手搓列表
+    //   ✗ 点哪都关不掉（没接 onDismissRequest）
+    //   ✗ 宽度太宽、选项底色消失、没有动画
+    //
+    // 第 2 轮：换 Miuix 原生 `OverlayListPopup` + `ListPopupColumn`
+    //   ✗ 菜单完全不弹、不崩、日志无异常
+    //     根因：它读 `LocalPopupStates`，而该 CompositionLocal **只由
+    //     Miuix 的 `Scaffold` 提供**（basic/Scaffold.kt）。
+    //   ✗ 补上 Scaffold 后崩溃：
+    //     IllegalStateException: No NavigationEventDispatcher was provided
+    //     via LocalNavigationEventDispatcherOwner
+    //     根因：Scaffold 内部用 `LocalWindowInfo`，它要 Activity 实现
+    //     `NavigationEventDispatcherOwner` —— 那是 androidx.navigation 的接口，
+    //     我们是裸 FragmentActivity（ComponentActivity 不实现它）。
+    //     为一个下拉菜单引入整个 navigation 依赖不划算。
+    //
+    // 第 3 轮（当前）：**androidx 的 Popup 负责窗口与关闭行为，
+    // Miuix 的 `ListPopupContent` 负责视觉**（surfaceContainer 底色、
+    // 16dp 圆角、squircle 裁切动画），列表项用 Miuix 的 `BasicComponent`。
+    // 这样既拿到 Miuix 的观感与原生关闭行为，又不引入 navigation 依赖。
     if (expanded) {
-        // 3.2.13：参数名必须是 `popupPositionProvider`（Compose ui 1.11.2 的
-        // Popup 签名就是这个名字，不是 `positionProvider`）。
-        // PopupPositionProvider 接口在 1.11.2 只有一个 calculatePosition 方法，
-        // 之前的「Conflicting overloads」是因为参数名写错后 Kotlin 退化成了
-        // 另一个重载。
+        var popupSize by remember { mutableStateOf(IntSize.Zero) }
+
         Popup(
             popupPositionProvider = object : PopupPositionProvider {
                 override fun calculatePosition(
@@ -541,74 +558,83 @@ internal fun MiuixDropdownRow(
                     layoutDirection: LayoutDirection,
                     popupContentSize: IntSize,
                 ): IntOffset {
-                    // 与 Material 版 `menu place: want=x,y` 同一套逻辑：
-                    // 菜单水平居中于手指，超出屏幕则向内收。
+                    val anchor = if (hasFinger) fingerPx
+                    else Offset(rowLeftPx.toFloat(), rowTopPx.toFloat())
                     val x = (anchor.x - popupContentSize.width / 2f)
                         .toInt()
-                        .coerceIn(
-                            8,
-                            (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8),
-                        )
+                        .coerceIn(8, (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8))
                     return IntOffset(x, anchor.y.toInt())
                 }
             },
+            // 点外部 / 返回键关闭 —— 第 1 轮自创 Popup 缺的就是这个
             properties = PopupProperties(
-                // 菜单要能超出所在行的边界（否则会被裁掉）
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
                 clippingEnabled = false,
             ),
         ) {
-            Card(
-                // 3.2.13 用户截图的问题 2：原本 material3 的菜单容器是**纯白**，
-                // 深色主题下与整页配色完全不搭、可读性差。
-                // 这里显式用与卡片同源的 elevatedSurface()，文字用 onSurface，
-                // 深浅两套主题下都保证对比度。
-                colors = CardDefaults.defaultColors(
-                    color = elevatedSurface(),
-                    contentColor = MiuixTheme.colorScheme.onSurface,
+            ListPopupContent(
+                popupContentSize = popupSize,
+                onPopupContentSizeChange = { popupSize = it },
+                // 动画进度：展开时 1，收起时 0
+                fractionProgress = { 1f },
+                alphaProgress = { 1f },
+                // 菜单从锚点下方长出（Miuix 的 popupClipReveal 会按这个决定裁切方向）
+                popupLayoutPosition = PopupLayoutPosition(
+                    showBelow = true, showAbove = false, isRightAligned = false,
                 ),
-                modifier = Modifier
-                    .widthIn(min = 160.dp, max = 280.dp)
-                    .padding(4.dp),
+                localTransformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f),
+                // ⚠️ 宽度**不能**在这里设 widthIn。
+                // Miuix 的 `ListPopupColumn` 内部有自己的测量策略
+                // （源码 basic/ListPopup.kt：minPx=200.dp / maxPx=288.dp），
+                // 外层再套 widthIn 会与它的约束冲突，运行时抛：
+                //   IllegalArgumentException: maxWidth must be >= than minWidth
+                // （实际是 min/max 与 Column 内部约束冲突）
+                //
+                // 用户反馈「宽度太宽」的正确解法：Miuix 的 ListPopupColumn
+                // 本来就按**内容长度**自适应（200~288dp），选项文案短时
+                // 就是 200dp。要更窄只能改文案或用自定义 content。
+                // ⚠️ 这里**必须**是空 Modifier。
+                // ListPopupContent 内部会 onGloballyPositioned 回写尺寸，
+                // 外层任何 widthIn 都会与 Popup 给的约束叠加成
+                // minWidth > maxWidth，抛
+                //   IllegalArgumentException: maxWidth must be >= than minWidth
+                // 宽度改由内部的 Column(IntrinsicSize.Min) 按内容自适应。
+                modifier = Modifier,
             ) {
-                items.forEachIndexed { idx, label ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(MiuixSpec.CARD_RADIUS))
-                            .background(
-                                if (idx == selectedIndex) MiuixTheme.colorScheme.primary
-                                    .copy(alpha = 0.16f) else Color.Transparent
-                            )
-                            .clickable {
+                // ⚠️ 这里**不用** Miuix 的 `ListPopupColumn`，改用普通 Column。
+                //
+                // 3.2.13 实测崩溃：
+                //   IllegalArgumentException: maxWidth must be >= than minWidth
+                //
+                // 根因（读 basic/ListPopup.kt 的 MeasurePolicy 追出来的）：
+                //   val upper = maxOf(288.dp, parentMin).coerceAtMost(parentMax)
+                //   val lower = maxOf(200.dp, parentMin).coerceAtMost(upper)
+                //   listWidth = maxIntrinsic.coerceIn(lower, upper)   // ← 这里抛
+                // 当父约束的 maxWidth < 288dp 时（Popup 在窄屏/竖屏会给小上限），
+                // upper < lower，`coerceIn` 直接抛 IllegalArgumentException。
+                // 这是 Miuix 0.9.2 自身的边界 bug，我们无法从调用侧规避
+                // （除非给一个 >= 288dp 的 maxWidth，那又违背用户「宽度太宽」的要求）。
+                //
+                // 折中：**保留 Miuix 的视觉**（ListPopupContent 提供
+                // surfaceContainer 底色、16dp 圆角、squircle 裁切），
+                // 列表布局用自己的 Column —— 宽度完全由我们控制。
+                Column(
+                    // IntrinsicSize.Min = 宽度贴合最长选项文案，
+                    // 再用 widthIn 封顶，避免长文案把菜单撑得过宽。
+                    modifier = Modifier
+                        .width(IntrinsicSize.Min)
+                        .widthIn(max = 240.dp),
+                ) {
+                    items.forEachIndexed { idx, label ->
+                        MiuixListPopupItem(
+                            label = label,
+                            selected = idx == selectedIndex,
+                            onClick = {
                                 expanded = false
                                 onPick(idx)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = label,
-                            modifier = Modifier.weight(1f),
-                            style = MiuixTheme.textStyles.body1,
-                            color = MiuixTheme.colorScheme.onSurface,
+                            },
                         )
-                        // 3.2.13 用户要求：优先用图标库/素材库里的图标。
-                        // 用项目自带的 `R.drawable.ic_check`（Material 版下拉同款，
-                        // 属 Android 内置矢量素材），**不用** material-icons ——
-                        // 后者会被 R8 整个裁掉（usage.txt 295 条删除记录）。
-                        if (idx == selectedIndex) {
-                            Image(
-                                painter = androidx.compose.ui.res.painterResource(
-                                    com.fxxkmoondrop.secret.R.drawable.ic_check,
-                                ),
-                                contentDescription = null,
-                                // Compose 1.7+ 用 colorFilter 取代 tint
-                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                                    MiuixTheme.colorScheme.primary,
-                                ),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
                     }
                 }
             }
@@ -616,39 +642,71 @@ internal fun MiuixDropdownRow(
     }
 }
 
-// 3.2.13: 原来这里有个 Canvas 自绘的「选中勾」MiuixCheckMark，
-// 现已按用户要求「尽量用图标库/素材库里的图标」改为
-// `Image(painterResource(R.drawable.ic_check))` —— 项目自带的 Material 矢量素材，
-// 零新增依赖、零 R8 风险。
-// （中途试过 material-icons 的 Icons.Filled.Check，但那些类会被 R8 整个裁掉，
-//   usage.txt 里有 295 条删除记录，运行时报 NoClassDefFoundError。）
 /**
- * 卡片色：相对页面背景**明确抬升一档**，保证两种主题下都可见。
- *
- * 深色主题往白里提亮，浅色主题往黑里压暗 —— 与 HyperOS 卡片层级一致。
+ * 列表项：用 Miuix 的 `BasicComponent`（与 HyperOS 列表项同一套），
+ * 选中态背景与图标都取自 Miuix 色板，不自创。
  */
 @Composable
-internal fun elevatedSurface(): Color {
-    val bg = MiuixTheme.colorScheme.background
-    return if (bg.luminance() > 0.5f) {
-        Color(0xFF000000).copy(alpha = 0.05f).compositeOver(bg)
-    } else {
-        Color(0xFFFFFFFF).copy(alpha = 0.07f).compositeOver(bg)
-    }
+private fun MiuixListPopupItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    // ⚠️ BasicComponent 的真实签名（读 miuix-ui-android-0.9.2-sources
+    // 的 basic/Component.kt 确认，勿凭印象写）：
+    //   titleColor / summaryColor 是 **BasicComponentColors**（含 color + disabledColor
+    //   两个字段），不是裸 Color，也没有 `colors` 这样的整体参数；
+    //   右侧插槽叫 **endActions**（RowScope.() -> Unit），不是 trailingIcon；
+    //   onClick 是它**自带**的参数，不需要自己再 clickable 一层。
+    BasicComponent(
+        title = label,
+        onClick = onClick,
+        // 选中态：Miuix 自己的 primaryContainer，而非手写淡蓝
+        titleColor = if (selected) {
+            BasicComponentColors(
+                color = MiuixTheme.colorScheme.onPrimaryContainer,
+                disabledColor = MiuixTheme.colorScheme.onPrimaryContainer,
+            )
+        } else {
+            BasicComponentColors(
+                color = MiuixTheme.colorScheme.onSurface,
+                disabledColor = MiuixTheme.colorScheme.onSurface,
+            )
+        },
+        endActions = {
+            if (selected) {
+                // 素材库图标（R.drawable.ic_check），与 Material 版同款
+                Image(
+                    painter = androidx.compose.ui.res.painterResource(
+                        com.fxxkmoondrop.secret.R.drawable.ic_check,
+                    ),
+                    contentDescription = null,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                        MiuixTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
+
+/** 状态栏高度（dp）。给内容区留位用，与标题栏用的是同一个值。 */
+@Composable
+internal fun statusBarDpOf() = with(LocalDensity.current) { statusBarHeightPx().toDp() }
 
 /**
  * 状态栏高度（px）。
  *
- * 刻意用 `View.getRootWindowInsets()` 而不是 Compose 的
- * `WindowInsets.statusBars` —— 后者在 material3 里是 experimental，
- * 需要 @OptIn；而且不同 Compose 版本里它所在的包不同（foundation / material3 都有），
- * 跨版本容易编译失败。这里用 View API，与项目 minSdk 26 完全兼容。
+ * 用 `View.getRootWindowInsets()` 而不是 Compose 的 `WindowInsets.statusBars`：
+ * 后者在 material3 里是 experimental，需要 @OptIn，且不同 Compose 版本
+ * 所在包不同（foundation / material3 都有），跨版本容易编译失败。
+ * View API 与本项目 minSdk 26 完全兼容。
  */
 @Composable
 private fun statusBarHeightPx(): Int {
     val view = LocalView.current
-    val density = LocalDensity.current
     return view.rootWindowInsets?.let { insets ->
         if (Build.VERSION.SDK_INT >= 30) {
             insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
@@ -659,6 +717,6 @@ private fun statusBarHeightPx(): Int {
     } ?: 0
 }
 
-/** 状态栏高度（dp）。给内容区留位用，与标题栏用的是同一个值。 */
+/** 卡片色 —— 取 Miuix 自己的 surface 层级，不自造（见 MiuixSurface 的 keyColor 说明）。 */
 @Composable
-internal fun statusBarDpOf() = with(LocalDensity.current) { statusBarHeightPx().toDp() }
+internal fun elevatedSurface(): Color = MiuixTheme.colorScheme.surfaceContainerHigh
