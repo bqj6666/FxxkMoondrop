@@ -149,6 +149,20 @@ class SettingsFragment : Fragment() {
             scheduleRebuild(0L)
         }
         appear.addView(M3Ui.groupCard(requireActivity(), pal, modeRow), LinearLayout.LayoutParams(-1, -2))
+        appear.addView(spacer(dp(12)))
+
+        // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
+        // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
+        // 看到的界面与上一版完全一致，不会因为升级就换皮。
+        val styleRow = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("界面风格", "Interface style"),
+                Lang.t("选择控件观感；切换不影响上方亮暗设置", "Control appearance; independent of light/dark"),
+                arrayOf(Lang.t("Material You", "Material You"), Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)")),
+                UiStyle.entries.indexOf(UiStyle.current(requireContext()))) { si ->
+            UiStyle.set(requireContext(), UiStyle.entries[si])
+            scheduleRebuild(0L)
+        }
+        appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
 
         // 动态取色 / AMOLED 开关（makeSwitchRow 自身即卡片，无需再包）
         val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
