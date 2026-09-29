@@ -476,3 +476,32 @@ java -Djava.io.tmpdir=/dev/gtmp2 -cp <gradle-launcher.jar>      org.gradle.launc
 - `assembleDebug` BUILD SUCCESSFUL（18M，未压缩）
 - `assembleRelease` 失败于 **keystore 口令**（本机没有，CI 才注入）——
   这是环境限制，不是代码问题
+
+## 2026-09-29 目录整理核查（结论：无需整理）
+
+用户要求「谨慎整理一下目录」。核查后**未做任何改动**，理由如下：
+
+### 本地大文件全部已被 .gitignore 覆盖
+
+| 路径 | 体积 | 在版本库？ |
+|---|---|---|
+| `app/build/` | 251M | 否（`build/` 已 ignore） |
+| `backup/` | 17M | 否（0 个文件被跟踪） |
+| `.bak_*`（52 个） | 7.1M | 否（`.gitignore:51 *.bak*`） |
+| `.git/` | 24M | — |
+
+`.bak_*` 与 `backup/` 是**本项目的历史资产**（历次改动前的快照），
+刻意不进版本库。任何「清理」都会丢失回滚依据 —— **不动**。
+
+### 版本库实际很干净
+
+- 跟踪文件：**183 个**
+- 远端 GitHub 计量：**4.8 MB**
+- 分布：`app/` 86、`src/` 58、根 17、`screenshots/` 7、`.github/` 7、
+  `tools/` 3、`docs/` 3、`gradle/` 2
+- 未跟踪文件：**0**（工作区干净）
+
+### 为什么不「为了整理而整理」
+
+版本库里没有冗余、没有误提交的大文件、没有临时脚本残留。
+强行调整只会产生无意义的 diff 噪音，反而掩盖真正的代码改动。
