@@ -1,8 +1,13 @@
 name: Sync module release to modules.lsposed
 
 on:
-  release:
-    types: [published]
+  # 3.2.13: 删掉 `release: published` 触发器。
+  # 一个 tag push 同时命中 release: published 与 push: tags，而 android-ci 还会
+  # 显式 dispatch 一次 —— 一次发版因此跑 2~3 遍。两个 run 并发时会在「删旧 asset」
+  # 与「上传新 APK」之间互相踩：后者把前者刚传的删掉，或撞 422 失败。
+  # 实测镜像仓因此留下过一个 ci-N 的**草稿**残留（草稿不可见，却挂着 APK）。
+  # 现在只留 push: tags 这一个自动触发源：tag 一推就同步，语义明确且只跑一次；
+  # 需要手工补同步时用 workflow_dispatch。
   push:
     tags: ['*']
   workflow_dispatch:
@@ -14,6 +19,16 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    # 3.2.13: 同一个 tag 只允许一个 mirror run 在跑。手动补同步时若正好撞上
+    # 自动那次，本次直接跳过而不是排队 —— 后到的那个本来就无事可做，
+    # 排队反而可能在前一个「删完旧 asset、还没上传完」的窗口里插进来。
+    #
+    # 按 **tag** 分组而不是 github.ref：dispatch 事件的 ref 是默认分支，
+    # 用它分组会让「补同步 A」和「补同步 B」互相排队，而两者毫无关系。
+    # tag 表达式在 on 里已 resolve 过，这里直接取输入；push 事件则用 ref_name。
+    concurrency:
+      group: mirror-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     permissions:
       contents: read
     env:
