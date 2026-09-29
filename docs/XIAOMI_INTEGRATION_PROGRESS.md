@@ -336,3 +336,47 @@ Gradle 9 调了，在这个 PROot/容器环境里**无解**（不是配置问题
   - **回到 3.2.12 基线 + 方案 B**：不依赖 Miuix，用 Compose Material3
     自建 HyperOS 观感（仍需 Compose，但 Compose 本身不要求 compileSdk 37）
   - **降级目标**：接受 Material 单轨，HyperOS 观感后续再说
+
+
+## 2026-09-29 工具链全量升级（用户选定方案 A：由 CI 验证）
+
+**决定**：本机 Gradle 9 起不来（见上节实测），因此**保留升级并由 GitHub Actions 验证**。
+本机只能编辑代码，无法构建也无法跑单测 —— 这是方案 A 的既定代价。
+
+### 已完成的改动
+
+| 项 | 旧 | 新 | 依据 |
+|---|---|---|---|
+| AGP | 8.6.1 | **9.4.1** | AGP 最新稳定（9.5.0 还是 alpha） |
+| Gradle | 8.9 | **9.6.0** | 与 HyperEars 同档 |
+| Kotlin | 2.3.21 | **2.4.10** | 与 HyperEars 同档；Compose 插件须与 kotlin 一致 |
+| compileSdk | 35 | **37** | Miuix 全部版本 minCompileSdk=37 |
+| targetSdk | 36 | **36 不变** | 升的只是编译期 API，运行时行为不变 |
+| CI JDK | 17 | **21** | 与 jvmTarget / compileOptions 对齐 |
+| CI SDK | platform-34 / bt-34.0.0 | **platform-37 / bt-36.0.0** | 匹配 compileSdk |
+
+### AGP 9 的 breaking change 处理
+
+1. **`android.lint` 已废弃** → 移到顶层 DSL。参照 HyperEars（AGP 9.4）的写法。
+   语义保持不变（`checkReleaseBuilds=false` / `abortOnError=false`）。
+
+2. **`postEdf` 的 build-tools 34.0.0 硬编码** → 改为**按版本号倒序自动探测**。
+   这是发布链的关键环节（注入 scope.list/ascope.list + 重签），硬编码版本号
+   在 SDK 升级时必然失效且表现为「构建莫名中断」。现在取最新的可用 apksigner，
+   找不到时报错会列出已装版本。
+
+3. **jvmTarget / compileOptions 17 → 21**，与 CI 的 JDK 21 三处同步。
+   混编（Kotlin 21 + Java 目标 17）会出警告或失败。
+
+### ⚠️ 未验证项（必须由 CI 回答）
+
+本机无法构建，以下**全部未经验证**：
+- AGP 9.4.1 + Gradle 9.6.0 能否正常配置本项目
+- compileSdk 37 能否在 CI 装到（Android 17 平台是小版本编号，
+  `sdkmanager "platforms;android-37"` 能否命中待验证）
+- 131 项单测是否仍全过
+- **`postEdf` 是否仍正常**（AGP 8→9 的 assembleRelease 行为变化）
+- Compose + Miuix 能否编译通过
+- APK 体积增量
+
+**下一步：push 后看 CI run 结果。CI 失败则按报错逐项修。**

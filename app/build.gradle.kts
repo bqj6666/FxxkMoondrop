@@ -59,16 +59,14 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        // 3.2.13: 17 -> 21，与 CI 的 JDK 21 及上方 jvmTarget 保持一致。
+        // 三处（compileOptions / jvmTarget / CI java-version）必须同步改，
+        // 否则会出现「Kotlin 字节码 21 + Java 目标 17」的混编警告或失败。
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     // Kotlin 2.3+ 起 kotlinOptions.jvmTarget 由警告升级为错误，须用 compilerOptions DSL。
     // 位置必须在顶层 kotlin {}（不能放在 android {} 内），见 kotl.in/u1r8ln
-
-    lint {
-        checkReleaseBuilds = false
-        abortOnError = false
-    }
 
     // 纯 JVM 单元测试（GaiaCommands 帧构造/映射）；无 Android 依赖，缺失的框架桩返回默认值
     testOptions {
@@ -165,6 +163,13 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
 }
 
+// 3.2.13: AGP 8 -> 9 后 `android.lint` 已废弃，必须作为顶层 DSL。
+// 参照 HyperEars（AGP 9.4）的写法。语义不变：release 不跑 lint、不因 lint 中断构建。
+lint {
+    checkReleaseBuilds = false
+    abortOnError = false
+}
+
 // —— LSPosed 推荐作用域 EDF 注入（构建后处理：注入 scope.list/ascope.list + 重签）——
 // AGP 8.x 签名内嵌 packageRelease，无 signRelease 任务；zip 追加会破坏 v2/v3，故 assemble 后重签。
 val postEdf by tasks.registering(Exec::class) {
@@ -185,9 +190,20 @@ val postEdf by tasks.registering(Exec::class) {
                     .firstOrNull { it.startsWith("sdk.dir=") }
                     ?.substringAfter("sdk.dir=") else null
             }
-        val buildTools = (androidSdk ?: "/workspace/sdk") + "/build-tools/34.0.0"
-        val apksigner = file(buildTools + "/apksigner")
-        if (!apksigner.exists()) throw GradleException("apksigner not found: ${apksigner.absolutePath}（请确认 SDK build-tools 34.0.0 已安装且 ANDROID_HOME 正确）")
+        // 3.2.13: 不再硬编码 build-tools 34.0.0（compileSdk 已升到 37，CI 装的是 36.0.0）。
+        // 改为按版本号倒序探测：取**最新的** build-tools 里那个可用的 apksigner。
+        // 硬编码版本号在 SDK 升级时必然失效，而这里失效的表现是构建莫名中断。
+        val sdkRoot = androidSdk ?: "/workspace/sdk"
+        val btRoot = file("$sdkRoot/build-tools")
+        val candidates = (btRoot.listFiles()?.toList() ?: emptyList())
+            .filter { it.isDirectory && File(it, "apksigner").exists() }
+            .sortedByDescending { it.name }   // 版本号字符串倒序：36 > 35 > 34
+        val apksigner = candidates.firstOrNull()?.let { file(it, "apksigner") }
+            ?: throw GradleException(
+                "apksigner not found under $btRoot（请确认已安装 build-tools，" +
+                "且 ANDROID_HOME / local.properties 的 sdk.dir 指向正确；" +
+                "已装版本：" + (btRoot.list()?.toList()?.joinToString() ?: "无")
+            )
         commandLine(
             "python3", "$rootDir/tools/post_edf.py",
             apk.get().asFile.absolutePath,
@@ -204,6 +220,7 @@ tasks.configureEach {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        // 3.2.13: 17 -> 21，与 CI 的 JDK 21 对齐（AGP 8.6 时代是 JDK 17）
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
