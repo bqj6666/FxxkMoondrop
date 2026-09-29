@@ -505,3 +505,37 @@ java -Djava.io.tmpdir=/dev/gtmp2 -cp <gradle-launcher.jar>      org.gradle.launc
 
 版本库里没有冗余、没有误提交的大文件、没有临时脚本残留。
 强行调整只会产生无意义的 diff 噪音，反而掩盖真正的代码改动。
+
+## 2026-09-29 CI 首轮验证通过（AGP 9 全链路真机跑通）
+
+推送后 CI run 36559502102 **全部步骤 ✓**：
+
+```
+✓ 安装 Android SDK 组件（platform-37 / build-tools 36）   ← 关键：Android 17
+  小版本编号的 sdkmanager 路径可用
+✓ 还原签名密钥
+✓ Gradle 构建（有密钥=Release）
+✓ 上传 APK 产物
+```
+
+**真实产物体积：2.29 MB**（本机临时密钥测得 1.9M，CI 产物 2.29M 为准）。
+即：AGP 9.4.1 + Gradle 9.6.0 + Kotlin 2.4.10 + compileSdk 37 + R8 + Miuix
+这一整条链在 CI 上跑通了。
+
+### CI 首轮暴露的两个问题（已修）
+
+1. **CI 从不跑单测** —— workflow 只有 `assemble*`，131 项测试从未在 CI 执行。
+   已补 `testDebugUnitTest` 步骤（不用 `check`，因为本项目
+   `abortOnError=false`，跑 lint 不拦错误、纯浪费时间）。
+
+2. **postEdf 是从未执行的死代码** —— 已连同 `tools/post_edf.py` 删除。
+   查证：注册于 `768d9db`，但同一次提交里 `tasks.configureEach` 只留空壳，
+   无 dependsOn/finalizedBy；它唯一多做的 ascope.list 注入，
+   而该文件 `git log --all` 查无记录（从未存在）。
+   `scope.list` 早由 packaging.resources.merges 自动合入
+   （下载 ci-209 产物核实：三个 xposed 文件俱全）。
+
+   ⛔ 更正此前的错误判断：我一度以为「发布产物的 scope 声明可能一直缺失」，
+   那是错的 —— scope.list 一直在包里，只是走 packaging 而非 postEdf。
+
+   回归验证：删除后 APK 里三个 xposed 文件仍完整。
