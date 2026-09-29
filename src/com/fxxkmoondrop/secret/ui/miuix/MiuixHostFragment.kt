@@ -6,9 +6,12 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
 import com.fxxkmoondrop.secret.MiuixSurface
+import com.fxxkmoondrop.secret.UiStyle
 
 /**
  * HyperOS 轨的宿主 Fragment。
@@ -75,36 +78,40 @@ class MiuixHostFragment(
  * 对应 Material 轨的 `AboutFragment`。数据来源与 Material 版完全一致 ——
  * 版本号仍从 PackageManager 读，不硬编码。
  *
- * 这一页内容最简单（没有开关、没有置灰逻辑），所以选它作为
- * 「Miuix 轨能不能真的渲染出来」的第一验证点。
+ * ## 排版参考
+ *
+ * 版式对齐 OppoPods 的 `EarphonesTabPage` / `SettingsTabPage`：
+ * 大标题在上、卡片分组、卡片间距 12dp。
  */
 @Composable
 internal fun MiuixAboutScreen() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    MiuixPage {
-        MiuixSectionLabel("关于")
+    val ctx = LocalContext.current
+    MiuixPage(title = "关于") {
         MiuixCard {
             MiuixListRow(title = "FxxkMoondrop", subtitle = "水月雨耳机系统级控制模块")
         }
         MiuixGap()
         MiuixCard {
-            MiuixListRow(
-                title = "版本",
-                subtitle = appVersion(ctx),
-            )
+            MiuixListRow(title = "版本", subtitle = appVersion(ctx))
         }
         MiuixGap()
         MiuixCard {
-            MiuixListRow(
-                title = "界面风格",
-                subtitle = "当前：HyperOS（Miuix）",
-            )
+            MiuixListRow(title = "界面风格", subtitle = "当前：HyperOS（Miuix）")
         }
         MiuixGap()
+
+        // ── 切回 Material 的入口 ──────────────────────────────────
+        // 3.2.13 修 bug：原来这里是一行**没有 onClick 的静态行**，
+        // 看上去像可点的，实际点了没反应 —— 用户反馈「切换不回 Material
+        // 似乎没有回来的入口」。现在给它真正的点击行为 + 立即重建界面。
         MiuixCard {
             MiuixListRow(
-                title = "切换到 Material You",
-                subtitle = "在「设置 → 外观 → 界面风格」中切换",
+                title = "切回 Material You",
+                subtitle = "点击立即切换界面风格",
+                onClick = {
+                    UiStyle.set(ctx, UiStyle.MATERIAL)
+                    (ctx as? FragmentActivity)?.recreate()
+                },
             )
         }
     }
@@ -113,7 +120,7 @@ internal fun MiuixAboutScreen() {
 /**
  * 版本号。**唯一来源是 PackageManager，不硬编码** —— 与 `AboutFragment` 相同。
  */
-private fun appVersion(ctx: android.content.Context): String = try {
+internal fun appVersion(ctx: android.content.Context): String = try {
     @Suppress("DEPRECATION")
     ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?"
 } catch (_: Throwable) {

@@ -2,7 +2,10 @@ package com.fxxkmoondrop.secret.ui.miuix
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -59,21 +62,48 @@ object MiuixSpec {
 }
 
 /**
- * 页面纵向留白 + 内容容器。
+ * 页面容器：大标题 + 可滚动内容。
  *
- * 对应 M3Ui 里 `box.setPadding(dp(16), 0, dp(16), dp(24))` 的外层容器。
+ * 版式参考 OppoPods 的 `EarphonesTabPage` / `SettingsTabPage`：
+ * **大标题在上、内容在下、可垂直滚动**。标题用 Miuix 的 `title1`，
+ * 这也是 HyperOS 与 Material 观感差异最明显的地方之一。
+ *
+ * 对应 Material 轨的 `M3Ui.largeHeaderPage`（LargeTopAppBar）。
+ * 标题暂不随滚动收缩 —— 收缩动画在第 3 步随概览页一起做，
+ * 它需要嵌套滚动的协作，属于同一处实现。
  */
 @Composable
 internal fun MiuixPage(
+    title: String? = null,
     modifier: Modifier = Modifier,
+    bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
     content: @Composable () -> Unit,
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .background(MiuixTheme.colorScheme.background)
-            .padding(horizontal = 16.dp),
-    ) { content() }
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.background),
+    ) {
+        if (title != null) MiuixLargeTitle(title)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = bottomPadding),
+        ) { content() }
+    }
+}
+
+@Composable
+internal fun MiuixLargeTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        style = MiuixTheme.textStyles.title1,
+        color = MiuixTheme.colorScheme.onSurface,
+    )
 }
 
 /**
