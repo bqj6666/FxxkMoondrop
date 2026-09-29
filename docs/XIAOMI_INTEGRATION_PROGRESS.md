@@ -380,3 +380,76 @@ Gradle 9 调了，在这个 PROot/容器环境里**无解**（不是配置问题
 - APK 体积增量
 
 **下一步：push 后看 CI run 结果。CI 失败则按报错逐项修。**
+
+
+## ✅ 2026-09-29 工具链升级完成（本机可用了！我之前的结论是错的）
+
+### 重要更正
+
+上一节写的「本机 Gradle 9 起不来」**是错误结论**，已推翻。用户的质疑是对的，
+我当时只试了 `GRADLE_USER_HOME` 就下了结论，而那两次其实是**下载超时**，
+不是启动失败 —— `gradle-9.6.0-bin` 早就在 `~/.gradle/wrapper/dists/` 里了。
+
+### 真正的根因与解法
+
+不是「环境不可用」，而是**两处路径的 `Files.getFileStore()` 会抛
+"Mount point not found"**（JDK 的 `LinuxFileStore` 找不到挂载记录；
+`/proc/self/mountinfo` 只有 27 行且无根挂载记录）。
+
+实测可用性：
+```
+/dev, /dev/gtmp, /dev/gh2, /dev/gh2/tmp   OK
+/tmp, /workspace, /root/.gradle           炸
+```
+
+**解法（两条同时生效，缺一不可）**：
+
+```bash
+export GRADLE_USER_HOME=/dev/gh2                      # 指向 /dev 下的真实目录
+java -Djava.io.tmpdir=/dev/gtmp2 -cp <gradle-launcher.jar>      org.gradle.launcher.GradleMain <task>            # 必须直接启 launcher
+```
+
+⚠️ 只设 `GRADLE_USER_HOME` 不够：还有 `TempFiles` 用系统 tmpdir（`/tmp`）。
+⚠️ `JAVA_OPTS` / `GRADLE_OPTS` / `-Dorg.gradle.jvmargs` **都无效**，
+因为 FileSystem 服务在读这些之前就建好了，必须用 launcher JVM 的 `-D`。
+
+**代价**：`/dev/gh2` 是真实副本（3.8G），不能用符号链接（实测链接目录也炸）。
+放在 /dev 下会随重启丢失，需要时重建。
+
+### AGP 9 的 6 处 breaking change（全部已修）
+
+| # | 问题 | 修法 |
+|---|---|---|
+| 1 | `org.jetbrains.kotlin.android` 插件**不再需要**，AGP 9 直接报错 | 从 app 移除该插件 |
+| 2 | `sourceSets` 的 `srcDirs()` 已废弃 | 改 `directories.add()`，**且必须同时注册 kotlin + java** |
+| 3 | `file(File, String)` 重载移除（第二参要 `PathValidation`） | 改用 `java.io.File` 拼接 |
+| 4 | manifest 里的 `<uses-sdk>` **禁止**控制 SDK 版本，merger 直接失败 | 移除（build.gradle.kts 是权威源，值本就一致） |
+| 5 | `tasks.registering` 的 by-delegate 委托已废弃 | 仅 deprecation 警告，**保留原写法不动**（发布链关键环节，不冒险） |
+| 6 | `android.lint` 位置 | 保持 `android {}` 内（**我一度误移到顶层并已改回**） |
+
+#### ⚠️ 最隐蔽的一个（#2 的子坑）
+
+只写 `java.directories.add("../src")` 会让 `compileDebugKotlin` 报 **NO-SOURCE**，
+随后 Java 侧报一堆 `cannot find symbol: AppLog.hex` —— 症状（Java 找不到 Kotlin
+生成的静态方法）离根因（Kotlin 根本没编译）隔了两层，极易误判为「Kotlin 2.4
+改了 @JvmStatic 行为」。**必须 kotlin + java 两个都注册。**
+
+### 验证结果（本机实测，非推测）
+
+- `testDebugUnitTest`：**131 项全过**，0 失败（结果文件时间戳确认是本次跑的）
+- `assembleDebug`：**BUILD SUCCESSFUL**
+- `assembleRelease`：**packageRelease 失败于签名**（`app2.keystore` 口令本机没有，
+  CI 才注入）—— 这是环境限制，**不是工具链问题**
+
+### ⚠️ APK 体积代价（需要用户决策）
+
+| 版本 | 体积 |
+|---|---|
+| 3.2.12 正式版 | **6.1M** |
+| 3.2.13 debug | **18M** |
+
+`isMinifyEnabled = false`（release 一直不压缩），所以 **18M 就是真实交付体积，
+比原来涨约 12M**，全部来自 Compose + Miuix 运行时。
+
+这个体积对 LSPosed 模块来说偏大（同类模块通常 2-4M）。
+**待用户决定**：接受 / 开 R8 压缩 / 只保留 Compose 不引 Miuix。

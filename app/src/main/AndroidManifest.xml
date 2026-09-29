@@ -11,7 +11,10 @@
     android:versionCode="332"
     android:versionName="3.2.12">
 
-    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+    <!-- 3.2.13: 移除 <uses-sdk>。AGP 9 起禁止在 manifest 里控制 SDK 版本
+         （minSdk/targetSdk），会直接让 manifest merger 失败。
+         权威源是 app/build.gradle.kts 的 defaultConfig（minSdk 26 / targetSdk 36），
+         两者本就一致，删除不改变任何行为。 -->
 
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"

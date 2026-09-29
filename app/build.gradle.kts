@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // 3.2.13: AGP 9.0 起 Kotlin 支持由 AGP 内置，
+    // 不能再声明 org.jetbrains.kotlin.android（会直接报错，见 kotl.in/gradle/agp-built-in-kotlin）
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -46,7 +47,15 @@ android {
     // 源码复用现有 src/（单一权威源，不复制双份）
     sourceSets {
         getByName("main") {
-            java.srcDirs("../src")
+            // 3.2.13: srcDirs() 在 AGP 9 已废弃，改用 directories 可变集合。
+            //
+            // ⚠️ 必须**同时**注册 kotlin 与 java：原来的 java.srcDirs("../src")
+            // 会同时把该目录纳入 Kotlin 与 Java 两套源；只写 java.directories 时
+            // compileDebugKotlin 会报 NO-SOURCE，随后 Java 侧因找不到 Kotlin
+            // 生成的类（如 AppLog.hex）报「cannot find symbol」——症状离根因很远。
+            // 本项目源码在仓库根 src/（不是 app/src/），这个布局不能改。
+            kotlin.directories.add("../src")
+            java.directories.add("../src")
             manifest.srcFile("src/main/AndroidManifest.xml")
         }
     }
@@ -69,6 +78,11 @@ android {
     // 位置必须在顶层 kotlin {}（不能放在 android {} 内），见 kotl.in/u1r8ln
 
     // 纯 JVM 单元测试（GaiaCommands 帧构造/映射）；无 Android 依赖，缺失的框架桩返回默认值
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
@@ -163,13 +177,6 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
 }
 
-// 3.2.13: AGP 8 -> 9 后 `android.lint` 已废弃，必须作为顶层 DSL。
-// 参照 HyperEars（AGP 9.4）的写法。语义不变：release 不跑 lint、不因 lint 中断构建。
-lint {
-    checkReleaseBuilds = false
-    abortOnError = false
-}
-
 // —— LSPosed 推荐作用域 EDF 注入（构建后处理：注入 scope.list/ascope.list + 重签）——
 // AGP 8.x 签名内嵌 packageRelease，无 signRelease 任务；zip 追加会破坏 v2/v3，故 assemble 后重签。
 val postEdf by tasks.registering(Exec::class) {
@@ -198,7 +205,9 @@ val postEdf by tasks.registering(Exec::class) {
         val candidates = (btRoot.listFiles()?.toList() ?: emptyList())
             .filter { it.isDirectory && File(it, "apksigner").exists() }
             .sortedByDescending { it.name }   // 版本号字符串倒序：36 > 35 > 34
-        val apksigner = candidates.firstOrNull()?.let { file(it, "apksigner") }
+        // 注意：AGP 9 的 file(File, String) 重载已移除（第二参要 PathValidation），
+        // 这里直接用 java.io.File 拼接，避免踩这层 API 变化。
+        val apksigner = candidates.firstOrNull()?.let { File(it, "apksigner") }
             ?: throw GradleException(
                 "apksigner not found under $btRoot（请确认已安装 build-tools，" +
                 "且 ANDROID_HOME / local.properties 的 sdk.dir 指向正确；" +
