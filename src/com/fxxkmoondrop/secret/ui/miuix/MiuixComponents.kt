@@ -9,6 +9,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
@@ -25,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +44,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -437,72 +452,176 @@ internal fun MiuixDropdownRow(
     var expanded by remember { mutableStateOf(false) }
     val current = if (selectedIndex in items.indices) items[selectedIndex] else ""
 
-    MiuixCard {
-        MiuixListRow(
-            title = title,
-            subtitle = subtitle,
-            onClick = { expanded = true },
-            trailing = {
-                Text(
-                    text = current,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            },
-        )
-    }
+    // ── 记录手指位置（问题 1：菜单要弹在手指处）────────────────────
+    //
+    // Material 轨的做法（`M3Ui.dropdownRow`）：OnTouchListener 记 ACTION_DOWN 的
+    // rawX/rawY，再 `PopupWindow.showAtLocation(rootView, Gravity.NO_GRAVITY, px, py)`，
+    // 菜单还会从「离手指最近的角」缩放长出。
+    //
+    // 这里用 Compose 的 `Popup` + `PopupPositionProvider` 复刻同一语义。
+    // 不用 material3 的 `DropdownMenu` 的原因（三条都实测踩过）：
+    //   1. 它的 `offset` 是 **DpOffset**（dp 单位），换算成手指像素位置要做两次
+    //      density 转换，容易错；`PopupPositionProvider` 直接给 px。
+    //   2. 它的容器色默认是 material3 的 surface，**深色主题下仍是浅色**（用户截图
+    //      的问题 2），要改得传 `colors`，而 1.3.1 的参数名不稳定。
+    //   3. 它内部用 material3 的 MenuItemColors，字色/图标色也难完全接管。
+    // Popup 让我们对定位、配色、图标三件事有完全控制权。
+    //
+    // 无障碍点击（屏幕朗读器直接 performClick）没有 ACTION_DOWN，
+    // 此时退化为「锚定到行的中心」，与 Material 版一致。
+    val density = LocalDensity.current
+    var fingerPx by remember { mutableStateOf(Offset.Zero) }
+    var hasFinger by remember { mutableStateOf(false) }
+    var rowCenterPx by remember { mutableStateOf(Offset.Zero) }
+    var boxOriginInWindow by remember { mutableStateOf(Offset.Zero) }
 
-    androidx.compose.material3.DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { expanded = false },
-    ) {
-        items.forEachIndexed { idx, label ->
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text(label) },
-                onClick = {
-                    expanded = false
-                    onPick(idx)
-                },
-                trailingIcon = {
-                    // 3.2.13: 用 Canvas 自绘勾，**不引 material-icons**。
-                    //
-                    // 引 `androidx.compose.material:material-icons-core` 后实测：
-                    //   NoClassDefFoundError: androidx.compose.material.icons.Icons$Filled
-                    // 原因不是依赖没加，而是 **R8 把它整个裁掉了**
-                    // （usage.txt 里有 295 条 material.icons 的删除记录）——
-                    // 那些类只被间接引用，R8 判定不可达。
-                    // 为了一个勾去和 R8 较劲不值当，Canvas 画零依赖、零风险。
-                    if (idx == selectedIndex) {
-                        MiuixCheckMark()
+    MiuixCard {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { c ->
+                    // ⚠️ 必须用 positionInWindow 而不是 positionInRoot。
+                    // PopupPositionProvider 返回的坐标是**窗口坐标系**；
+                    // 而下面 pointerInput 记的 down.position 是**本节点的局部坐标**。
+                    // 两者不在同一个坐标系里直接相加就是错的 ——
+                    // 实测症状：菜单一律弹在屏幕顶部（y≈40），
+                    // 因为局部 y 只有 0~280 的量级，与窗口 y（≈1100）差了两个数量级。
+                    val win = c.positionInWindow()
+                    rowCenterPx = Offset(
+                        x = win.x + c.size.width / 2f,
+                        y = win.y,
+                    )
+                    boxOriginInWindow = Offset(win.x, win.y)
+                }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitPointerEvent().changes.firstOrNull { it.pressed }
+                            if (down != null) {
+                                // down.position 是相对本 Box 的局部坐标，
+                                // 加上 Box 在窗口里的原点才是窗口坐标。
+                                fingerPx = Offset(
+                                    x = boxOriginInWindow.x + down.position.x,
+                                    y = boxOriginInWindow.y + down.position.y,
+                                )
+                                hasFinger = true
+                            }
+                        }
                     }
+                }
+                .clickable { expanded = true },
+        ) {
+            MiuixListRow(
+                title = title,
+                subtitle = subtitle,
+                trailing = {
+                    Text(
+                        text = current,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
                 },
             )
         }
     }
-}
 
-/**
- * 选中勾。Canvas 自绘，零依赖（理由见 MiuixDropdownRow 里的注释）。
- */
-@Composable
-internal fun MiuixCheckMark(
-    modifier: Modifier = Modifier,
-    size: androidx.compose.ui.unit.Dp = 18.dp,
-    color: Color = MiuixTheme.colorScheme.primary,
-) {
-    Canvas(modifier = modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.14f)
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.18f, h * 0.52f)
-            lineTo(w * 0.42f, h * 0.76f)
-            lineTo(w * 0.82f, h * 0.26f)
+    val anchor = if (hasFinger) fingerPx else rowCenterPx
+
+    if (expanded) {
+        // 3.2.13：参数名必须是 `popupPositionProvider`（Compose ui 1.11.2 的
+        // Popup 签名就是这个名字，不是 `positionProvider`）。
+        // PopupPositionProvider 接口在 1.11.2 只有一个 calculatePosition 方法，
+        // 之前的「Conflicting overloads」是因为参数名写错后 Kotlin 退化成了
+        // 另一个重载。
+        Popup(
+            popupPositionProvider = object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset {
+                    // 与 Material 版 `menu place: want=x,y` 同一套逻辑：
+                    // 菜单水平居中于手指，超出屏幕则向内收。
+                    val x = (anchor.x - popupContentSize.width / 2f)
+                        .toInt()
+                        .coerceIn(
+                            8,
+                            (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8),
+                        )
+                    return IntOffset(x, anchor.y.toInt())
+                }
+            },
+            properties = PopupProperties(
+                // 菜单要能超出所在行的边界（否则会被裁掉）
+                clippingEnabled = false,
+            ),
+        ) {
+            Card(
+                // 3.2.13 用户截图的问题 2：原本 material3 的菜单容器是**纯白**，
+                // 深色主题下与整页配色完全不搭、可读性差。
+                // 这里显式用与卡片同源的 elevatedSurface()，文字用 onSurface，
+                // 深浅两套主题下都保证对比度。
+                colors = CardDefaults.defaultColors(
+                    color = elevatedSurface(),
+                    contentColor = MiuixTheme.colorScheme.onSurface,
+                ),
+                modifier = Modifier
+                    .widthIn(min = 160.dp, max = 280.dp)
+                    .padding(4.dp),
+            ) {
+                items.forEachIndexed { idx, label ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(MiuixSpec.CARD_RADIUS))
+                            .background(
+                                if (idx == selectedIndex) MiuixTheme.colorScheme.primary
+                                    .copy(alpha = 0.16f) else Color.Transparent
+                            )
+                            .clickable {
+                                expanded = false
+                                onPick(idx)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = label,
+                            modifier = Modifier.weight(1f),
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        )
+                        // 3.2.13 用户要求：优先用图标库/素材库里的图标。
+                        // 用项目自带的 `R.drawable.ic_check`（Material 版下拉同款，
+                        // 属 Android 内置矢量素材），**不用** material-icons ——
+                        // 后者会被 R8 整个裁掉（usage.txt 295 条删除记录）。
+                        if (idx == selectedIndex) {
+                            Image(
+                                painter = androidx.compose.ui.res.painterResource(
+                                    com.fxxkmoondrop.secret.R.drawable.ic_check,
+                                ),
+                                contentDescription = null,
+                                // Compose 1.7+ 用 colorFilter 取代 tint
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                                    MiuixTheme.colorScheme.primary,
+                                ),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
         }
-        drawPath(path, color = color, style = stroke)
     }
 }
 
+// 3.2.13: 原来这里有个 Canvas 自绘的「选中勾」MiuixCheckMark，
+// 现已按用户要求「尽量用图标库/素材库里的图标」改为
+// `Image(painterResource(R.drawable.ic_check))` —— 项目自带的 Material 矢量素材，
+// 零新增依赖、零 R8 风险。
+// （中途试过 material-icons 的 Icons.Filled.Check，但那些类会被 R8 整个裁掉，
+//   usage.txt 里有 295 条删除记录，运行时报 NoClassDefFoundError。）
 /**
  * 卡片色：相对页面背景**明确抬升一档**，保证两种主题下都可见。
  *
