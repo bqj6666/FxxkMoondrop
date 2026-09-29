@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
+import com.fxxkmoondrop.secret.ui.miuix.MiuixHostFragment
 
 /**
  * alpha2.12: 官方单 Activity 架构 —— 三页 Fragment 切换，底部导航常驻（M3 官方 fade 仅作用于内容区）。
@@ -84,10 +85,19 @@ class MainActivity : FragmentActivity() {
     /** 官方 M3 切换：Fragment fade 过渡（内容动，底栏静止） */
     private fun showTab(id: Int) {
         curTab = id
+        // 3.2.13: 双主题分派点（**全项目唯一**）。
+        //
+        // Material 轨一行未改，只是这里多一个 if：选 Miuix 时走 ui/miuix 下的
+        // Compose 实现，否则走原 Fragment。两套并存，用户在设置页随时切换。
+        // 删掉整个 ui/miuix 目录 + 这个 if 即可回到纯 Material。
+        val miuix = MiuixSurface.enabled(this)
         val f: Fragment = when (id) {
-            2 -> SettingsFragment()
-            3 -> AboutFragment()
-            else -> OverviewFragment()
+            2 -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.SETTINGS)
+                 else SettingsFragment()
+            3 -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.ABOUT)
+                 else AboutFragment()
+            else -> if (miuix) MiuixHostFragment(MiuixHostFragment.Screen.OVERVIEW)
+                    else OverviewFragment()
         }
         val ft: FragmentTransaction = supportFragmentManager.beginTransaction()
         // alpha2.53: 对齐 org.lsposed.manager 的切页动效 ——
