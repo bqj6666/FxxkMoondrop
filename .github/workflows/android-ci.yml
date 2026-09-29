@@ -136,12 +136,6 @@ jobs:
           fail_on_unmatched_files: false
           generate_release_notes: false
 
-      - name: 触发模块镜像同步（ci 预发布）
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run sync-module-release.yml -f tag="ci-${{ github.run_number }}" || true
-
       - name: 生成 Release 说明（含 CHANGELOG 更新日志）
         if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
@@ -168,8 +162,3 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: false
           generate_release_notes: false
-
-      # 3.2.13: 正式版的镜像同步**不再由这里显式触发**。
-      # sync workflow 自己监听 push: tags，tag 一推就会同步；这里再 dispatch 一次
-      # 等于同一件事做两遍（且与 release: published 撞在一起时是三遍）。
-      # 手写版本号 tag 时，Release 是本步骤刚建的，同步紧随其后由 push 触发器接手。

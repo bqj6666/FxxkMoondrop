@@ -1,15 +1,23 @@
 name: Sync module release to modules.lsposed
 
 on:
-  # 3.2.13: 删掉 `release: published` 触发器。
-  # 一个 tag push 同时命中 release: published 与 push: tags，而 android-ci 还会
-  # 显式 dispatch 一次 —— 一次发版因此跑 2~3 遍。两个 run 并发时会在「删旧 asset」
-  # 与「上传新 APK」之间互相踩：后者把前者刚传的删掉，或撞 422 失败。
-  # 实测镜像仓因此留下过一个 ci-N 的**草稿**残留（草稿不可见，却挂着 APK）。
-  # 现在只留 push: tags 这一个自动触发源：tag 一推就同步，语义明确且只跑一次；
-  # 需要手工补同步时用 workflow_dispatch。
-  push:
-    tags: ['*']
+  # 触发器收敛为「release: published」+ 手工 dispatch，去掉 push: tags。
+  #
+  # 为什么不能用 push: tags：
+  #   softprops/action-gh-release 在 tag 不存在时会**顺手创建 tag**，
+  #   这本身又产生一次 tag push。于是 CI 预发布会同时命中
+  #   「push: tags 自动同步」和「android-ci 里的显式 dispatch」，
+  #   一次发版跑两遍；两个 run 并发在「删旧 asset」与「上传新 APK」之间互相踩，
+  #   实测镜像仓因此留下过一个 ci-N 的**草稿**残留（草稿不可见，却挂着 APK）。
+  #
+  # 为什么 release: published 是正确的单一触发源：
+  #   - 它只在 Release 真正发布那一刻触发一次，语义 = 「该同步了」；
+  #   - 此时主仓的 APK 已经挂好，镜像一定能拿到产物；
+  #   - 编辑已发布的 Release 不会触发（只有 draft→published 才触发），
+  #     所以不会有人改个说明就把同步重跑一遍。
+  # 推 tag 建 Release 的活交给 android-ci，同步一律等发布事件。
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -19,15 +27,15 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    # 3.2.13: 同一个 tag 只允许一个 mirror run 在跑。手动补同步时若正好撞上
-    # 自动那次，本次直接跳过而不是排队 —— 后到的那个本来就无事可做，
-    # 排队反而可能在前一个「删完旧 asset、还没上传完」的窗口里插进来。
+    # 同一个 tag 只允许一个 mirror run 在跑。同 tag 重复入队时
+    # 后到的直接排队，不会插进前一个「删完旧 asset、还没上传完」的窗口。
     #
-    # 按 **tag** 分组而不是 github.ref：dispatch 事件的 ref 是默认分支，
-    # 用它分组会让「补同步 A」和「补同步 B」互相排队，而两者毫无关系。
-    # tag 表达式在 on 里已 resolve 过，这里直接取输入；push 事件则用 ref_name。
+    # 必须按 **tag** 分组：release 事件与 dispatch 事件的 github.ref 都是默认
+    # 分支（main），按 ref 分组会让「自动同步 A」和「补同步 B」互相排队，
+    # 而两者毫无关系。
+    # release 事件取 release.tag_name，dispatch 取输入的 tag。
     concurrency:
-      group: mirror-${{ github.event.inputs.tag || github.ref_name }}
+      group: mirror-${{ github.event.release.tag_name || github.event.inputs.tag }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -43,7 +51,12 @@ jobs:
       - name: Resolve tag + prerelease flag
         id: tag
         run: |
+          # 三个来源，依次兜底：workflow_dispatch 输入 → release 事件的
+          # tag_name → （理论已不存在的）tag push 的 ref_name。
+          # release 事件的 GITHUB_REF_NAME 是**默认分支**（main），
+          # 直接用它会把 main 当成要同步的 tag，所以必须先取 release.tag_name。
           TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.event.release.tag_name }}"
           [ -z "$TAG" ] && TAG="${GITHUB_REF_NAME}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           if echo "$TAG" | grep -Eq '^[0-9]+-.+$'; then
@@ -110,6 +123,9 @@ jobs:
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          # workflow_dispatch 补同步历史版本时置 1：允许删掉重建。
+          # push: tags 触发的正常同步一律为 0，走「已存在就跳过」。
+          ALLOW_REPUBLISH: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: |
           set -e
           TAG="${{ steps.tag.outputs.tag }}"
@@ -133,16 +149,27 @@ jobs:
             # 干净重建：删除旧 release，再以目标 prerelease 新建。
             # 对正式版尤其必要：避免旧的预发行状态锁死 latest。
             if [ "$PRERELEASE" != "$CURR_PRE" ]; then
-              echo "预先状态不一致，删除重建 (${TAG})，让 latest 重算"
+              echo "预发布状态不一致，删除重建 (${TAG})，让 latest 重算"
+              curl -sS -X DELETE -H "$AUTH" -H "$ACCEPT" \
+                "https://api.github.com/repos/${REPO}/releases/${EXIST}" >/dev/null || true
+              REL_ID=""
+            elif [ "${ALLOW_REPUBLISH:-0}" = "1" ]; then
+              # 补同步历史版本时**删掉重建**，而不是 PATCH。
+              #
+              # 原因：GitHub 的 /releases/latest 按 **published_at** 取最新，
+              # 而任何 PATCH 都会把 published_at 刷成当前时间。于是「PATCH 一个
+              # 老版本的说明」会让那个老版本突然变成 latest —— 实测补同步
+              # 274-alpha2.41.0 之后，镜像仓的 latest 从 331-3.2.11 跳到了 274。
+              # 删掉重建同样会刷新 published_at，但那时它就是最新的，没问题。
+              echo "允许重发 (${TAG})，删除重建"
               curl -sS -X DELETE -H "$AUTH" -H "$ACCEPT" \
                 "https://api.github.com/repos/${REPO}/releases/${EXIST}" >/dev/null || true
               REL_ID=""
             else
-              # 状态一致，直接复用（保留下载数），仅修正 name
-              curl -sS -X PATCH -H "$AUTH" -H "$ACCEPT" \
-                -H "Content-Type: application/json" \
-                "https://api.github.com/repos/${REPO}/releases/${EXIST}" \
-                --data-binary @release_payload.json >/dev/null || true
+              # 正常同步：状态一致就**什么都不做**。
+              # 原先这里会 PATCH 一遍「仅修正 name」，而 name 本来就等于 tag，
+              # 改它是空操作，代价却是刷新 published_at 并劫持 latest。
+              echo "镜像仓已存在且状态一致 (${TAG})，跳过（避免刷新 published_at 影响 latest）"
               REL_ID="${EXIST}"
             fi
           else
