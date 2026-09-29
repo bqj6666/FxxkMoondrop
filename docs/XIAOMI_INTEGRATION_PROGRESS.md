@@ -453,3 +453,26 @@ java -Djava.io.tmpdir=/dev/gtmp2 -cp <gradle-launcher.jar>      org.gradle.launc
 
 这个体积对 LSPosed 模块来说偏大（同类模块通常 2-4M）。
 **待用户决定**：接受 / 开 R8 压缩 / 只保留 Compose 不引 Miuix。
+
+## 2026-09-29 本机构建封装 `g9.sh`
+
+本机 PROot 环境跑 Gradle 9 的两条绕行已固化为 `./g9.sh`：
+
+```bash
+./g9.sh assembleDebug
+./g9.sh testDebugUnitTest
+./g9.sh :app:assembleRelease
+```
+
+要点（已写进脚本注释，勿删）：
+- `GRADLE_USER_HOME=/dev/gh2` —— 必须是**真实目录**，符号链接实测也炸
+- launcher JVM 的 `-Djava.io.tmpdir=/dev/gtmp2` —— 必须直接启 launcher，
+  `JAVA_OPTS` / `GRADLE_OPTS` / `-Dorg.gradle.jvmargs` 全部无效
+- `/dev` 是 tmpfs，**重启即失**，脚本会在缓存缺失时自动从 `/root/.gradle` 重建
+- JDK 必须 21（默认的 25 会让 Gradle 报 `25.0.4.1`）
+
+本机验证结果：
+- `testDebugUnitTest` 131 项全过
+- `assembleDebug` BUILD SUCCESSFUL（18M，未压缩）
+- `assembleRelease` 失败于 **keystore 口令**（本机没有，CI 才注入）——
+  这是环境限制，不是代码问题
