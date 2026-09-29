@@ -90,3 +90,23 @@ PUDDING 协议（来自 PuddingPods 文档，可信）：
 
 **本次动作**：
 - DexKit 2.2.0 → 2.3.0（2 天前发布）
+
+### 2026-09-29 · DexKit 升级完成 ✅
+
+**改动**：`app/build.gradle.kts` — `org.luckypray:dexkit:2.2.0` → `2.3.0`
+
+**验证**：
+- 联网解析成功（`--offline` 会 FAILED，因为本机无新版缓存）
+- 4 个 ABI 的 `libdexkit.so` 齐全，arm64 从 414728 → 434788 字节
+- `ndk.abiFilters` 仍只留 arm64/armeabi-v7a，x86 已正确剔除（APK 内 lib/x86 计数 0）
+- `assembleDebug` 通过，APK 8.2M
+- **单变体 `testDebugUnitTest` 102 项全过**（debug/release 不要相加）
+- 提交 `736a1b9`
+
+**踩坑记录**：
+- `JAVA_HOME` 必须设 `java-21-openjdk-arm64`。默认的 JDK 25 会让 Gradle 报
+  `What went wrong: 25.0.4.1` —— 那串数字是 JDK 版本号，不是 SDK 错误。
+  Kotlin 内嵌编译器解析不了 JDK 25。
+- 只跑 `./gradlew dependencies` 不会下载 aar，必须真正 `assembleDebug`。
+
+**下一步**：P0 主体 —— `XiaomiProbe` 检测门禁
