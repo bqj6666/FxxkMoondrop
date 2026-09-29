@@ -12,7 +12,7 @@
 | 期 | 内容 | 状态 |
 |---|---|---|
 | **P0** | DexKit 升级 + `XiaomiProbe` 检测门禁 + 设置页门禁 | ✅ 已完成 |
-| **P1** | Device ID 映射 + Miuix 轨骨架 + 主题切换 | ⏳ 未开始（下一步） |
+| **P1** | 载体 ID 映射 + Miuix 轨骨架 + 主题切换 | 🔄 进行中 |
 | **P2** | 系统入口 hook（设备中心卡 / MiLink / 系统蓝牙页） | ⏳ 未开始 |
 | **P3** | 焦点岛实装（`focus-api:1.4`） | ⏳ 未开始 |
 
@@ -151,3 +151,74 @@ PUDDING 协议（来自 PuddingPods 文档，可信）：
   产生歧义，改成 `private val noPkg: (String) -> Boolean = { false }` 才稳。
 
 **下一步**：P1 —— Device ID 映射 + Miuix 轨骨架 + 主题切换
+
+
+### 2026-09-29 · 关键发现：silverpoetry/HyperEars
+
+用户要求「看看上游和 fork 有没有」→ 找到**全网唯一支持水月雨的 HyperOS 项目**。
+
+仓库：`github.com/silverpoetry/HyperEars` · 37809 行 · AGPL-3.0 · 多模块
+（`protocol` / `integration` / `system-module` / `protocol-test`）
+适配厂商：Apple / Bose / Edifier / Honor / Huawei / **Moondrop** / NiceHck /
+OPPO / QCY / Rose / Sony / StarRing / Technics / Vivo
+
+### 三个决定性发现
+
+**1. 载体 ID 不是「型号→ID」，是「形态→ID」** ⭐ 核心设计
+
+`system-module/.../hook/MiLinkCarrierIdentity.kt`：
+
+```kotlin
+const val TWS_DEVICE_ID = "01010607"       // TWS 形态
+const val HEADPHONES_DEVICE_ID = "01013A04"  // 小米 O70C 头戴
+```
+
+原文关键注释（决定我们照抄这个思路的理由）：
+
+> These IDs are **compatibility carriers, not model identity**.
+> adapters must **never depend on** the Xiaomi model represented by this value.
+
+→ 映射键是**形态**（TWS / 头戴）而非型号，因此**不存在硬编码型号表**，
+新增形态只需加一行。`01010607` 与 PuddingPods 文档一致，互为印证。
+
+**2. 主题是二维正交的，不是一个下拉框**
+
+`ui/theme/UiPreferences.kt`：
+
+```kotlin
+enum class UiThemeMode { SYSTEM, LIGHT, DARK }        // 亮暗
+data class UiPreferences(
+    val style: UiStyle = UiStyle.MIUIX,                // 风格
+    val themeMode: UiThemeMode = UiThemeMode.SYSTEM,
+    val navigationBlur: Boolean = false,
+    val floatingNavigationBar: Boolean = false,
+    val interfaceScale: Float = 1.0f,                  // 0.9~1.1
+)
+```
+
+原文：
+> Renderer-specific values remain persisted when another renderer is selected
+> → **切换风格不丢另一套的专属设置**（Miuix 的模糊/悬浮栏/缩放等保留）
+
+**3. OppoPods 的 `device_models.json` 不能用于我们**
+
+那张表 137 个型号 / 132K，但**全是 OPPO(56) realme(46) OnePlus(32) DIZO(3)**，
+**一个水月雨都没有**。它读表不用硬编码的方式值得学，但表本身对我们无用。
+
+### ⚠️ 协议矛盾（三处说法不一致，待实机验证）
+
+| 来源 | ANC 命令 | 模式值 |
+|---|---|---|
+| PuddingPods 文档 | `1D 40 04` | 关闭00 **自适应01** 通透02 抗风03 基础04 |
+| HyperEars | `1D 40/41 03/04` | 三档 |
+| **我们** | `F_ANC_V2=32` `SET=4` | OFF0 ON1 **通透2** 抗风3 **自适应4** LIVE5 |
+
+我们的通透/自适应与 PuddingPods 错位。**用户已裁定：按我们现状不动**
+（`GaiaCommandsTest` 23 项覆盖 + 记忆里 PUDDING 走 GAIA v4 为实测结论）。
+差异已记录，将来实机验证时再处理。**L1 协议层继续零改动。**
+
+### 用户本轮裁定
+
+1. 映射键用**形态**（TWS/头戴）—— 采纳
+2. PUDDING 协议**按我们的**—— 采纳
+3. HyperEars 可**学设计思路**（AGPL-3.0，不抄代码）
