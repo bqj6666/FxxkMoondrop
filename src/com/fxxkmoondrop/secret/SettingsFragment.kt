@@ -287,6 +287,42 @@ class SettingsFragment : Fragment() {
                 "FastPairHook 模块未激活，以下集成项不可用",
                 "FastPairHook module inactive; the integrations below are unavailable")))
         }
+        // ── 小米 / HyperOS 系统集成（3.2.13）────────────────────────────
+        // 门禁：非小米设备上整组置灰并给出原因，不提供开关。
+        // 与「模块未激活」不同，这里**不隐藏**分组 —— 用户需要看到
+        // 「为什么我的手机上没有这一项」，静默消失会让人以为装漏了。
+        box.addView(makeSubLabel(Lang.t("小米系统集成", "Xiaomi integration")))
+        val isXiaomi = XiaomiProbe.isXiaomi()
+        if (!isXiaomi) {
+            box.addView(makeSubLabel(Lang.t(
+                "未检测到小米 / HyperOS 设备（当前机型：${android.os.Build.BRAND}），以下集成不可用",
+                "Not a Xiaomi/HyperOS device (brand: ${android.os.Build.BRAND}); unavailable")))
+        }
+        val swXiaomi = makeTintedSwitch()
+        swXiaomi.isChecked = isXiaomi && getSP().getBoolean("feat_xiaomi_integration", true)
+        if (!isXiaomi) {
+            // 只灰不藏：如实反映「本机用不了」，同时让用户知道功能存在
+            swXiaomi.isEnabled = false
+            swXiaomi.isClickable = false
+            swXiaomi.alpha = 0.4f
+        }
+        val rowXiaomi = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_tune,
+                Lang.t("HyperOS 设备集成", "HyperOS device integration"),
+                Lang.t("接入系统设备中心卡片、焦点岛与高级耳机页",
+                        "Integrate with device-center cards, Focus Island and the advanced headset page"),
+                swXiaomi, null)
+        if (isXiaomi) {
+            swXiaomi.setOnCheckedChangeListener { _, checked ->
+                getSP().edit().putBoolean("feat_xiaomi_integration", checked).commit()
+            }
+        }
+        if (!isXiaomi) {
+            rowXiaomi.isEnabled = false
+            rowXiaomi.alpha = 0.4f
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowXiaomi))
+        box.addView(spacer(dp(14)))
+
         box.addView(makeSubLabel(Lang.t("官方集成", "Official integration")))
         val swOfficial = makeTintedSwitch()
         swOfficial.isChecked = if (hookOff) false else getSP().getBoolean("feat_official_panel", true)
