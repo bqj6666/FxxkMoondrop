@@ -571,8 +571,8 @@ Miuix 轨全部代码集中在 `src/.../ui/miuix/`，删目录即回退。
 | 步 | 内容 | 状态 |
 |---|---|---|
 | 1 | 基础控件库 `MiuixComponents.kt` | ✅ 已完成并装机 |
-| 2 | `MiuixScreen` + `MiuixHostFragment` 骨架 | ⏳ 下一步 |
-| 3 | 概览页 | ⏳ |
+| 2 | `MiuixHostFragment` 骨架 + 分派点接入 | ✅ 已完成并装机 |
+| 3 | 概览页（当前为占位） | ⏳ 下一步 |
 | 4 | 关于页（最简单） | ⏳ |
 | 5 | 设置页（最复杂） | ⏳ |
 | 6 | 弹窗（跨进程，独立路径，风险最高） | ⏳ |
@@ -581,3 +581,40 @@ Miuix 轨全部代码集中在 `src/.../ui/miuix/`，删目录即回退。
 卡片间距 12），两套主题要像同一款应用的两个皮肤。
 `MiuixSwitchRow` 复用了 3.2.12 的 MaterialSwitch 教训 ——
 置灰必须同时作用在视觉（alpha）与交互（回调传 null），否则是同一个 bug。
+
+
+## 2026-09-29 CI 第二轮验证通过
+
+run 36563937804 **全绿**，且**新增的「单元测试」步骤 ✓ 真正执行了**
+（此前 CI 从不跑单测，131 项测试只在���机跑）。
+
+## 第 2 步完成：MiuixHostFragment 骨架 + 分派点接入
+
+**分派点唯一**（`MainActivity.showTab()`）：
+
+```kotlin
+val miuix = MiuixSurface.enabled(this)
+val f: Fragment = when (id) {
+    2 -> if (miuix) MiuixHostFragment(Screen.SETTINGS) else SettingsFragment()
+    3 -> if (miuix) MiuixHostFragment(Screen.ABOUT)     else AboutFragment()
+    else -> if (miuix) MiuixHostFragment(Screen.OVERVIEW) else OverviewFragment()
+}
+```
+
+Material 轨三个 Fragment **一行未改**。删掉 `ui/miuix/` 目录 + 这个 if
+即可回到纯 Material。
+
+**体积印证 R8 真的在工作**：第 1 步 4.0M → 第 2 步 **4.6M**。
+涨的 0.6M 是 Miuix 渲染路径被真实引用后 R8 保留的部分 ——
+第 1 步时 Miuix/Compose 会被整体裁掉（dex 实测 0 处匹配）。
+
+**MiuixHostFragment 不需要 proguard keep**：由 MainActivity 直接 new，
+编译期绑定，非字符串加载。
+
+**已装机**：`pm install -r -d` Success，实机启动正常无崩溃。
+
+### 待用户实测
+
+我读不到 `/data/user/0/...`（应用数据隔离），无法代为切换主题。
+请手动验证：设置 → 外观 → 界面风格 → HyperOS (Miuix) → 看「关于」页
+是否变为 Miuix 观感；再切回 Material You 确认原界面完好。
