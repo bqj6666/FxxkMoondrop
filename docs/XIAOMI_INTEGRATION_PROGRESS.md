@@ -661,3 +661,42 @@ Caused by: java.lang.NoSuchMethodException: sp0.<init> []
 标题暂不随滚动收缩（需嵌套滚动协作，留到第 3 步与概览页一起做）。
 
 **当前测试数：135 项**（131 + Miuix 4）
+
+## 2026-09-29 Miuix 轨第二轮用户实测：3 个问题修复
+
+### 1. 切换后不立即生效（两侧共有的 bug）
+
+根因：`MainActivity.onCreate` 里 `if (savedInstanceState == null) showTab(curTab)`。
+`recreate()` 后 `savedInstanceState != null` → **showTab 不执行** →
+FragmentManager 恢复**旧主题的 Fragment** → SP 已切但界面不变。
+
+⛔ Material 设置页那行 `scheduleRebuild(0L)` 内部也是 `act.recreate()`，
+**同样有这个 bug**。两侧都改用新增的 `MainActivity.applyStyleSwitch()`
+（直接 `showTab(curTab)`，按当前 SP 重新分派，不重建 Activity）。
+
+### 2. 切换入口移到设置页
+
+- Miuix 关于页的切换行**移除**，改为说明「在设置 → 外观 → 界面风格中切换」
+- Miuix **设置页**新增外观分组：状态行 + 切回 Material + 切到 Miuix
+- 两侧共用同一 SP 键 `ui_style`
+
+### 3. 排版改回对齐 Material（我上一轮做错了方向）
+
+⛔ 上一轮我照抄了 **OppoPods** 的大标题风格 —— 那是 OppoPods 的排版，
+不是我们的。用户要求「跟 material 主题时排版一样」。
+
+已改为严格复刻 `M3Ui.collapsingHeader`：
+
+```
+大标题展开高   152dp  ← 取自 M3Ui.HEADER_EXPANDED_DP
+大标题收缩高    64dp  ← 取自 M3Ui.HEADER_COLLAPSED_DP
+结构           Box 叠放（Material 是 FrameLayout 叠放）
+内容区         verticalScroll + paddingTop=152dp
+收缩           graphicsLayer: translationY + scale 0.55
+```
+
+⚠️ 刻意**不用** material3 的 TopAppBar（Miuix 轨里塞 Material 组件会串味），
+也**不用** Miuix 的 TopAppBar（它 56dp 小标题栏规格与 Material 152dp 不同，
+直接用会导致切换时布局跳动）。
+
+**当前测试数：135 项**
