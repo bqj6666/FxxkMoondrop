@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.fxxkmoondrop.secret.Lang
 import com.fxxkmoondrop.secret.MainActivity
 import com.fxxkmoondrop.secret.UiStyle
 
@@ -17,8 +18,9 @@ import com.fxxkmoondrop.secret.UiStyle
  */
 @Composable
 internal fun MiuixOverviewScreen() {
+    // 3.2.13 实机截图发现：页面大标题已是「概览」，再放一个同名的
+    // MiuixSectionLabel("概览") 就重复了。分组标签只用于**页内**分节。
     MiuixPage(title = "概览") {
-        MiuixSectionLabel("概览")
         MiuixCard {
             MiuixListRow(
                 title = "概览页（Miuix）",
@@ -37,8 +39,8 @@ internal fun MiuixOverviewScreen() {
 @Composable
 internal fun MiuixSettingsScreen() {
     val ctx = LocalContext.current
+    // 页面大标题已是「设置」，不再重复同名分组标签。
     MiuixPage(title = "设置") {
-        MiuixSectionLabel("设置")
         MiuixCard {
             MiuixListRow(
                 title = "设置页（Miuix）",
@@ -49,36 +51,23 @@ internal fun MiuixSettingsScreen() {
 
         // ── 外观 ────────────────────────────────────────────────
         MiuixSectionLabel("外观")
-        MiuixCard {
-            MiuixListRow(
-                title = "界面风格",
-                subtitle = "当前：HyperOS（Miuix）",
-            )
-        }
-        MiuixGap()
-        MiuixCard {
-            MiuixListRow(
-                title = "切回 Material You",
-                subtitle = "点击立即切换（与 Material 版同一个 SP 键）",
-                onClick = {
-                    UiStyle.set(ctx, UiStyle.MATERIAL)
-                    // 立即重建当前页，不等冷启动。
-                    // 不能用 recreate()：那条路 savedInstanceState 非空，
-                    // showTab 不会被调用，界面不会变（详见 MainActivity.applyStyleSwitch 注释）。
-                    (ctx as? MainActivity)?.applyStyleSwitch()
-                },
-            )
-        }
-        MiuixGap()
-        MiuixCard {
-            MiuixListRow(
-                title = "切到 HyperOS（Miuix）",
-                subtitle = "当前已是 Miuix 轨，此项用于确认切换通路",
-                onClick = {
-                    UiStyle.set(ctx, UiStyle.MIUIX)
-                    (ctx as? MainActivity)?.applyStyleSwitch()
-                },
-            )
+
+        // 3.2.13 用户要求：「切换的开关也要做成 material 一样的、
+        // 展开选项切换的那种样式」—— 即 M3Ui.dropdownRow 那套。
+        MiuixDropdownRow(
+            title = Lang.t("界面风格", "Interface style"),
+            subtitle = Lang.t("选择控件观感；切换不影响上方亮暗设置",
+                    "Control appearance; independent of light/dark"),
+            items = listOf(
+                Lang.t("Material You", "Material You"),
+                Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)"),
+            ),
+            selectedIndex = UiStyle.entries.indexOf(UiStyle.current(ctx)),
+        ) { si ->
+            UiStyle.set(ctx, UiStyle.entries[si])
+            // 立即重建当前页，不等冷启动。不能用 recreate()：
+            // 那条路 savedInstanceState 非空，showTab 不会被调用（详见 applyStyleSwitch 注释）。
+            (ctx as? MainActivity)?.applyStyleSwitch()
         }
         MiuixGap()
         MiuixCard {

@@ -117,6 +117,7 @@ class MiuixHostFragment : Fragment() {
 internal fun MiuixAboutScreen() {
     val ctx = LocalContext.current
     MiuixPage(title = "关于") {
+        // 页面大标题已是「关于」，不再重复放同名分组标签。
         MiuixCard {
             MiuixListRow(title = "FxxkMoondrop", subtitle = "水月雨耳机系统级控制模块")
         }

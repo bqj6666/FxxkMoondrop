@@ -1,11 +1,15 @@
 package com.fxxkmoondrop.secret.ui.miuix
 
+import android.os.Build
+
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +21,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.height
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -107,7 +121,10 @@ internal fun MiuixPage(
                 .verticalScroll(scroll)
                 .padding(horizontal = 16.dp)
                 // 顶部留出展开态标题的高度，滚动时内容从标题下方穿过
-                .padding(top = MiuixSpec.HEADER_EXPANDED_DP.dp, bottom = bottomPadding),
+                .padding(
+                    top = MiuixSpec.HEADER_EXPANDED_DP.dp + statusBarDpOf(),
+                    bottom = bottomPadding,
+                ),
         ) { content() }
 
         if (title != null) {
@@ -153,16 +170,31 @@ internal fun MiuixCollapsingHeader(
     val baseY = expanded * (1f - t) + collapsed * 0.5f * t
     val scale = 1f - 0.45f * t          // 28sp -> 约 15.4sp，与 Material 收缩后的小标题相当
 
+    // 3.2.13 实机截图：标题被状态栏压住。Material 轨靠 `M3Ui.fitSystemBars`
+    // 处理（Activity 层面 setDecorFitsSystemWindows(false) + 手动 padding），
+    // Miuix 轨走 Compose，用 WindowInsets 取状态栏高度加在标题上方。
+    val statusBarPx = statusBarHeightPx()
+
+    val statusBarDp = with(LocalDensity.current) { statusBarPx.toDp() }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(expanded.dp),
+            // ⚠️ 高度是 expanded **加上**状态栏，不是 padding(top=)：
+            // 固定高度后再 padding 会把内容区压缩，标题又 align 在 Bottom，
+            // 于是标题被顶到状态栏底下 —— 实机截图就是这个症状。
+            // 正确做法是把状态栏高度算进总高度，标题的下沿位置保持不变。
+            .height((expanded.dp) + statusBarDp),
     ) {
         Text(
             text = title,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                .padding(
+                    start = 16.dp, end = 16.dp,
+                    bottom = 16.dp,
+                    top = statusBarDp,
+                )
                 .graphicsLayer {
                     translationY = -((1f - t) * (expanded - collapsed) * density) +
                             (t * (expanded - collapsed) * 0.5f * density)
@@ -171,7 +203,7 @@ internal fun MiuixCollapsingHeader(
                     // 缩放会让人看着「糊」；按位移反向补偿透明度变化在 HyperOS 里不常见，
                     // 这里只做位移+缩放，观感接近 Material 的 collapsing header。
                 },
-            style = MiuixTheme.textStyles.title1,
+            style = MiuixTheme.textStyles.headline1.copy(fontSize = 28.sp),
             color = MiuixTheme.colorScheme.onSurface,
         )
     }
@@ -205,7 +237,38 @@ internal fun MiuixCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val m = if (onClick != null) modifier.clickable { onClick() } else modifier
-    Card(modifier = m.fillMaxWidth(), content = content)
+    Card(
+        // 3.2.13 实机截图发现：不显式给 containerColor 时，Miuix 的 Card 在浅色
+        // 主题下背景与页面底色几乎一致，卡片「看不见」——只有文字浮在背景上。
+        // 显式用 onSurface 的低透明度当卡片底，靠 alpha 区分层级。
+        // Miuix 0.9.2 的取色入口是 `CardDefaults.defaultColors(color, contentColor)`，
+        // **不是** material3 的 CardDefaults.cardColors()；参数名也不是 containerColor。
+        // 默认值本来就是 colorScheme.surfaceContainer（HyperOS 的卡片色），
+        // 显式写出来是为了让这个选择可见 —— 否则将来被误改会很难发现。
+        // 3.2.13 实机截图（浅色 + 深色各一轮）：`surfaceContainer` 与 `background`
+        // 过于接近，卡片在两种主题下都「看不见」——像一堆浮空的文字。
+        // Miuix 色板里有三档 surface 层级，HyperOS 的卡片用的是更高一档：
+        //   surfaceContainer         基础容器
+        //   surfaceContainerHigh     卡片 / 抬升面
+        //   surfaceContainerHighest  最上层
+        // 这里用 High，层级关系与 HyperOS 系统应用一致。
+        // 3.2.13 实机截图（浅色/深色各两轮）实测：Miuix 自带的 surfaceContainer 系列
+        // 在「keyColor=null 走默认配色」场景下与 background 亮度差极小，
+        // 卡片完全看不见。改为按「相对背景抬升一档」自己算色，见 elevatedSurface()。
+        colors = CardDefaults.defaultColors(
+            color = elevatedSurface(),
+            contentColor = MiuixTheme.colorScheme.onSurface,
+        ),
+        // 内边距由 Card 统一提供（与 Material 轨「内边距在行上」结构对齐），
+        // 所以 MiuixListRow 自己不加 padding —— 否则两层叠加会变成 32dp。
+        // 显式写成 MiuixSpec.ROW_PADDING 而不是依赖 CardDefaults.InsideMargin，
+        // 是为了让「16dp」这个与 Material 轨对齐的数值可见、可控。
+        insideMargin = androidx.compose.foundation.layout.PaddingValues(
+            MiuixSpec.ROW_PADDING,
+        ),
+        modifier = m.fillMaxWidth(),
+        content = content,
+    )
 }
 
 /**
@@ -231,7 +294,10 @@ internal fun MiuixListRow(
                 if (onClick != null && enabled) Modifier.clickable { onClick() }
                 else Modifier
             )
-            .padding(MiuixSpec.ROW_PADDING),
+            // 刻意不加 padding：Miuix 的 Card 自带 insideMargin（默认已给足留白），
+            // 再叠一层 16dp 会变成 32dp，把卡片内容挤扁、看不出卡片轮廓。
+            // 3.2.13 实机截图就是这个症状：像是一堆浮空的文字而不是卡片。
+            ,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leading != null) {
@@ -247,10 +313,16 @@ internal fun MiuixListRow(
                 overflow = TextOverflow.Ellipsis,
             )
             if (!subtitle.isNullOrEmpty()) {
+                // 3.2.13 实机截图：副标题若不限制行数会与 trailing 抢宽度导致折行错乱，
+                // 但限制成 1 行又会把长文案截断得看不出含义。
+                // 这里给 2 行 —— 与 Material 轨 listRow 的实际观感接近，
+                // 常见的「切换不影响上方亮暗设置」这类文案能完整显示。
                 Text(
                     text = subtitle,
                     style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = alpha),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -339,3 +411,135 @@ internal fun MiuixIconSlot(size: androidx.compose.ui.unit.Dp = 24.dp) {
 
 /** 便捷：把 Android 的 color int 转成 Compose Color。 */
 internal fun Int.toComposeColor(): Color = Color(this)
+
+/**
+ * 下拉选择行 —— **样式与交互对齐 Material 轨的 `M3Ui.dropdownRow`**。
+ *
+ * 3.2.13 用户要求：「那个切换的开关也要做成这样 material 一样，
+ * 展开选项切换的那种样式」。
+ *
+ * Material 版行为：行内右侧显示**当前值**，点击整行弹出菜单，
+ * 菜单跟随手指位置，选中项带勾。语义完全一致。
+ *
+ * 为什么不用 Miuix 自带的 `DropdownImpl`：它入参是 `DropdownItem` + `mipmap`
+ * 资源 id，而我们的选项是纯文本，硬套会引入一套用不上的图标资源体系。
+ * 交互用 Compose 原生实现，观感（超椭圆、按压反馈、字体）仍来自 Miuix。
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun MiuixDropdownRow(
+    title: String,
+    subtitle: String? = null,
+    items: List<String>,
+    selectedIndex: Int,
+    onPick: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = if (selectedIndex in items.indices) items[selectedIndex] else ""
+
+    MiuixCard {
+        MiuixListRow(
+            title = title,
+            subtitle = subtitle,
+            onClick = { expanded = true },
+            trailing = {
+                Text(
+                    text = current,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            },
+        )
+    }
+
+    androidx.compose.material3.DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+    ) {
+        items.forEachIndexed { idx, label ->
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(label) },
+                onClick = {
+                    expanded = false
+                    onPick(idx)
+                },
+                trailingIcon = {
+                    // 3.2.13: 用 Canvas 自绘勾，**不引 material-icons**。
+                    //
+                    // 引 `androidx.compose.material:material-icons-core` 后实测：
+                    //   NoClassDefFoundError: androidx.compose.material.icons.Icons$Filled
+                    // 原因不是依赖没加，而是 **R8 把它整个裁掉了**
+                    // （usage.txt 里有 295 条 material.icons 的删除记录）——
+                    // 那些类只被间接引用，R8 判定不可达。
+                    // 为了一个勾去和 R8 较劲不值当，Canvas 画零依赖、零风险。
+                    if (idx == selectedIndex) {
+                        MiuixCheckMark()
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * 选中勾。Canvas 自绘，零依赖（理由见 MiuixDropdownRow 里的注释）。
+ */
+@Composable
+internal fun MiuixCheckMark(
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 18.dp,
+    color: Color = MiuixTheme.colorScheme.primary,
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.14f)
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.18f, h * 0.52f)
+            lineTo(w * 0.42f, h * 0.76f)
+            lineTo(w * 0.82f, h * 0.26f)
+        }
+        drawPath(path, color = color, style = stroke)
+    }
+}
+
+/**
+ * 卡片色：相对页面背景**明确抬升一档**，保证两种主题下都可见。
+ *
+ * 深色主题往白里提亮，浅色主题往黑里压暗 —— 与 HyperOS 卡片层级一致。
+ */
+@Composable
+internal fun elevatedSurface(): Color {
+    val bg = MiuixTheme.colorScheme.background
+    return if (bg.luminance() > 0.5f) {
+        Color(0xFF000000).copy(alpha = 0.05f).compositeOver(bg)
+    } else {
+        Color(0xFFFFFFFF).copy(alpha = 0.07f).compositeOver(bg)
+    }
+}
+
+/**
+ * 状态栏高度（px）。
+ *
+ * 刻意用 `View.getRootWindowInsets()` 而不是 Compose 的
+ * `WindowInsets.statusBars` —— 后者在 material3 里是 experimental，
+ * 需要 @OptIn；而且不同 Compose 版本里它所在的包不同（foundation / material3 都有），
+ * 跨版本容易编译失败。这里用 View API，与项目 minSdk 26 完全兼容。
+ */
+@Composable
+private fun statusBarHeightPx(): Int {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    return view.rootWindowInsets?.let { insets ->
+        if (Build.VERSION.SDK_INT >= 30) {
+            insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+        } else {
+            @Suppress("DEPRECATION")
+            insets.systemWindowInsetTop
+        }
+    } ?: 0
+}
+
+/** 状态栏高度（dp）。给内容区留位用，与标题栏用的是同一个值。 */
+@Composable
+internal fun statusBarDpOf() = with(LocalDensity.current) { statusBarHeightPx().toDp() }
