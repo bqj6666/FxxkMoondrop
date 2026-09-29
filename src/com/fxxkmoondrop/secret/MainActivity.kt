@@ -14,12 +14,37 @@ import android.widget.LinearLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
 import com.fxxkmoondrop.secret.ui.miuix.MiuixHostFragment
 
 /**
  * alpha2.12: 官方单 Activity 架构 —— 三页 Fragment 切换，底部导航常驻（M3 官方 fade 仅作用于内容区）。
  */
-class MainActivity : FragmentActivity() {
+// 3.2.13: 实现 `NavigationEventDispatcherOwner`。
+//
+// Miuix 的所有弹层（下拉 `WindowDropdownMenu` / `OverlayListPopup` /
+// `Scaffold` 内的 popupHost）都要读 Compose 的 `LocalWindowInfo.current`，
+// 它由 androidx.navigationevent 提供，要求宿主实现本接口。
+// 缺实现时一点弹层就崩：
+//   IllegalStateException: No NavigationEventDispatcher was provided
+//   via LocalNavigationEventDispatcherOwner
+//
+// `ComponentActivity` 只在 androidx.navigation 存在时才实现它，
+// 而我们只引了 navigation-runtime（不要 NavHost/NavController），
+// 所以这里显式实现：一个无参 NavigationEventDispatcher 即可。
+//
+// ⚠️ 与导航功能无关，不影响任何现有页面架构与行为。
+class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
+
+    // ⚠️ 必须写成 Kotlin 的 `override val`（不是 Java 风格的 override fun
+    // getNavigationEventDispatcher()）—— 该接口是用 Kotlin 声明的
+    // `val navigationEventDispatcher: NavigationEventDispatcher`，
+    // 编译器会明确要求这一点（报 "not implement abstract member:
+    // val navigationEventDispatcher"）。
+    override val navigationEventDispatcher: NavigationEventDispatcher by lazy {
+        NavigationEventDispatcher()
+    }
 
     private var curTab = 1 // 1=概览 2=设置 3=关于
     // 固定 container id：recreate 后 FragmentManager 按保存的 containerId 恢复 fragment；

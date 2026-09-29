@@ -190,6 +190,35 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
+    // 3.2.13: miuix-preference 提供 **官方**的下拉选择组件
+    // `OverlayDropdownPreference`（title/summary/items/selectedIndex/onSelectedIndexChange）。
+    // 版���与 miuix-ui 严格一致（同 0.9.2），来自同一个 BOM。
+    //
+    // 用它的原因（用户要求「按 MIUI 官方的用法和规范」）：
+    // 自己拼 Popup 反复踩坑 —— 点外部不关闭、宽度不可控、动画不对，
+    // 而 ListPopupColumn / OverlayListPopup 又依赖 Scaffold + androidx.navigation。
+    // 官方组件把这一整套都封装好了，排版与尺寸都按 HyperOS 规范。
+    // 参考用法：OppoPods 的 SettingsPage（同样 miuix 0.9.2）。
+    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.2")
+
+    // 3.2.13: androidx.navigation —— 只为拿到 Miuix 下拉所需的那个接口。
+    //
+    // `LocalWindowInfo.current` 由 androidx.navigation 提供，它要求宿主 Activity
+    // 实现 `NavigationEventDispatcherOwner`；`ComponentActivity` **只有在
+    // navigation 在 classpath 里时**才会实现该接口。没有它，Miuix 任何下拉
+    // / 弹层一打开就崩：
+    //   IllegalStateException: No NavigationEventDispatcher was provided
+    //   via LocalNavigationEventDispatcherOwner
+    //
+    // ⚠️ 我们**不使用** NavHost/NavController、不改任何页面架构，
+    // 纯粹是让 Miuix 的弹层能开。参考项目同样引了它
+    // （HyperEars 用 navigation-compose 2.10.0，OppoPods 用 navigation3-runtime）。
+    //
+    // 只引 runtime（不含 compose 导航 UI），体积增量最小。
+    implementation("androidx.navigation:navigation-runtime:2.10.0")
+    // navigationevent 是 navigation-runtime 的**传递**依赖（runtime scope），
+    // 编译期不可见，而 MainActivity 要实现它声明的接口 → 必须显式引入。
+    implementation("androidx.navigationevent:navigationevent-android:1.1.1")
 }
 
 // 3.2.13: 删除 postEdf（EDF 作用域注入 + 重签）整段。
