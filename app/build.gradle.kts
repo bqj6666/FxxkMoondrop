@@ -39,7 +39,22 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 3.2.13: false -> true。引入 Compose + Miuix 后体积从 6.1M 涨到 18M，
+            // 开 R8 压缩换回可接受的体积。
+            //
+            // 风险已逐项核实（全仓 91 处反射）：
+            //   - 反射目标全是外部类（android.* / com.android.* / com.google.android.material.*
+            //     / com.moondroplab.* / com.qualcomm.*），不在我们 APK 内，不受影响；
+            //   - 真正的风险只有「LSPosed 按字符串加载入口」与「manifest 声明的组件
+            //     被系统按字符串实例化」两类，已在 proguard-rules.pro 里按需 keep。
+            //
+            // ⚠️ 规则刻意不写 `-keep class com.fxxkmoondrop.secret.** { *; }`，
+            // 那等于放弃 R8 对我们代码的全部优化，体积收益会大幅缩水。
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
         }
     }
