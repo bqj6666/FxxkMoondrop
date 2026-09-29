@@ -83,6 +83,37 @@ class MainActivity : FragmentActivity() {
     }
 
     /** 官方 M3 切换：Fragment fade 过渡（内容动，底栏静止） */
+    /**
+     * 3.2.13: 切换界面风格后立即重建当前页。
+     *
+     * ## 为什么不能用 recreate()
+     *
+     * 用户实测反馈：「点击切换之后不会立即生效，要来回切换一下页面才会生效」。
+     *
+     * 根因在 onCreate 里这一行：
+     *
+     * ```kotlin
+     * if (savedInstanceState == null) showTab(curTab)
+     * ```
+     *
+     * `recreate()` 之后 `savedInstanceState != null`，于是 **showTab 根本不会被调用**，
+     * 而是由 FragmentManager 依据保存的 state 恢复**旧主题的 Fragment**
+     * （此刻仍是 MiuixHostFragment）。SP 里虽然已写成 MATERIAL，界面却不变
+     * —— 必须手动切一次 tab 才会触发 showTab 重新分派。
+     *
+     * 顺带一提，3.2.13 那次「切回 Material 闪退」也出在 recreate 路径上
+     * （FragmentManager 用 `getConstructor()` 重建，要求 Fragment 必须有无参构造）。
+     *
+     * ## 修法
+     *
+     * 直接 `showTab(curTab)`：内部 `ft.replace(containerId, f)` 会按**当前 SP**
+     * 重新分派出对应主题的 Fragment 并替换现有 Fragment。
+     * Activity 本身不重建 —— 底栏、状态栏配色都不受影响，切换更轻。
+     */
+    fun applyStyleSwitch() {
+        showTab(curTab)
+    }
+
     private fun showTab(id: Int) {
         curTab = id
         // 3.2.13: 双主题分派点（**全项目唯一**）。

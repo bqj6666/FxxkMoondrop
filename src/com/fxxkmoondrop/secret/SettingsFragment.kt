@@ -160,7 +160,17 @@ class SettingsFragment : Fragment() {
                 arrayOf(Lang.t("Material You", "Material You"), Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)")),
                 UiStyle.entries.indexOf(UiStyle.current(requireContext()))) { si ->
             UiStyle.set(requireContext(), UiStyle.entries[si])
-            scheduleRebuild(0L)
+            // 3.2.13: scheduleRebuild(0L) -> applyStyleSwitch()。
+            //
+            // scheduleRebuild 内部是 act.recreate()，而 recreate() 之后
+            // MainActivity.onCreate 里 `if (savedInstanceState == null) showTab(curTab)`
+            // **不会执行**（savedInstanceState 非 null），showTab 不被调用，
+            // FragmentManager 依据保存的 state 恢复**旧主题的 Fragment** ——
+            // 于是 SP 已切到 Miuix，界面却还是 Material，必须手动切一次 tab 才生效。
+            //
+            // 用户实测反馈的「要来回切换一下页面才会生效」就是这个。
+            // applyStyleSwitch() 直接 showTab(curTab)，按当前 SP 重新分派，立即生效。
+            (activity as? MainActivity)?.applyStyleSwitch()
         }
         appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
 

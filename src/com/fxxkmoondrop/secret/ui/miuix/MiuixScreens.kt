@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.fxxkmoondrop.secret.MainActivity
+import com.fxxkmoondrop.secret.UiStyle
 
 /**
  * 概览页（Miuix 版）—— **占位**，第 3 步实装。
@@ -41,6 +43,41 @@ internal fun MiuixSettingsScreen() {
             MiuixListRow(
                 title = "设置页（Miuix）",
                 subtitle = "第 5 步实装；Material 版此时仍完整可用",
+            )
+        }
+        MiuixGap()
+
+        // ── 外观 ────────────────────────────────────────────────
+        MiuixSectionLabel("外观")
+        MiuixCard {
+            MiuixListRow(
+                title = "界面风格",
+                subtitle = "当前：HyperOS（Miuix）",
+            )
+        }
+        MiuixGap()
+        MiuixCard {
+            MiuixListRow(
+                title = "切回 Material You",
+                subtitle = "点击立即切换（与 Material 版同一个 SP 键）",
+                onClick = {
+                    UiStyle.set(ctx, UiStyle.MATERIAL)
+                    // 立即重建当前页，不等冷启动。
+                    // 不能用 recreate()：那条路 savedInstanceState 非空，
+                    // showTab 不会被调用，界面不会变（详见 MainActivity.applyStyleSwitch 注释）。
+                    (ctx as? MainActivity)?.applyStyleSwitch()
+                },
+            )
+        }
+        MiuixGap()
+        MiuixCard {
+            MiuixListRow(
+                title = "切到 HyperOS（Miuix）",
+                subtitle = "当前已是 Miuix 轨，此项用于确认切换通路",
+                onClick = {
+                    UiStyle.set(ctx, UiStyle.MIUIX)
+                    (ctx as? MainActivity)?.applyStyleSwitch()
+                },
             )
         }
         MiuixGap()

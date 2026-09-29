@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +20,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -59,18 +62,31 @@ object MiuixSpec {
     val ROW_PADDING = 16.dp
     /** 卡片之间的间距，与 M3Ui.groupCard 的 12dp 对齐 */
     val CARD_GAP = 12.dp
+    /** 大标题栏展开高度，取自 M3Ui.HEADER_EXPANDED_DP */
+    val HEADER_EXPANDED_DP = 152
+    /** 大标题栏收缩高度，取自 M3Ui.HEADER_COLLAPSED_DP */
+    val HEADER_COLLAPSED_DP = 64
 }
 
 /**
  * 页面容器：大标题 + 可滚动内容。
  *
- * 版式参考 OppoPods 的 `EarphonesTabPage` / `SettingsTabPage`：
- * **大标题在上、内容在下、可垂直滚动**。标题用 Miuix 的 `title1`，
- * 这也是 HyperOS 与 Material 观感差异最明显的地方之一。
+ * ## 排版必须与 Material 轨一致（3.2.13 用户明确要求）
  *
- * 对应 Material 轨的 `M3Ui.largeHeaderPage`（LargeTopAppBar）。
- * 标题暂不随滚动收缩 —— 收缩动画在第 3 步随概览页一起做，
- * 它需要嵌套滚动的协作，属于同一处实现。
+ * 用户原话：「整个 MIUIX 的界面排版要跟 material 主题时排版一样」。
+ * 所以这里**不是**照抄 OppoPods，而是复刻 `M3Ui.largeHeaderPage` 的结构：
+ *
+ * | 规格       | Material 轨                      | Miuix 轨          |
+ * |------------|----------------------------------|-------------------|
+ * | 大标题     | collapsingHeader（大标题+收缩）   | `MiuixTopBar`（下）|
+ * | 内容区     | ScrollView，paddingTop=expanded   | Column(weight=1f)  |
+ * | 卡片圆角   | 20dp                             | 20dp（MiuixSpec）  |
+ * | 行高/内边距| 56dp / 16dp                      | 56dp / 16dp        |
+ * | 卡片间距   | 12dp                             | 12dp               |
+ *
+ * 换成 Miuix 组件后**观感**变（超椭圆、字体、按压反馈），
+ * 但**结构与尺寸**与 Material 轨相同 —— 这样两套主题切换时
+ * 布局不会跳动，才是「同一个 app 的两套皮肤」。
  */
 @Composable
 internal fun MiuixPage(
@@ -79,31 +95,86 @@ internal fun MiuixPage(
     bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
     content: @Composable () -> Unit,
 ) {
-    Column(
+    val scroll = rememberScrollState()
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MiuixTheme.colorScheme.background),
     ) {
-        if (title != null) MiuixLargeTitle(title)
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxSize()
+                .verticalScroll(scroll)
                 .padding(horizontal = 16.dp)
-                .padding(bottom = bottomPadding),
+                // 顶部留出展开态标题的高度，滚动时内容从标题下方穿过
+                .padding(top = MiuixSpec.HEADER_EXPANDED_DP.dp, bottom = bottomPadding),
         ) { content() }
+
+        if (title != null) {
+            // 叠在滚动内容之上（等价 Material 的 FrameLayout + gravity=TOP）
+            MiuixCollapsingHeader(
+                title = title,
+                scrollY = scroll.value,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
     }
 }
 
+/**
+ * 大标题栏。**结构与尺寸严格对齐 Material 轨的 `M3Ui.collapsingHeader`**。
+ *
+ * 数值直接取自 Material 轨的常量，不是估的：
+ * ```
+ * M3Ui: HEADER_EXPANDED_DP = 152
+ *       HEADER_COLLAPSED_DP = 64
+ * ```
+ *
+ * 收缩用 `graphicsLayer` 改 translationY + scale，
+ * 与 Material 的 `CollapseHeader.apply(t)` 同一思路：
+ * 标题随滚动上移并缩小，到底部变成一行小标题。
+ *
+ * ⚠️ 刻意**不用** material3 的 TopAppBar —— 那是 Material 组件，
+ * 用它等于「Miuix 轨里塞了个 Material 标题栏」，两套主题会串味。
+ * 也不直接用 Miuix 的 `TopAppBar`：它的高度规格（56dp 小标题栏）
+ * 与 Material 的 152dp 大标题不同，直接用会导致切换时布局跳动。
+ */
 @Composable
-internal fun MiuixLargeTitle(title: String, modifier: Modifier = Modifier) {
-    Text(
-        text = title,
-        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
-        style = MiuixTheme.textStyles.title1,
-        color = MiuixTheme.colorScheme.onSurface,
-    )
+internal fun MiuixCollapsingHeader(
+    title: String,
+    scrollY: Int,
+    modifier: Modifier = Modifier,
+) {
+    val expanded = MiuixSpec.HEADER_EXPANDED_DP
+    val collapsed = MiuixSpec.HEADER_COLLAPSED_DP
+    // t: 0 = 完全展开，1 = 完全收缩
+    val t = (scrollY / (expanded - collapsed).toFloat()).coerceIn(0f, 1f)
+    // 标题基线：展开时在底部，收缩时居中
+    val baseY = expanded * (1f - t) + collapsed * 0.5f * t
+    val scale = 1f - 0.45f * t          // 28sp -> 约 15.4sp，与 Material 收缩后的小标题相当
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(expanded.dp),
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                .graphicsLayer {
+                    translationY = -((1f - t) * (expanded - collapsed) * density) +
+                            (t * (expanded - collapsed) * 0.5f * density)
+                    scaleX = scale
+                    scaleY = scale
+                    // 缩放会让人看着「糊」；按位移反向补偿透明度变化在 HyperOS 里不常见，
+                    // 这里只做位移+缩放，观感接近 Material 的 collapsing header。
+                },
+            style = MiuixTheme.textStyles.title1,
+            color = MiuixTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 /**

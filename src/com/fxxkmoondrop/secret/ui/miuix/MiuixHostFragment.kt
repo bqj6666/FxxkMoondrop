@@ -9,9 +9,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import com.fxxkmoondrop.secret.MiuixSurface
-import com.fxxkmoondrop.secret.UiStyle
 
 /**
  * HyperOS 轨的宿主 Fragment。
@@ -132,18 +130,11 @@ internal fun MiuixAboutScreen() {
         }
         MiuixGap()
 
-        // ── 切回 Material 的入口 ──────────────────────────────────
-        // 3.2.13 修 bug：原来这里是一行**没有 onClick 的静态行**，
-        // 看上去像可点的，实际点了没反应 —— 用户反馈「切换不回 Material
-        // 似乎没有回来的入口」。现在给它真正的点击行为 + 立即重建界面。
+        // 说明行：切换入口已移到设置页（用户要求）
         MiuixCard {
             MiuixListRow(
-                title = "切回 Material You",
-                subtitle = "点击立即切换界面风格",
-                onClick = {
-                    UiStyle.set(ctx, UiStyle.MATERIAL)
-                    (ctx as? FragmentActivity)?.recreate()
-                },
+                title = "切换界面风格",
+                subtitle = "在「设置 → 外观 → 界面风格」中切换",
             )
         }
     }
