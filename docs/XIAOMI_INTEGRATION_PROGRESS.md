@@ -700,3 +700,43 @@ FragmentManager 恢复**旧主题的 Fragment** → SP 已切但界面不变。
 直接用会导致切换时布局跳动）。
 
 **当前测试数：135 项**
+
+## 2026-09-29 下拉菜单三修（用户截图指出）
+
+### 1. 菜单位置：坐标系混用
+
+`PopupPositionProvider` 要**窗口坐标**，而 `pointerInput` 的 `down.position`
+是**节点局部坐标**（0~280 量级）—— 直接用导致菜单 y 差约 1100px，
+实测一律弹在屏幕顶部。
+
+必须用 `positionInWindow`（**不是** `positionInRoot`），并把 Box 原点加上。
+
+### 2. 配色：改用 Popup 自绘
+
+material3 的 `DropdownMenu` 容器色在深色主题下仍是浅色（用户截图的问题）。
+改用 `Popup` 自绘，容器色复用 `elevatedSurface()`，文字用 `onSurface`。
+
+放弃 material3 DropdownMenu 的三个理由（都实测踩过）：
+- `offset` 是 DpOffset，换算手指像素要做两次 density 转换
+- 容器色/字色/图标色难完全接管
+
+### 3. 图标：改用素材库资源
+
+用 `R.drawable.ic_check`（项目自带，Material 版下拉同款）。
+⛔ 不用 material-icons —— 加依赖仍崩（`NoClassDefFoundError`），
+因为 R8 把整个 material-icons 裁掉（usage.txt 295 条删除记录）。
+
+**⛔ 铁律：加了依赖 ≠ 类会进 dex。R8 按可达性裁剪，间接引用的类会被删。**
+
+### 撞过的 Compose ui 1.11.2 API 坑
+
+- `Popup` 参数名是 `popupPositionProvider`（不是 `positionProvider`）
+- 参数名写错会退化到别的重载，报 `Conflicting overloads`
+- `Image` 着色用 `colorFilter = ColorFilter.tint(...)`（不是 `tint`）
+- `clip()` 收 `Shape` 不是 `Dp`
+
+### 验证方式升级（用户建议）
+
+改用 **`uiautomator dump` 拿无障碍节点坐标** + `screencap` 看渲染。
+之前 `input tap 602 2530` 是瞎猜的；现在 dump 出
+「界面风格」bounds `[96,1103][288,1173]` 后精确定点。
