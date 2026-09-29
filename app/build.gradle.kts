@@ -1,11 +1,17 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.fxxkmoondrop.secret"
-    compileSdk = 35
+    // 3.2.13: 35 -> 37。Miuix（HyperOS 观感轨）全部版本的
+    // aar-metadata.properties 都写死 minCompileSdk=37，没有 35 可用的版本。
+    // 升的是**编译期**可见 API，targetSdk 仍是 36，运行时行为不变。
+    // 实测使用面极窄：全仓仅 2 处 VERSION_CODES.Q（API 35），
+    // 最高 SDK_INT 判断为 34，因此升级无行为变更风险。
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.fxxkmoondrop.secret"
@@ -43,6 +49,13 @@ android {
             java.srcDirs("../src")
             manifest.srcFile("src/main/AndroidManifest.xml")
         }
+    }
+
+    buildFeatures {
+        // 3.2.13: HyperOS 观感轨（UiStyle.MIUIX）需要 Compose。
+        // Material 轨不构建任何 Compose 源文件（源文件在 src/ 下按命名区分），
+        // 但 Compose 运行时仍会进 APK —— 体积影响见 docs/XIAOMI_INTEGRATION_PROGRESS.md。
+        compose = true
     }
 
     compileOptions {
@@ -117,7 +130,7 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     // Kotlin（与旧链 libs/ 版本一致）
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.21")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.10")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Xposed API：仅编译期（运行时由 LSPosed 提供）
@@ -138,6 +151,18 @@ dependencies {
     // 3.0.3: HookGuardTest 需要 XposedInterface.Chain 做桩，测试期才把它放进 classpath
     // （主代码仍是 compileOnly，运行时由 LSPosed 提供，不进 APK）
     testImplementation("io.github.libxposed:api:102.0.0")
+
+    // ── 3.2.13: HyperOS 观感轨（UiStyle.MIUIX）────────────────────────
+    // 许可：Miuix 为 Apache-2.0（不同于 HyperEars 的 AGPL-3.0，可放心引入）。
+    // 兼容性已核：miuix-ui-android 0.9.2 自身 minSdk=23，本模块 minSdk 26 满足。
+    // 参考项目 OppoPods / HyperEars 用 minSdk 35，本模块不跟随。
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose")
+    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
 }
 
 // —— LSPosed 推荐作用域 EDF 注入（构建后处理：注入 scope.list/ascope.list + 重签）——

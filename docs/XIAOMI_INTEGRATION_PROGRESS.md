@@ -256,3 +256,83 @@ data class UiPreferences(
 这在 P2 补上。**切换通路本身已可用且不破坏 Material 轨。**
 
 **下一步**：P2 —— 引入 Compose + Miuix 实装渲染器，以及系统入口 hook
+
+
+## ⚠️ 2026-09-29 工具链升级受阻（重要，非代码问题）
+
+### 起因
+
+Miuix（HyperOS 观感轨）**所有版本**（0.9.0 / 0.9.1 / 0.9.2）的
+`aar-metadata.properties` 都写死 `minCompileSdk=37`，我们 compileSdk 35 用不了。
+用户拍板「升级工具链搞定」。
+
+### 发现的第一个坑：Android 17 改了平台编号
+
+`dl.google.com/android/repository/repository2-3.xml` 里 API 37 的平台包是：
+
+```
+platforms;android-37.0   → platform-37.0_r02.zip   (ApiLevel=37.0)
+platforms;android-37.1   → platform-37.1_r01.zip   (ApiLevel=37.1)
+platforms;android-37.2   → platform-37.2_r01.zip
+```
+
+**没有裸 `platforms/android-37`**。我们把 `platform-37.0` 装到
+`/workspace/sdk/platforms/android-37` 后，AGP 8.6.1 报
+`Failed to find Platform SDK with path: platforms;android-37`。
+
+→ 用 API 37 必须同时升 AGP（8.6.1 只认裸编号目录）。
+
+### 第二个坑（真正的阻塞）：本机 JDK 查不到文件系统
+
+升级到 **Gradle 9.6.0 + AGP 9.4.1 + Kotlin 2.4.10** 后，Gradle **连启动都失败**：
+
+```
+Could not create service of type FileSystem using FileSystemServices.createFileSystem().
+  > java.io.IOException: Mount point not found
+Caused by:
+  at java.nio.file.Files.getFileStore(Files.java:1497)
+  at org.gradle.api.internal.file.temp.TempFiles.createTempFile(TempFiles.java:63)
+```
+
+**根因实测**（写了 `/tmp/FS.java` 直接调 `Files.getFileStore`）：
+
+```
+/tmp        炸: Mount point not found
+/workspace  炸: Mount point not found
+/           炸: Mount point not found
+/data       炸: Mount point not found
+/dev        OK   ← 只有这一个能查
+```
+
+JDK 21 和 JDK 25 **表现一致**，所以与版本无关。`/proc/self/mountinfo`
+只有 27 行、是 Android 的 tmpfs/seclabel 布局，**没有根挂载记录**，
+JDK 的 `LinuxFileStore.findMountEntry` 因此对绝大多数路径抛
+"Mount point not found"。
+
+Gradle 8.9 不调 `getFileStore` 建临时目录，所以此前一直没事；
+Gradle 9 调了，在这个 PROot/容器环境里**无解**（不是配置问题，
+无法靠参数绕过 —— 试过 `-g`、`GRADLE_USER_HOME` 指到 /dev，仍同样失败）。
+
+### 参考项目的工具链（说明为什么它们没事）
+
+| 项目 | AGP | Gradle | Kotlin | 它们跑在哪 |
+|---|---|---|---|---|
+| **我们** | 8.6.1→9.4.1 试 | 8.9→9.6.0 试 | 2.3.21→2.4.10 试 | 本机 PROot（Gradle 9 起不来） |
+| OppoPods | 9.1.0 | 9.4.1 | 2.4.0 | 正常 CI/开发机 |
+| HyperEars | 9.4.0 | 9.6.0 | 2.4.10 | 正常 CI/开发机 |
+
+### 当前仓库状态
+
+**⚠️ 处于编译不过的中间态**：`compileSdk=37` + Compose 依赖已写入
+`app/build.gradle.kts`，工具链版本已改，但 Gradle 9 起不来，因此无法验证。
+**恢复方式**：`git checkout build.gradle.kts app/build.gradle.kts gradle/wrapper/gradle-wrapper.properties`
+
+### 结论
+
+工具链升级**不是代码问题，是本机 Linux 环境的能力边界**。
+可行的替代路径（待用户选）：
+  - **CI 上构建**：GitHub Actions 是完整 Linux 容器，Gradle 9 能正常跑；
+    本机只做代码编辑与逻辑单测（但单测也要 gradle，同样受限）
+  - **回到 3.2.12 基线 + 方案 B**：不依赖 Miuix，用 Compose Material3
+    自建 HyperOS 观感（仍需 Compose，但 Compose 本身不要求 compileSdk 37）
+  - **降级目标**：接受 Material 单轨，HyperOS 观感后续再说
