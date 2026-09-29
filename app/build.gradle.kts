@@ -127,7 +127,7 @@ dependencies {
     // 用特征（字符串/调用关系/修饰符）反查被混淆的类与方法，
     // 避免把混淆名硬编码进来。
     // 文档：https://luckypray.org/DexKit/
-    implementation("org.luckypray:dexkit:2.2.0")
+    implementation("org.luckypray:dexkit:2.3.0")
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
     testImplementation("junit:junit:4.13.2")
