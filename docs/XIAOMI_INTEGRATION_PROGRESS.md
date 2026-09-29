@@ -11,8 +11,8 @@
 
 | 期 | 内容 | 状态 |
 |---|---|---|
-| **P0** | DexKit 升级 + `XiaomiProbe` 检测门禁 + 设置页门禁 + DexKit 定位表 | 🔄 进行中 |
-| **P1** | Device ID 映射 + Miuix 轨骨架 + 主题切换 | ⏳ 未开始 |
+| **P0** | DexKit 升级 + `XiaomiProbe` 检测门禁 + 设置页门禁 | ✅ 已完成 |
+| **P1** | Device ID 映射 + Miuix 轨骨架 + 主题切换 | ⏳ 未开始（下一步） |
 | **P2** | 系统入口 hook（设备中心卡 / MiLink / 系统蓝牙页） | ⏳ 未开始 |
 | **P3** | 焦点岛实装（`focus-api:1.4`） | ⏳ 未开始 |
 
@@ -37,7 +37,7 @@
   compileSdk     35  targetSdk 36
   Xposed API     io.github.libxposed:api:102.0.0  ✅ 已在用
   热重载          onHotReloading / onHotReloaded  ✅ 已有清理逻辑
-  DexKit         2.2.0 → 2.3.0（本轮升级中）
+  DexKit         2.3.0  ✅
   root 探测      EnvProbe.isRooted()  ✅ 已就绪
   源码位置        仓库根 src/（不是 app/src），sourceSets 里 java.srcDirs("../src")
 
@@ -110,3 +110,44 @@ PUDDING 协议（来自 PuddingPods 文档，可信）：
 - 只跑 `./gradlew dependencies` 不会下载 aar，必须真正 `assembleDebug`。
 
 **下一步**：P0 主体 —— `XiaomiProbe` 检测门禁
+
+
+### 2026-09-29 · P0 完成 ✅ `c2affb3`
+
+**新增文件**：
+- `src/com/fxxkmoondrop/secret/XiaomiProbe.kt`（约 230 行）
+- `app/src/test/java/com/fxxkmoondrop/secret/XiaomiProbeTest.kt`（13 项）
+
+**关键设计决策（勿推翻）**：
+
+1. **检测三级判据全部不依赖 root**。理由：模块支持无 root 运行，
+   检测依赖 `su` 会让无 root 小米用户永远拿不到功能。
+   - L1 `Build.BRAND`/`MANUFACTURER` 精确匹配 {xiaomi,redmi,poco,black sesame}
+   - L2 反射 `android.os.SystemProperties.get` 读 `ro.miui.ui.version.name` /
+     `ro.mi.os.version.name`（MIUI 与 HyperOS 两代都认）
+   - L3 `PackageManager` 查独有包 `com.miui.securitycenter` 等
+   - 三者是**或**关系，任一命中即认定小米
+
+2. **品牌必须精确匹配，不能用子串**。`XiaomiFake` / `notxiaomi` 不能误判 ——
+   反过来，用包名做子串又会把「作用域里有 `com.xiaomi.bluetooth`」误当本机是小米。
+
+3. **`evaluate()` 是纯逻辑静态方法**，单测直接调真实实现。
+   ⛔ 不要在测试里复制一份逻辑 —— 那会导致实现改了测试还绿（已踩过一次，已改回）。
+
+4. **L3 包查询必须 try 包住**。PM 异常时降级为「该级不命中」而非崩掉整次检测
+   （这是测试发现的真实缺陷，实现已加固）。
+
+5. **设置页小米分组刻意「置灰而不隐藏」**。静默消失会让人以为装漏了。
+   沿用 3.2.12 的置灰范式：row 与 trailing switch **各自**禁用
+   （`row.isEnabled=false` 传不到 MaterialSwitch，这是本项目的老坑）。
+
+**验证**：`testDebugUnitTest` **115 项全过**（102 + 新增 13），
+`assembleDebug` 通过，APK 8.5M。
+
+**踩坑**：
+- Kotlin 里 `_` 是保留名，lambda 参数不能叫 `_`（本项目旧代码用 `_` 是
+  因为它是 catch/解构位置，函数参数位不行）。
+- 辅助函数写成 `private fun noPkg(_pkg: String) = false` 会因尾随 lambda 解析
+  产生歧义，改成 `private val noPkg: (String) -> Boolean = { false }` 才稳。
+
+**下一步**：P1 —— Device ID 映射 + Miuix 轨骨架 + 主题切换
