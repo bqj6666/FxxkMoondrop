@@ -492,6 +492,24 @@ internal fun MiuixDropdownRow(
     //  4. Popup + ListPopupContent + Column(IntrinsicSize.Min)：
     //     崩 `IllegalArgumentException: maxWidth must be >= than minWidth`
     //     （IntrinsicSize.Min 要求子项高度确定，BasicComponent 高度不定）
+    // 3.2.13: 选中项加**框架图标**（素材库 R.drawable.ic_check）。
+    //
+    // 用户参照 LSPosed App 指出：锚定行应该有内缩圆角高亮，而 Miuix 默认是
+    // 通栏直角色块。我们试过三条路都不可行（详见 progress 档案）：
+    //   1. 外层 Modifier.clip —— 裁不到，clickableModifier 排在我们传入的
+    //      modifier 之后（BasicComponent 内部链 modifier → heightIn →
+    //      fillMaxWidth → then(clickableModifier) → padding）
+    //   2. LocalIndication provides null —— material3 的 LocalIndication
+    //      是 internal API
+    //   3. 自定义 IndicationNodeFactory —— Modifier.Node 与
+    //      IndicationNodeFactory 的构造函数对 Kotlin 子类**不可见**
+    //      （无论匿名/具名、无参/带参，1.11 与 1.12 实测都一样）。
+    //      读 miuix-ui-android 0.9.2 与 0.9.4 的 sources jar 确认：
+    //      两个版本的 MiuixIndication 都写死 drawRect，**库没修**。
+    //
+    // 所以改用 HyperOS 官方的另一条表达路径：`DropdownItem.icon`。
+    // Miuix 自己的默认观感也是「选中靠文字变主色 + 指示器，不靠色块」——
+    // `DropdownColors.selectedContainerColor` 默认等于 `containerColor`。
     val entry = remember(items, selectedIndex, onPick) {
         DropdownEntry(
             items.mapIndexed { index, item ->
@@ -499,6 +517,26 @@ internal fun MiuixDropdownRow(
                     text = item,
                     selected = index == selectedIndex,
                     onClick = { onPick(index) },
+                    // 选中项左侧显示 ✓（素材库图标，与 Material 轨下拉同款）
+                    // ⚠️ `icon` 的类型是 `@Composable ((Modifier) -> Unit)?`，
+                    // 库会把自己的 IconCellModifier（含 size/padding）传进来 ——
+                    // 所以这里**不要**自己再写 modifier，直接用参数。
+                    // 着色用 Miuix 自己的 `tint` Modifier 扩展（basic/Dropdown.kt 里
+                    // 选中项的箭头就是这么染色的），避免依赖 material3 的 Icon。
+                    icon = if (index == selectedIndex) {
+                        { m ->
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(
+                                    com.fxxkmoondrop.secret.R.drawable.ic_check,
+                                ),
+                                contentDescription = null,
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                                    MiuixTheme.colorScheme.primary,
+                                ),
+                                modifier = m.size(18.dp),
+                            )
+                        }
+                    } else null,
                 )
             },
         )

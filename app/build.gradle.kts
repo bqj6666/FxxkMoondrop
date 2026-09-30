@@ -183,13 +183,13 @@ dependencies {
     // 许可：Miuix 为 Apache-2.0（不同于 HyperEars 的 AGPL-3.0，可放心引入）。
     // 兼容性已核：miuix-ui-android 0.9.2 自身 minSdk=23，本模块 minSdk 26 满足。
     // 参考项目 OppoPods / HyperEars 用 minSdk 35，本模块不跟随。
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose")
-    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
+    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     // 3.2.13: miuix-preference 提供 **官方**的下拉选择组件
     // `OverlayDropdownPreference`（title/summary/items/selectedIndex/onSelectedIndexChange）。
     // 版���与 miuix-ui 严格一致（同 0.9.2），来自同一个 BOM。
@@ -199,7 +199,7 @@ dependencies {
     // 而 ListPopupColumn / OverlayListPopup 又依赖 Scaffold + androidx.navigation。
     // 官方组件把这一整套都封装好了，排版与尺寸都按 HyperOS 规范。
     // 参考用法：OppoPods 的 SettingsPage（同样 miuix 0.9.2）。
-    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.2")
+    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
 
     // 3.2.13: androidx.navigation —— 只为拿到 Miuix 下拉所需的那个接口。
     //
