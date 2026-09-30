@@ -44,10 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.height
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownEntry
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.menu.WindowDropdownMenu
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -119,6 +117,38 @@ internal fun MiuixPage(
 ) {
     val scroll = rememberScrollState()
 
+    // 3.2.13: 骨架换成 Miuix **官方** `Scaffold`。
+    //
+    // ## 为什么必须换
+    //
+    // `Scaffold` 的 `popupHost` 参数默认是 `MiuixPopupHost()`，它提供
+    // `LocalPopupStates` —— 而 `LocalPopupStates` 全库**只由 Scaffold 提供**
+    // （basic/Scaffold.kt 的 `LocalPopupStates provides popupStates`）。
+    // 没有它，Miuix 的 `OverlayListPopup` / `OverlayDropdownPreference`
+    // 会**静默不显示**：不崩、不报错、点了没反应。
+    //
+    // 之前两次尝试都卡在这里：
+    //   1. 只加 Scaffold → 崩 `No NavigationEventDispatcher`
+    //      （Scaffold 内部用 LocalWindowInfo，要求 Activity 实现
+    //        NavigationEventDispatcherOwner）
+    //   2. 只加 navigation → Scaffold 仍不可用
+    // 现在两半都齐了（见 MiuixSurface 的 CompositionLocalProvider），
+    // Scaffold 这条路才真正可行。
+    //
+    // 参考：OppoPods 的 MainTabs.kt:178 就是这么做的。
+    //
+    // ## 为什么不用 Compose 的 Scaffold
+    //
+    // Miuix 有自己的 `Scaffold`（top.yukonga.miuix.kmp.basic.Scaffold），
+    // 它才提供 Miuix 的 popupHost 体系；用 Compose/Material3 的那个
+    // 不提供 LocalPopupStates，弹层依旧不显示。
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MiuixTheme.colorScheme.background,
+        // 状态栏/导航栏 inset 由我们自己处理（见 MiuixCollapsingHeader 的
+        // statusBarDpOf 与 bottomPadding），避免与 Scaffold 的默认行为叠加两次。
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+    ) { _ ->
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -144,6 +174,7 @@ internal fun MiuixPage(
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
+    }
     }
 }
 
@@ -432,19 +463,14 @@ internal fun MiuixIconSlot(size: androidx.compose.ui.unit.Dp = 24.dp) {
 internal fun Int.toComposeColor(): Color = Color(this)
 
 /**
- * 下拉选择行 —— **样式与交互对齐 Material 轨的 `M3Ui.dropdownRow`**。
+ * 下拉选择行 —— 样式与交互对齐 Material 轨的 `M3Ui.dropdownRow`。
  *
- * 3.2.13 用户要求：「那个切换的开关也要做成这样 material 一样，
+ * 3.2.13 用户要求：「那个切换的开关也要做成 material 一样的、
  * 展开选项切换的那种样式」。
  *
- * Material 版行为：行内右侧显示**当前值**，点击整行弹出菜单，
- * 菜单跟随手指位置，选中项带勾。语义完全一致。
- *
- * 为什么不用 Miuix 自带的 `DropdownImpl`：它入参是 `DropdownItem` + `mipmap`
- * 资源 id，而我们的选项是纯文本，硬套会引入一套用不上的图标资源体系。
- * 交互用 Compose 原生实现，观感（超椭圆、按压反馈、字体）仍来自 Miuix。
+ * Material 版行为：行内右侧显示**当前值**（由官方 showValue 负责），
+ * 点击整行弹出菜单，选中项带勾。语义完全一致。
  */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun MiuixDropdownRow(
     title: String,
@@ -453,181 +479,42 @@ internal fun MiuixDropdownRow(
     selectedIndex: Int,
     onPick: (Int) -> Unit,
 ) {
-    // 3.2.13 最终形态：**完全采用 Miuix 官方组件**，一个自创像素都没有。
+    // 3.2.13: 与 OppoPods (ThemeSettingsPage.kt:51 / SettingsPage.kt:164) **完全同款**调用。
     //
-    // 用户要求「看一下 miui 官方的用法和规范，连排版和大小都要按官方的来」，
-    // 查参考项目（OppoPods 用 miuix 0.9.2，与我们同版本）得到官方用法：
+    // 为什么最终是 OverlayDropdownPreference:
+    //   WindowDropdownMenu 是「不需要 Scaffold 宿主」的权宜之计，那是 Scaffold 和
+    //   NavigationEventDispatcher 两半都缺时的临时方案。现在 MiuixPage 已是 Miuix
+    //   Scaffold (提供 LocalPopupStates), 换回这个标准组件。
     //
-    //   import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-    //   Card {
-    //       OverlayDropdownPreference(
-    //           title = ..., summary = ...,
-    //           items = listOf(...),
-    //           selectedIndex = ...,
-    //           onSelectedIndexChange = { ... },
-    //       )
-    //   }
+    // 为什么只传这四个参数 —— 每一处都读过 ref_miuix 0.9.4 源码确认:
     //
-    // ## 为什么最终用 `WindowDropdownMenu` 而不是 `OverlayDropdownPreference`
+    //  1. 不传 icon / 不构造 DropdownEntry
+    //     Dropdown.kt:206 库自己画 `MiuixIcons.Basic.Check`, 20dp, 染
+    //     selectedIndicatorColor。DropdownItem.icon 一旦非空就会**顶掉**它。
+    //     我们之前自绘的 ic_check 正是这个错误。
     //
-    // 两者 API 几乎一样（title/summary/items/selectedIndex/maxHeight/insideMargin），
-    // 差别只在弹窗宿主：
-    //   - `OverlayDropdownPreference` / `OverlayListPopup`
-    //       → 内部读 `LocalPopupStates`，只由 Miuix `Scaffold` 提供；
-    //         而 Scaffold 内部用 `LocalWindowInfo`，要求 Activity 实现
-    //         `NavigationEventDispatcherOwner`（androidx.navigation 的接口，
-    //         裸 FragmentActivity 不实现）→ 崩溃：
-    //         `IllegalStateException: No NavigationEventDispatcher was provided`
-    //   - `WindowDropdownMenu`
-    //       → 自己开窗口，**不依赖 Scaffold、不依赖 navigation**。
+    //  2. 不传 dropdownColors
+    //     DropdownDefaults.dropdownColors() 默认值逐项相同:
+    //       contentColor            = onSurfaceContainer
+    //       containerColor          = surfaceContainer
+    //       selectedContentColor    = primary
+    //       selectedIndicatorColor  = primary
+    //     我们手写的四项一字不差, 属于纯死代码。
     //
-    // 也就是说它是「官方组件 + 无额外依赖」的唯一组合。
-    // 排版、尺寸、动画、squircle 裁切全部由 Miuix 自己负责，
-    // 与 HyperOS 系统应用的下拉完全一致。
+    //  3. summary 只放说明文字, 不放当前值
+    //     showValue 默认 true, 组件自己在行尾显示选中项。
+    //     OppoPods 也是这么用的: summary = language_summary (说明), 不是 「中文」。
+    //     我们之前把 items[selectedIndex] 塞进 summary, 会和行尾重复显示两遍。
     //
-    // ## 前四轮踩的坑（别再走了）
-    //  1. 自创 Popup：点哪都关不掉、宽度不可控、无动画
-    //  2. OverlayListPopup：菜单不弹（缺 LocalPopupStates）
-    //  3. 补 Miuix Scaffold：崩（缺 NavigationEventDispatcherOwner）
-    //  4. Popup + ListPopupContent + Column(IntrinsicSize.Min)：
-    //     崩 `IllegalArgumentException: maxWidth must be >= than minWidth`
-    //     （IntrinsicSize.Min 要求子项高度确定，BasicComponent 高度不定）
-    // 3.2.13: 选中项加**框架图标**（素材库 R.drawable.ic_check）。
-    //
-    // 用户参照 LSPosed App 指出：锚定行应该有内缩圆角高亮，而 Miuix 默认是
-    // 通栏直角色块。我们试过三条路都不可行（详见 progress 档案）：
-    //   1. 外层 Modifier.clip —— 裁不到，clickableModifier 排在我们传入的
-    //      modifier 之后（BasicComponent 内部链 modifier → heightIn →
-    //      fillMaxWidth → then(clickableModifier) → padding）
-    //   2. LocalIndication provides null —— material3 的 LocalIndication
-    //      是 internal API
-    //   3. 自定义 IndicationNodeFactory —— Modifier.Node 与
-    //      IndicationNodeFactory 的构造函数对 Kotlin 子类**不可见**
-    //      （无论匿名/具名、无参/带参，1.11 与 1.12 实测都一样）。
-    //      读 miuix-ui-android 0.9.2 与 0.9.4 的 sources jar 确认：
-    //      两个版本的 MiuixIndication 都写死 drawRect，**库没修**。
-    //
-    // 所以改用 HyperOS 官方的另一条表达路径：`DropdownItem.icon`。
-    // Miuix 自己的默认观感也是「选中靠文字变主色 + 指示器，不靠色块」——
-    // `DropdownColors.selectedContainerColor` 默认等于 `containerColor`。
-    val entry = remember(items, selectedIndex, onPick) {
-        DropdownEntry(
-            items.mapIndexed { index, item ->
-                DropdownItem(
-                    text = item,
-                    selected = index == selectedIndex,
-                    onClick = { onPick(index) },
-                    // 选中项左侧显示 ✓（素材库图标，与 Material 轨下拉同款）
-                    // ⚠️ `icon` 的类型是 `@Composable ((Modifier) -> Unit)?`，
-                    // 库会把自己的 IconCellModifier（含 size/padding）传进来 ——
-                    // 所以这里**不要**自己再写 modifier，直接用参数。
-                    // 着色用 Miuix 自己的 `tint` Modifier 扩展（basic/Dropdown.kt 里
-                    // 选中项的箭头就是这么染色的），避免依赖 material3 的 Icon。
-                    icon = if (index == selectedIndex) {
-                        { m ->
-                            androidx.compose.foundation.Image(
-                                painter = androidx.compose.ui.res.painterResource(
-                                    com.fxxkmoondrop.secret.R.drawable.ic_check,
-                                ),
-                                contentDescription = null,
-                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                                    MiuixTheme.colorScheme.primary,
-                                ),
-                                modifier = m.size(18.dp),
-                            )
-                        }
-                    } else null,
-                )
-            },
-        )
-    }
-
-    MiuixCard(
-        // 3.2.13 修「选中/展开态高亮是直角长方形」。
-        //
-        // 现象：弹窗展开时「界面风格」行是一整块**直角通栏**深色高亮，
-        // 与 HyperOS 超椭圆卡片完全不搭（用户反馈「轮廓很奇怪，是长方形」）。
-        //
-        // 根因（读 miuix-ui-android-0.9.2-sources 确认）：
-        //   utils/MiuixIndication.kt 写死
-        //       drawRect(color, alpha, size = size)    // 硬编码直角通栏
-        //   `BasicComponent.clickable` 没传 indication，回落到
-        //   MiuixTheme 的 LocalIndication（就是它）。Miuix 0.9.2 无 squircle 版。
-        //
-        // ⛔ 外层 Modifier.clip 解决不了：BasicComponent 内部链是
-        //     modifier → heightIn → fillMaxWidth → then(clickableModifier) → padding
-        // 画高亮的那层排在我们传入的 modifier **之后**，clip 裁不到（实测无效）。
-        // ⛔ LocalIndication 也不可用：material3 的 LocalIndication 是 internal API。
-        // ⛔ 自己实现 IndicationNodeFactory：Compose 1.11 的 DelegatableNode 契约
-        //    复杂且跨版本易碎，只为换个形状不值得。
-        //
-        // 正解：用 Miuix **官方**的 pressFeedbackType。
-        // 它走 Card 自己的 `Modifier.pressable`（squircle 感知），
-        // 效果是 HyperOS 的「按下时轻微下沉」—— 这正是 HyperOS 列表/卡片的观感，
-        // 而不是画一块直角色块。库在 0.9.2 没有 squircle 色块高亮可用。
-        pressFeedbackType = top.yukonga.miuix.kmp.utils.PressFeedbackType.Sink,
-        showIndication = false,
-        // 3.2.13 修「选中项高亮是直角长方形」。
-        //
-        // 现象：弹窗展开时「界面风格」行出现一块**通栏直角**深色高亮，
-        // 与 HyperOS 的超椭圆卡片完全不搭。
-        //
-        // 根因（读 miuix-ui-android-0.9.2-sources 确认）：
-        //   utils/MiuixIndication.kt 的 ContentDrawScope.draw() 里写死了
-        //       drawRect(color, alpha, size = size)      // 硬编码直角
-        //   BasicComponent 的 clickable 没传 indication，于是回落到
-        //   MiuixTheme 提供的 LocalIndication（就是它）。
-        //   库在 0.9.2 **没有**提供 squircle 版的 Indication。
-        //
-        // 解法：不改库（我们用的是官方组件，不该魔改），
-        // 而是在**行这一层**加 squircle 圆角裁剪 ——
-        // 裁剪会把通栏的直角高亮切成超椭圆，与 Card 的 squircle 边缘对齐。
-        // 这是纯布局层的处理，不改变任何交互与官方组件语义。
-        modifier = Modifier.clip(
-            androidx.compose.foundation.shape.RoundedCornerShape(MiuixSpec.CARD_RADIUS),
-        ),
-    ) {
-        // ⚠️ 当前值必须放在 `summary`，**不能**用 `endActions`。
-        //
-        // 读 miuix-preference 0.9.2 的 WindowDropdownMenu 源码确认：
-        // 它内部的 `endActions` 已被 `DropdownArrowEndAction`（展开箭头）
-        // 和 `WindowDropdownPopup`（弹层本体）占满，不接受外部再塞内容。
-        // `showValue` 参数只有 `OverlayDropdownPreference` 才有，
-        // `WindowDropdownMenu` 没有。
-        //
-        // 所以 HyperOS 官方组件表达「当前选中」的方式就是 summary ——
-        // 我们照此办理，与 Material 轨 `M3Ui.dropdownRow`
-        // （标题 + 副标题 + 右侧值）语义一致。
-        WindowDropdownMenu(
-            entry = entry,
+    //  4. 不传 renderInRootScaffold
+    //     默认 true = 弹层覆盖全屏, 与 HyperOS 系统观感一致。
+    MiuixCard {
+        OverlayDropdownPreference(
             title = title,
-            summary = if (selectedIndex in items.indices) items[selectedIndex]
-            else subtitle,
-            maxHeight = 320.dp,
-            // ⚠️ `dropdownColors` 用 Miuix 的默认值即可，**不要**自创。
-            //
-            // 实机观察：弹窗打开时「界面风格」行会留下一块**通栏**高亮。
-            // 查源码确认这是 **Miuix 官方设计，不是 bug**：
-            //   WindowDropdownMenu 里 `isHoldDown` 在展开时置 true，
-            //   只在 `onDismissFinished`（关闭动画结束）才置回 false；
-            //   BasicComponent 的 `clickable` 没传 indication，
-            //   于是用 MiuixTheme 提供的 `MiuixIndication`，
-            //   它按 HyperOS 规范画**通栏**按压高亮（不是 squircle）。
-            // 系统自带的下拉菜单同样如此。
-            //
-            // 真正需要留意的是颜色：默认取 `onBackground`，
-            // 深色主题下过重、浅色下过淡。这里按 HyperOS 观感显式指定，
-            // 让按压高亮与菜单底色（surfaceContainer）协调。
-            dropdownColors = DropdownDefaults.dropdownColors(
-                // 菜单底色：与卡片同一层级
-                containerColor = MiuixTheme.colorScheme.surfaceContainer,
-                // 选中项：官方观感是**文字变主色 + 右侧指示器**，
-                // 不给独立底色（selectedContainerColor 默认等于 containerColor）
-                selectedContentColor = MiuixTheme.colorScheme.primary,
-                selectedIndicatorColor = MiuixTheme.colorScheme.primary,
-                // 未选中项
-                contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-            ),
+            items = items,
+            selectedIndex = selectedIndex,
+            summary = subtitle,
+            onSelectedIndexChange = { onPick(it) },
         )
     }
 }

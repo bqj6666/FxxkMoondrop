@@ -163,7 +163,16 @@ internal fun MiuixSurface(
             colorSpec = ThemeColorSpec.Spec2021,
         )
     ) {
-        content()
+        // 3.2.13: 注入超椭圆版 Indication, 修「下拉行高亮是直角方块」。
+        //
+        // 放在 MiuixTheme **内层** —— MiuixTheme 自己 provide 的是矩形版
+        // MiuixIndication (MiuixTheme.kt:36), 我们必须在内层覆盖它。
+        //
+        // BasicComponent 的 clickable 不传 indication, 自动取这个 Local,
+        // 所以这是唯一生效点 (详见 MiuixSquircleIndication 的 KDoc)。
+        com.fxxkmoondrop.secret.ui.miuix.ProvideMiuixSquircleIndication {
+            content()
+        }
     }
     }
 }
