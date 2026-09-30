@@ -45,6 +45,32 @@ class MiuixHostFragment : Fragment() {
     /** Miuix 轨的页面枚举。 */
     enum class Screen { OVERVIEW, SETTINGS, ABOUT }
 
+    /**
+     * 3.2.13: 底部导航栏的 tab 事件出口。
+     *
+     * onAttach 时从 Activity 拿，onDetach 必须置空 —— 否则 Fragment 存活
+     * 期间一直持有 Activity 引用，切页时泄漏。
+     */
+    private var navHost: MiuixNavHost? = null
+
+    override fun onAttach(context: android.content.Context) {
+        super.onAttach(context)
+        navHost = context as? MiuixNavHost
+    }
+
+    override fun onDetach() {
+        navHost = null
+        super.onDetach()
+    }
+
+    /** 当前选中的 tab id，供导航栏显示。 */
+    private val currentTabId: Int
+        get() = when (screen) {
+            Screen.OVERVIEW -> TAB_OVERVIEW
+            Screen.SETTINGS -> TAB_SETTINGS
+            Screen.ABOUT -> TAB_ABOUT
+        }
+
     private val screen: Screen
         get() = Screen.valueOf(arguments?.getString(ARG_SCREEN) ?: Screen.OVERVIEW.name)
 
@@ -98,10 +124,19 @@ class MiuixHostFragment : Fragment() {
                 // 由 Miuix 自己按 HCT 色轮算出整套 surface 层级色。
                 keyColor = Color(ThemeUtil.seedColor(ctx)),
             ) {
+                // 3.2.13 (D1): 底部导航栏用 Miuix 官方 NavigationBar，
+                // 挂进 MiuixPage 的 Scaffold.bottomBar 插槽。
+                // Material 轨的 BottomNavigationView 一行未动。
+                val nav = @Composable {
+                    MiuixNavBar(
+                        selected = currentTabId,
+                        onSelect = { id -> navHost?.onMiuixTab(id) },
+                    )
+                }
                 when (screen) {
-                    Screen.OVERVIEW -> MiuixOverviewScreen()
-                    Screen.SETTINGS -> MiuixSettingsScreen()
-                    Screen.ABOUT -> MiuixAboutScreen()
+                    Screen.OVERVIEW -> MiuixOverviewScreen(nav)
+                    Screen.SETTINGS -> MiuixSettingsScreen(nav)
+                    Screen.ABOUT -> MiuixAboutScreen(nav)
                 }
             }
         }
@@ -121,9 +156,9 @@ class MiuixHostFragment : Fragment() {
  * 大标题在上、卡片分组、卡片间距 12dp。
  */
 @Composable
-internal fun MiuixAboutScreen() {
+internal fun MiuixAboutScreen(bottomBar: (@Composable () -> Unit)? = null) {
     val ctx = LocalContext.current
-    MiuixPage(title = "关于") {
+    MiuixPage(title = "关于", bottomBar = bottomBar) {
         // 页面大标题已是「关于」，不再重复放同名分组标签。
         MiuixCard {
             MiuixListRow(title = "FxxkMoondrop", subtitle = "水月雨耳机系统级控制模块")

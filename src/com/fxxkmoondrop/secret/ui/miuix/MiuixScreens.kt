@@ -17,10 +17,10 @@ import com.fxxkmoondrop.secret.UiStyle
  * 先跑通并可在真机验证；第 3 步再接入 `GaiaBleClient` 的真实数据。
  */
 @Composable
-internal fun MiuixOverviewScreen() {
+internal fun MiuixOverviewScreen(bottomBar: (@Composable () -> Unit)? = null) {
     // 3.2.13 实机截图发现：页面大标题已是「概览」，再放一个同名的
     // MiuixSectionLabel("概览") 就重复了。分组标签只用于**页内**分节。
-    MiuixPage(title = "概览") {
+    MiuixPage(title = "概览", bottomBar = bottomBar) {
         MiuixCard {
             MiuixListRow(
                 title = "概览页（Miuix）",
@@ -37,10 +37,10 @@ internal fun MiuixOverviewScreen() {
  * MaterialSwitch 置灰陷阱。最后做，届时逐项对照 Material 版迁移。
  */
 @Composable
-internal fun MiuixSettingsScreen() {
+internal fun MiuixSettingsScreen(bottomBar: (@Composable () -> Unit)? = null) {
     val ctx = LocalContext.current
     // 页面大标题已是「设置」，不再重复同名分组标签。
-    MiuixPage(title = "设置") {
+    MiuixPage(title = "设置", bottomBar = bottomBar) {
         MiuixCard {
             MiuixListRow(
                 title = "设置页（Miuix）",

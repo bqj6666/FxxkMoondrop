@@ -35,7 +35,8 @@ import com.fxxkmoondrop.secret.ui.miuix.MiuixHostFragment
 // 所以这里显式实现：一个无参 NavigationEventDispatcher 即可。
 //
 // ⚠️ 与导航功能无关，不影响任何现有页面架构与行为。
-class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
+class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
+    com.fxxkmoondrop.secret.ui.miuix.MiuixNavHost {
 
     // ⚠️ 必须写成 Kotlin 的 `override val`（不是 Java 风格的 override fun
     // getNavigationEventDispatcher()）—— 该接口是用 Kotlin 声明的
@@ -71,6 +72,9 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         navBar = M3Ui.navBar(this, pal, curTab) { showTab(it) }
         root.addView(navBar, LinearLayout.LayoutParams(-1, -2))
+        // 3.2.13 (D1): Miuix 轨自带 Compose 导航栏，Material 的这根要藏起来，
+        // 否则页面里会出现两根导航栏。
+        syncNavBarVisibility()
         setContentView(root)
         // 状态栏/导航栏 insets：必须等 DecorView 创建后再设置（否则 getInsetsController NPE）
         if (Build.VERSION.SDK_INT >= 30) {
@@ -136,11 +140,30 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
      * Activity 本身不重建 —— 底栏、状态栏配色都不受影响，切换更轻。
      */
     fun applyStyleSwitch() {
+        // 3.2.13 (D1): 切主题时导航栏要跟着换实现 ——
+        // Material 的 View 导航栏与 Miuix 的 Compose 导航栏二选一。
+        syncNavBarVisibility()
         showTab(curTab)
+    }
+
+    /**
+     * Material 导航栏只在 Material 轨显示。
+     *
+     * Miuix 轨的导航栏由 `MiuixNavBar` 画在页面的 Scaffold 里，
+     * 这根 View 导航栏必须 `GONE`，否则一屏两根。
+     */
+    private fun syncNavBarVisibility() {
+        navBar?.visibility = if (MiuixSurface.enabled(this)) View.GONE else View.VISIBLE
+    }
+
+    override fun onMiuixTab(id: Int) {
+        if (id == curTab) return   // 重复点当前项不做无谓重建
+        showTab(id)
     }
 
     private fun showTab(id: Int) {
         curTab = id
+        syncNavBarVisibility()
         // 3.2.13: 双主题分派点（**全项目唯一**）。
         //
         // Material 轨一行未改，只是这里多一个 if：选 Miuix 时走 ui/miuix 下的

@@ -113,6 +113,8 @@ internal fun MiuixPage(
     title: String? = null,
     modifier: Modifier = Modifier,
     bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
+    // 3.2.13: 底部导航栏插槽（D1）。传 null = 不显示，Material 轨不受影响。
+    bottomBar: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -148,7 +150,8 @@ internal fun MiuixPage(
         // 状态栏/导航栏 inset 由我们自己处理（见 MiuixCollapsingHeader 的
         // statusBarDpOf 与 bottomPadding），避免与 Scaffold 的默认行为叠加两次。
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-    ) { _ ->
+        bottomBar = { bottomBar?.invoke() },
+    ) { innerPadding ->
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -162,7 +165,8 @@ internal fun MiuixPage(
                 // 顶部留出展开态标题的高度，滚动时内容从标题下方穿过
                 .padding(
                     top = MiuixSpec.HEADER_EXPANDED_DP.dp + statusBarDpOf(),
-                    bottom = bottomPadding,
+                    // 导航栏存在时，Scaffold 已给出它的高度；再叠原本的 bottomPadding
+                    bottom = bottomPadding + innerPadding.calculateBottomPadding(),
                 ),
         ) { content() }
 
