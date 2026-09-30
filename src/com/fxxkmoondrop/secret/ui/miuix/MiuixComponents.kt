@@ -508,14 +508,26 @@ internal fun MiuixDropdownRow(
     //
     //  4. 不传 renderInRootScaffold
     //     默认 true = 弹层覆盖全屏, 与 HyperOS 系统观感一致。
+    // 不用 MiuixPressableCard：它的 clickable 会与 OverlayDropdownPreference
+    // 内部的 clickable 抢事件（下拉就打不开了）。
+    //
+    // D3 去卡内高亮：`OverlayDropdownPreference` -> `BasicComponent`
+    // -> `Modifier.clickable` 不传 indication，自动取 LocalIndication.current。
+    // 官方 MiuixIndication 画的是通栏直角色块（这就是「卡内一圈」的来源）。
+    // 这里把这棵子树的 LocalIndication 置 null —— 高亮彻底消失，
+    // 整卡按下高亮交给 MiuixPressableCard / 其他卡片自己处理。
     MiuixCard {
-        OverlayDropdownPreference(
-            title = title,
-            items = items,
-            selectedIndex = selectedIndex,
-            summary = subtitle,
-            onSelectedIndexChange = { onPick(it) },
-        )
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.foundation.LocalIndication provides NoOpIndication as androidx.compose.foundation.Indication,
+        ) {
+            OverlayDropdownPreference(
+                title = title,
+                items = items,
+                selectedIndex = selectedIndex,
+                summary = subtitle,
+                onSelectedIndexChange = { onPick(it) },
+            )
+        }
     }
 }
 
