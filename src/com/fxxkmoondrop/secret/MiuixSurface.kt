@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -127,6 +130,31 @@ internal fun MiuixSurface(
     // 「设置 → 外观 → 种子颜色」是同一份偏好）作为 keyColor 交给 Miuix，
     // 由 **Miuix 自己**按 HCT 色轮算出完整的 surface 层级与 windowDimming。
     // 这样两套主题各用各的组件与配色体系，互不干涉。
+    // 3.2.13: 显式 provide NavigationEventDispatcherOwner。
+    //
+    // 之前只在 Activity 上 `implements NavigationEventDispatcherOwner` 是不够的 ——
+    // 实测仍崩 `No NavigationEventDispatcher was provided`。追出来的原因：
+    //
+    //   Miuix 弹层 → 读 Compose 的 `LocalWindowInfo`
+    //            → 它取 `LocalNavigationEventDispatcherOwner.current`
+    //            → 该 Local 由 `rememberNavigationEventDispatcherOwner` 填充
+    //            → 后者沿 **View 树**（ViewTreeOwner）逐级往上找 Owner
+    //
+    // View 树找的是「View 树节点上的 Owner」，而不是「Activity 是 Owner」。
+    // 我们的 ComposeView 挂在 Fragment 容器里，树上没有这个 Owner，
+    // 于是 `current` 为 null → 抛异常。
+    //
+    // 正解：用 `LocalNavigationEventDispatcherOwner.provides(...)` 在
+    // **Composition 层面**直接提供，完全绕开 View 树查找。
+    // 这是 Compose 官方给的显式注入入口，比依赖 View 树可靠。
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalNavigationEventDispatcherOwner provides object :
+            NavigationEventDispatcherOwner {
+            private val dispatcher = NavigationEventDispatcher()
+            override val navigationEventDispatcher: NavigationEventDispatcher
+                get() = dispatcher
+        },
+    ) {
     MiuixTheme(
         controller = ThemeController(
             colorSchemeMode = colorSchemeMode,
@@ -135,6 +163,7 @@ internal fun MiuixSurface(
         )
     ) {
         content()
+    }
     }
 }
 

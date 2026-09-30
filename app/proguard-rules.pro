@@ -74,3 +74,27 @@
 
 # ── 7. 不要警告 DexKit / libxposed 的可选依赖 ─────────────────────
 -dontwarn org.luckypray.dexkit.**
+
+# ── 3.2.13: Miuix 弹层需要的 NavigationEventDispatcherOwner ──────────
+#
+# Miuix 的所有弹层（下拉 WindowDropdownMenu / OverlayListPopup 等）都读
+# Compose 的 `LocalWindowInfo.current`，它通过
+# `LocalNavigationEventDispatcherOwner` 反射/类型查找宿主 Activity 是否实现
+# `androidx.navigationevent.NavigationEventDispatcherOwner`。
+#
+# MainActivity 已经 `implements` 了它，但 **R8 会把这个接口从 class_defs 的
+# interfaces 列表里优化掉** —— 因为项目里没有任何静态引用能证明它需要
+# （R8 只看得到「没人调用这个接口」）。实测：dex 里 MainActivity 的
+# interfaces 列表为空，运行时必然抛
+#   IllegalStateException: No NavigationEventDispatcher was provided
+#   via LocalNavigationEventDispatcherOwner
+#
+# `-keep interface` + `-keepclassmembers class * implements` 双保险：
+# 前者保证接口本身不被裁，后者保证实现关系（interfaces 列表）被保留。
+-keep interface androidx.navigationevent.NavigationEventDispatcherOwner
+-keep interface androidx.navigationevent.NavigationEventDispatcher
+-keep class * implements androidx.navigationevent.NavigationEventDispatcherOwner {
+    <init>(...);
+    *** getNavigationEventDispatcher();
+    *** navigationEventDispatcher();
+}

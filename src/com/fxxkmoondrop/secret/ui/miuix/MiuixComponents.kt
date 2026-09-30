@@ -493,12 +493,22 @@ internal fun MiuixDropdownRow(
     }
 
     MiuixCard {
+        // ⚠️ 当前值必须放在 `summary`，**不能**用 `endActions`。
+        //
+        // 读 miuix-preference 0.9.2 的 WindowDropdownMenu 源码确认：
+        // 它内部的 `endActions` 已被 `DropdownArrowEndAction`（展开箭头）
+        // 和 `WindowDropdownPopup`（弹层本体）占满，不接受外部再塞内容。
+        // `showValue` 参数只有 `OverlayDropdownPreference` 才有，
+        // `WindowDropdownMenu` 没有。
+        //
+        // 所以 HyperOS 官方组件表达「当前选中」的方式就是 summary ——
+        // 我们照此办理，与 Material 轨 `M3Ui.dropdownRow`
+        // （标题 + 副标题 + 右侧值）语义一致。
         WindowDropdownMenu(
             entry = entry,
             title = title,
-            summary = subtitle,
-            // 官方默认 maxHeight 是 null（不限）；给个上限避免选项多时菜单过长。
-            // 这个值属于「排版规范」范畴，用 Miuix 自己的 Dp 常量表达。
+            summary = if (selectedIndex in items.indices) items[selectedIndex]
+            else subtitle,
             maxHeight = 320.dp,
         )
     }

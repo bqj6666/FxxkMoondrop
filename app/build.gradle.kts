@@ -219,6 +219,9 @@ dependencies {
     // navigationevent 是 navigation-runtime 的**传递**依赖（runtime scope），
     // 编译期不可见，而 MainActivity 要实现它声明的接口 → 必须显式引入。
     implementation("androidx.navigationevent:navigationevent-android:1.1.1")
+    // LocalNavigationEventDispatcherOwner / provides(...) 在 compose 变体里。
+    // 我们用它做**显式注入**（绕开 View 树查找），所以必须显式引入。
+    implementation("androidx.navigationevent:navigationevent-compose-android:1.1.1")
 }
 
 // 3.2.13: 删除 postEdf（EDF 作用域注入 + 重签）整段。
