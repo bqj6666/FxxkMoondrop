@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
@@ -46,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.menu.WindowDropdownMenu
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -492,7 +494,27 @@ internal fun MiuixDropdownRow(
         )
     }
 
-    MiuixCard {
+    MiuixCard(
+        // 3.2.13 修「选中项高亮是直角长方形」。
+        //
+        // 现象：弹窗展开时「界面风格」行出现一块**通栏直角**深色高亮，
+        // 与 HyperOS 的超椭圆卡片完全不搭。
+        //
+        // 根因（读 miuix-ui-android-0.9.2-sources 确认）：
+        //   utils/MiuixIndication.kt 的 ContentDrawScope.draw() 里写死了
+        //       drawRect(color, alpha, size = size)      // 硬编码直角
+        //   BasicComponent 的 clickable 没传 indication，于是回落到
+        //   MiuixTheme 提供的 LocalIndication（就是它）。
+        //   库在 0.9.2 **没有**提供 squircle 版的 Indication。
+        //
+        // 解法：不改库（我们用的是官方组件，不该魔改），
+        // 而是在**行这一层**加 squircle 圆角裁剪 ——
+        // 裁剪会把通栏的直角高亮切成超椭圆，与 Card 的 squircle 边缘对齐。
+        // 这是纯布局层的处理，不改变任何交互与官方组件语义。
+        modifier = Modifier.clip(
+            androidx.compose.foundation.shape.RoundedCornerShape(MiuixSpec.CARD_RADIUS),
+        ),
+    ) {
         // ⚠️ 当前值必须放在 `summary`，**不能**用 `endActions`。
         //
         // 读 miuix-preference 0.9.2 的 WindowDropdownMenu 源码确认：
@@ -510,6 +532,30 @@ internal fun MiuixDropdownRow(
             summary = if (selectedIndex in items.indices) items[selectedIndex]
             else subtitle,
             maxHeight = 320.dp,
+            // ⚠️ `dropdownColors` 用 Miuix 的默认值即可，**不要**自创。
+            //
+            // 实机观察：弹窗打开时「界面风格」行会留下一块**通栏**高亮。
+            // 查源码确认这是 **Miuix 官方设计，不是 bug**：
+            //   WindowDropdownMenu 里 `isHoldDown` 在展开时置 true，
+            //   只在 `onDismissFinished`（关闭动画结束）才置回 false；
+            //   BasicComponent 的 `clickable` 没传 indication，
+            //   于是用 MiuixTheme 提供的 `MiuixIndication`，
+            //   它按 HyperOS 规范画**通栏**按压高亮（不是 squircle）。
+            // 系统自带的下拉菜单同样如此。
+            //
+            // 真正需要留意的是颜色：默认取 `onBackground`，
+            // 深色主题下过重、浅色下过淡。这里按 HyperOS 观感显式指定，
+            // 让按压高亮与菜单底色（surfaceContainer）协调。
+            dropdownColors = DropdownDefaults.dropdownColors(
+                // 菜单底色：与卡片同一层级
+                containerColor = MiuixTheme.colorScheme.surfaceContainer,
+                // 选中项：官方观感是**文字变主色 + 右侧指示器**，
+                // 不给独立底色（selectedContainerColor 默认等于 containerColor）
+                selectedContentColor = MiuixTheme.colorScheme.primary,
+                selectedIndicatorColor = MiuixTheme.colorScheme.primary,
+                // 未选中项
+                contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+            ),
         )
     }
 }
