@@ -934,3 +934,56 @@ Compose 1.11 的 `IndicationNodeFactory` / `DelegatableNode` 契约
 （`selectedContainerColor` 默认等于 `containerColor`，这是 HyperOS 观感）。
 
 **测试数：135 项 | 体积：4.7M | 已装机零崩溃**
+
+## 2026-09-29 第八轮：直角高亮彻底解决（官方 pressFeedbackType）
+
+用户反馈「还是直角」→ 上一轮 `Modifier.clip` 无效，**根因找错层级**。
+
+### 为什么 clip 裁不到
+
+`BasicComponent` 内部 modifier 链：
+
+```
+modifier → heightIn → fillMaxWidth → then(clickableModifier) → padding
+```
+
+画高亮的 `clickableModifier` 排在我们传入的 `modifier` **之后**，
+外层 clip 裁不到（实测无效，已撤销）。
+
+### 根因
+
+`utils/MiuixIndication.kt` 写死
+`drawRect(color, alpha, size = size)`（硬编码直角通栏），
+`BasicComponent.clickable` 没传 indication → 回落 `LocalIndication`。
+**Miuix 0.9.2 无 squircle 版 Indication。**
+
+### 试过并放弃
+
+1. 自定义 `IndicationNodeFactory` —— Compose 1.11 的 `DelegatableNode`
+   契约（`getNode()` + `Modifier.Node` 集成 + 挂载点）复杂易碎，
+   写出来引用不存在的 API。
+2. `LocalIndication provides null` —— material3 的 `LocalIndication`
+   是 **internal API**，外部不可用。
+
+### 正解
+
+```kotlin
+MiuixCard(
+    showIndication = false,
+    pressFeedbackType = PressFeedbackType.Sink,
+) { WindowDropdownMenu(...) }
+```
+
+`pressFeedbackType` 走 Card 自己的 `Modifier.pressable`（squircle 感知），
+表现为 HyperOS 的「按下轻微下沉」—— 靠形变而非直角色块表达按下。
+已给 `MiuixCard` 包装器透传这两个参数。
+
+顺带解决展开态高亮残留（原先 `isHoldDown` 只在 `onDismissFinished` 复位）。
+
+### 实机截图确认 ✅
+
+- 下拉弹窗为**圆角超椭圆**，与卡片边缘对齐
+- 选中项是**主色文字 + ✓ 指示器**，无色块
+  （HyperOS 官方观感：`selectedContainerColor` 默认等于 `containerColor`）
+- 「界面风格」行显示当前值 `HyperOS (Miuix)`
+- 零崩溃 | 135 项测试 | 4.7M
