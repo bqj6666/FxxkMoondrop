@@ -887,3 +887,50 @@ CompositionLocalProvider(
 `summary`**，已照此办理。
 
 **测试数：135 项 | 体积：4.7M | 已装机零崩溃**
+
+## 2026-09-29 第七轮：下拉行直角高亮 + 当前值显示
+
+### 根因（读 miuix-ui-android-0.9.2-sources 确认）
+
+`utils/MiuixIndication.kt`：
+
+```kotlin
+override fun ContentDrawScope.draw() {
+    drawContent()
+    if (alpha > 0f) drawRect(color = color, alpha = alpha, size = size)  // 硬编码直角
+}
+```
+
+`BasicComponent.clickable` 没传 `indication` → 回落 `LocalIndication`（就是它）
+→ 画**通栏直角矩形**，不跟随 squircle。
+且 `WindowDropdownMenu` 的 `isHoldDown` 只在 `onDismissFinished` 才复位。
+
+**Miuix 0.9.2 没有 squircle 版 Indication 实现。**
+
+### 解法：行层裁剪，不魔改官方组件
+
+```kotlin
+MiuixCard(modifier = Modifier.clip(RoundedCornerShape(MiuixSpec.CARD_RADIUS))) {
+    WindowDropdownMenu(...)
+}
+```
+
+裁剪把通栏直角高亮切成超椭圆，与 Card 边缘对齐。纯布局层处理。
+
+### 试过并放弃
+
+实现自定义 `IndicationNodeFactory` 覆盖 `LocalIndication`
+（行为照抄，只把 drawRect 换 drawRoundRect）——
+Compose 1.11 的 `IndicationNodeFactory` / `DelegatableNode` 契约
+（`getNode()` + `Modifier.Node` 集成）比预想复杂，写出来引用了不存在的 API。
+**不魔改官方组件、也不硬啃底层 API**是更稳的选择，已撤销。
+
+### 当前值显示
+
+`WindowDropdownMenu` 的 `endActions` 被箭头 + 弹层占满，`showValue`
+只有 `OverlayDropdownPreference` 有。**HyperOS 官方表达「当前选中」的方式
+就是 `summary`**，已照办。另显式传 `dropdownColors`：
+选中项给 `primary` 文字色 + 指示器，**不给独立底色**
+（`selectedContainerColor` 默认等于 `containerColor`，这是 HyperOS 观感）。
+
+**测试数：135 项 | 体积：4.7M | 已装机零崩溃**
