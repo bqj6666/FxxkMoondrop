@@ -145,42 +145,13 @@ class MiuixHostFragment : Fragment() {
 }
 
 /**
- * 关于页（Miuix 版）。
+ * 关于页（Miuix 版）—— 转发到 [MiuixAbout]。
  *
- * 对应 Material 轨的 `AboutFragment`。数据来源与 Material 版完全一致 ——
- * 版本号仍从 PackageManager 读，不硬编码。
- *
- * ## 排版参考
- *
- * 版式对齐 OppoPods 的 `EarphonesTabPage` / `SettingsTabPage`：
- * 大标题在上、卡片分组、卡片间距 12dp。
+ * 版式参考 SonyPods；版本号仍从 PackageManager 读，不硬编码。
  */
 @Composable
 internal fun MiuixAboutScreen(bottomBar: (@Composable () -> Unit)? = null) {
-    val ctx = LocalContext.current
-    MiuixPage(title = "关于", bottomBar = bottomBar) {
-        // 页面大标题已是「关于」，不再重复放同名分组标签。
-        MiuixCard {
-            MiuixListRow(title = "FxxkMoondrop", subtitle = "水月雨耳机系统级控制模块")
-        }
-        MiuixGap()
-        MiuixCard {
-            MiuixListRow(title = "版本", subtitle = appVersion(ctx))
-        }
-        MiuixGap()
-        MiuixCard {
-            MiuixListRow(title = "界面风格", subtitle = "当前：HyperOS（Miuix）")
-        }
-        MiuixGap()
-
-        // 说明行：切换入口已移到设置页（用户要求）
-        MiuixCard {
-            MiuixListRow(
-                title = "切换界面风格",
-                subtitle = "在「设置 → 外观 → 界面风格」中切换",
-            )
-        }
-    }
+    MiuixAbout(bottomBar)
 }
 
 /**
