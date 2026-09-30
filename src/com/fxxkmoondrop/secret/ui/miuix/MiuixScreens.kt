@@ -20,14 +20,8 @@ import com.fxxkmoondrop.secret.UiStyle
 internal fun MiuixOverviewScreen(bottomBar: (@Composable () -> Unit)? = null) {
     // 3.2.13 实机截图发现：页面大标题已是「概览」，再放一个同名的
     // MiuixSectionLabel("概览") 就重复了。分组标签只用于**页内**分节。
-    MiuixPage(title = "概览", bottomBar = bottomBar) {
-        MiuixCard {
-            MiuixListRow(
-                title = "概览页（Miuix）",
-                subtitle = "第 3 步接入 GAIA 实时数据",
-            )
-        }
-    }
+    // 3.2.13: 概览页实装到 MiuixOverview.kt（参考 SonyPods 层级）
+    MiuixOverview(bottomBar)
 }
 
 /**
