@@ -840,3 +840,50 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner {
 共同根因都是 `Column(IntrinsicSize.Min)` 与 `BasicComponent` 高度不定冲突。
 
 体积 4.7M（加依赖前后无变化，R8 裁掉未用部分）。**测试数：135 项。**
+
+
+## 2026-09-29 第六轮：Miuix 弹层闪退的真根因（我上一轮判断错了）
+
+上一轮我以为「Activity implements NavigationEventDispatcherOwner」就修好了，
+**实际仍然崩**。这次抓到完整链条：
+
+```
+Miuix 弹层 → LocalWindowInfo → LocalNavigationEventDispatcherOwner.current
+           → 由 rememberNavigationEventDispatcherOwner 填充
+           → 后者沿 **View 树**（ViewTreeOwner）逐级往上找
+```
+
+⛔ **View 树找的是「View 树节点上的 Owner」，不是「Activity 是 Owner」。**
+我们的 ComposeView 挂在 Fragment 容器里，树上没有该 Owner → current 为 null → 崩。
+
+### 正解：Compose 官方显式注入，绕开 View 树
+
+```kotlin
+CompositionLocalProvider(
+    LocalNavigationEventDispatcherOwner provides object : NavigationEventDispatcherOwner {
+        private val dispatcher = NavigationEventDispatcher()
+        override val navigationEventDispatcher get() = dispatcher
+    },
+) { MiuixTheme(controller = ...) { content() } }
+```
+
+依赖：`navigationevent-android:1.1.1` + `navigationevent-compose-android:1.1.1`
+（`provides()` 在 compose 变体里）。**没有** `navigationevent-runtime` 这个坐标。
+
+### 中间踩的两个坑（都写进档案了）
+
+1. **R8 会把 `implements` 关系优化掉**：dex 实测不加 keep 规则时
+   `MainActivity.interfaces` 是**空的**。已加 `-keep interface` +
+   `-keep class * implements ...`，加规则后 dex 实测接口在 ✓
+2. **我一度在装旧 APK**：改完 proguard 后 `assembleRelease` 报成功但
+   APK 时间戳没变（Gradle 判定 up-to-date），实际装的是 23:59 的旧包，
+   于是出现「改了还是崩」的假象。
+   ⛔ 改完必须重新 assemble + 重新 install，`BUILD SUCCESSFUL` 不算数。
+
+### 顺带：下拉行不显示当前值
+
+`WindowDropdownMenu` 的 `endActions` 被箭头与弹层占满，`showValue` 只有
+`OverlayDropdownPreference` 有 —— **HyperOS 官方表达「当前选中」的方式是
+`summary`**，已照此办理。
+
+**测试数：135 项 | 体积：4.7M | 已装机零崩溃**
