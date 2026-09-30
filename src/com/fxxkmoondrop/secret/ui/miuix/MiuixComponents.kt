@@ -243,6 +243,14 @@ internal fun MiuixSectionLabel(text: String, modifier: Modifier = Modifier) {
 internal fun MiuixCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    // 3.2.13: 透传 Miuix Card 官方的按压反馈参数。
+    // `showIndication=false` + `pressFeedbackType=Sink` 是 HyperOS 观感的正解：
+    // 官方默认的 indication 是硬编码 drawRect（直角通栏色块），
+    // 而 pressFeedbackType 走 Card 自己的 `Modifier.pressable`（squircle 感知），
+    // 表现为「按下轻微下沉」。
+    showIndication: Boolean = false,
+    pressFeedbackType: top.yukonga.miuix.kmp.utils.PressFeedbackType =
+        top.yukonga.miuix.kmp.utils.PressFeedbackType.None,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val m = if (onClick != null) modifier.clickable { onClick() } else modifier
@@ -275,6 +283,8 @@ internal fun MiuixCard(
         insideMargin = androidx.compose.foundation.layout.PaddingValues(
             MiuixSpec.ROW_PADDING,
         ),
+        showIndication = showIndication,
+        pressFeedbackType = pressFeedbackType,
         modifier = m.fillMaxWidth(),
         content = content,
     )
@@ -495,6 +505,30 @@ internal fun MiuixDropdownRow(
     }
 
     MiuixCard(
+        // 3.2.13 修「选中/展开态高亮是直角长方形」。
+        //
+        // 现象：弹窗展开时「界面风格」行是一整块**直角通栏**深色高亮，
+        // 与 HyperOS 超椭圆卡片完全不搭（用户反馈「轮廓很奇怪，是长方形」）。
+        //
+        // 根因（读 miuix-ui-android-0.9.2-sources 确认）：
+        //   utils/MiuixIndication.kt 写死
+        //       drawRect(color, alpha, size = size)    // 硬编码直角通栏
+        //   `BasicComponent.clickable` 没传 indication，回落到
+        //   MiuixTheme 的 LocalIndication（就是它）。Miuix 0.9.2 无 squircle 版。
+        //
+        // ⛔ 外层 Modifier.clip 解决不了：BasicComponent 内部链是
+        //     modifier → heightIn → fillMaxWidth → then(clickableModifier) → padding
+        // 画高亮的那层排在我们传入的 modifier **之后**，clip 裁不到（实测无效）。
+        // ⛔ LocalIndication 也不可用：material3 的 LocalIndication 是 internal API。
+        // ⛔ 自己实现 IndicationNodeFactory：Compose 1.11 的 DelegatableNode 契约
+        //    复杂且跨版本易碎，只为换个形状不值得。
+        //
+        // 正解：用 Miuix **官方**的 pressFeedbackType。
+        // 它走 Card 自己的 `Modifier.pressable`（squircle 感知），
+        // 效果是 HyperOS 的「按下时轻微下沉」—— 这正是 HyperOS 列表/卡片的观感，
+        // 而不是画一块直角色块。库在 0.9.2 没有 squircle 色块高亮可用。
+        pressFeedbackType = top.yukonga.miuix.kmp.utils.PressFeedbackType.Sink,
+        showIndication = false,
         // 3.2.13 修「选中项高亮是直角长方形」。
         //
         // 现象：弹窗展开时「界面风格」行出现一块**通栏直角**深色高亮，
