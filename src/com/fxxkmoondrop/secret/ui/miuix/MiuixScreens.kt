@@ -7,14 +7,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.fxxkmoondrop.secret.Lang
+import com.fxxkmoondrop.secret.ThemeUtil
 import com.fxxkmoondrop.secret.MainActivity
 import com.fxxkmoondrop.secret.UiStyle
 
 /**
- * 概览页（Miuix 版）—— **占位**，第 3 步实装。
+ * 概览页（Miuix 版）—— 实装见 [MiuixOverview]。
  *
- * 现在只显示说明卡片，让骨架链路（Fragment → ComposeView → Miuix）
- * 先跑通并可在真机验证；第 3 步再接入 `GaiaBleClient` 的真实数据。
+ * 这里只做转发，页面本体在 `MiuixOverview.kt`。
  */
 @Composable
 internal fun MiuixOverviewScreen(bottomBar: (@Composable () -> Unit)? = null) {
@@ -25,33 +25,47 @@ internal fun MiuixOverviewScreen(bottomBar: (@Composable () -> Unit)? = null) {
 }
 
 /**
- * 设置页（Miuix 版）—— **占位**，第 5 步实装。
+ * 设置页（Miuix 版）—— 按 SonyPods 的信息层级重排。
  *
- * 设置页最复杂：1168 行、含大量开关与置灰逻辑，还有 3.2.12 踩过的
- * MaterialSwitch 置灰陷阱。最后做，届时逐项对照 Material 版迁移。
+ * ## 分组依据
+ *
+ * SonyPods 设置页（本机实测截图）：一组同类项放进**一张大卡片**，
+ * 组间留白，标题弱化。我们照此分为三组：
+ *
+ *   外观 —— 界面风格 / 动态取色 / AMOLED 纯黑
+ *   功能 —— 官方降噪面板 / 后台监听 / 切后台隐藏
+ *   维护 —— 弹窗图标 / 使用引导
+ *
+ * ## key 全部取自真实实现
+ *
+ * 读用 `ThemeUtil.dynColor()` / `ThemeUtil.amoled()`（只读 getter，无 setter），
+ * 写用 `getSP().edit().putBoolean(...).commit()` —— 与 `SettingsFragment.makeThemeSwitch`
+ * 完全同一套，不臆造 API，不新增 key。
  */
 @Composable
 internal fun MiuixSettingsScreen(bottomBar: (@Composable () -> Unit)? = null) {
     val ctx = LocalContext.current
-    // 页面大标题已是「设置」，不再重复同名分组标签。
+    val sp = remember { ctx.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE) }
+
+    // 开关状态提升到页面级，切换后立即重组（与 Material 版一致）
+    var dynColor by remember { mutableStateOf(ThemeUtil.dynColor(ctx)) }
+    var amoled by remember { mutableStateOf(ThemeUtil.amoled(ctx)) }
+    var officialPanel by remember { mutableStateOf(sp.getBoolean("feat_official_panel", true)) }
+    var autoService by remember { mutableStateOf(sp.getBoolean("auto_service", true)) }
+    var bgHide by remember { mutableStateOf(sp.getBoolean("bg_hide", false)) }
+    var featPopup by remember { mutableStateOf(sp.getBoolean("feat_popup", true)) }
+    var onboarding by remember { mutableStateOf(sp.getBoolean("show_guide", true)) }
+
     MiuixPage(title = "设置", bottomBar = bottomBar) {
-        MiuixCard {
-            MiuixListRow(
-                title = "设置页（Miuix）",
-                subtitle = "第 5 步实装；Material 版此时仍完整可用",
-            )
-        }
-        MiuixGap()
 
-        // ── 外观 ────────────────────────────────────────────────
-        MiuixSectionLabel("外观")
-
-        // 3.2.13 用户要求：「切换的开关也要做成 material 一样的、
-        // 展开选项切换的那种样式」—— 即 M3Ui.dropdownRow 那套。
+        // ── 外观 ────────────────────────────────────────────
+        MiuixSectionLabel(Lang.t("外观", "Appearance"))
         MiuixDropdownRow(
             title = Lang.t("界面风格", "Interface style"),
-            subtitle = Lang.t("选择控件观感；切换不影响上方亮暗设置",
-                    "Control appearance; independent of light/dark"),
+            subtitle = Lang.t(
+                "选择控件观感；切换不影响下方亮暗设置",
+                "Control appearance; independent of light/dark",
+            ),
             items = listOf(
                 Lang.t("Material You", "Material You"),
                 Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)"),
@@ -60,39 +74,100 @@ internal fun MiuixSettingsScreen(bottomBar: (@Composable () -> Unit)? = null) {
         ) { si ->
             UiStyle.set(ctx, UiStyle.entries[si])
             // 立即重建当前页，不等冷启动。不能用 recreate()：
-            // 那条路 savedInstanceState 非空，showTab 不会被调用（详见 applyStyleSwitch 注释）。
+            // 那条路 savedInstanceState 非空，showTab 不会被调用。
             (ctx as? MainActivity)?.applyStyleSwitch()
         }
         MiuixGap()
-        MiuixCard {
-            // 3.2.13 修 bug：原来这里是 onCheckedChange = { } 的空回调，
-            // 视觉上是开关但状态永远不变 —— 用户反馈「能点但没法切换状态」。
-            // 现在真正写进 cfg SP，重启后仍保持。
-            var demoOn by remember { mutableStateOf(demoSwitch(ctx)) }
+
+        MiuixPressableCard(onClick = { /* 整卡按压反馈，点击由行内控件处理 */ }) {
             MiuixSwitchRow(
-                title = "示例开关",
-                subtitle = "写入 cfg SP（key=demo_miuix_switch），重启后仍保持",
-                checked = demoOn,
+                title = Lang.t("动态取色", "Dynamic color"),
+                subtitle = Lang.t("从系统壁纸取色，两套主题共用",
+                        "Seed from wallpaper; shared by both themes"),
+                checked = dynColor,
                 onCheckedChange = { v ->
-                    demoOn = v
-                    writeDemoSwitch(ctx, v)
+                    dynColor = v
+                    sp.edit().putBoolean("dynamic_color", v).commit()
+                    (ctx as? MainActivity)?.applyStyleSwitch()
+                },
+            )
+            MiuixDivider()
+            MiuixSwitchRow(
+                title = Lang.t("AMOLED 纯黑", "AMOLED black"),
+                subtitle = Lang.t("深色模式下用纯黑背景省电",
+                        "Pure black background in dark mode"),
+                checked = amoled,
+                onCheckedChange = { v ->
+                    amoled = v
+                    sp.edit().putBoolean("amoled", v).commit()
+                    (ctx as? MainActivity)?.applyStyleSwitch()
+                },
+            )
+        }
+        MiuixGap()
+
+        // ── 功能 ────────────────────────────────────────────
+        MiuixSectionLabel(Lang.t("功能", "Features"))
+        MiuixPressableCard(onClick = { }) {
+            MiuixSwitchRow(
+                title = Lang.t("官方降噪面板", "Official ANC panel"),
+                subtitle = Lang.t("在系统蓝牙设备详情页注入降噪与功能控制卡片",
+                        "Inject ANC & control card into system Bluetooth page"),
+                checked = officialPanel,
+                onCheckedChange = { v ->
+                    officialPanel = v
+                    sp.edit().putBoolean("feat_official_panel", v).commit()
+                },
+            )
+            MiuixDivider()
+            MiuixSwitchRow(
+                title = Lang.t("后台监听", "Background service"),
+                subtitle = Lang.t("自动连接已配对的耳机",
+                        "Auto-connect paired earphones"),
+                checked = autoService,
+                onCheckedChange = { v ->
+                    autoService = v
+                    sp.edit().putBoolean("auto_service", v).commit()
+                },
+            )
+            MiuixDivider()
+            MiuixSwitchRow(
+                title = Lang.t("切后台时隐藏主界面", "Hide on background"),
+                subtitle = Lang.t("离开主界面时自动隐藏任务",
+                        "Hide task when leaving main screen"),
+                checked = bgHide,
+                onCheckedChange = { v ->
+                    bgHide = v
+                    sp.edit().putBoolean("bg_hide", v).commit()
+                },
+            )
+        }
+        MiuixGap()
+
+        // ── 维护 ────────────────────────────────────────────
+        MiuixSectionLabel(Lang.t("维护", "Maintenance"))
+        MiuixPressableCard(onClick = { }) {
+            MiuixSwitchRow(
+                title = Lang.t("启用弹窗", "Enable popup"),
+                subtitle = Lang.t("连接时显示 Google 官方弹窗",
+                        "Show Google popup when connecting"),
+                checked = featPopup,
+                onCheckedChange = { v ->
+                    featPopup = v
+                    sp.edit().putBoolean("feat_popup", v).commit()
+                },
+            )
+            MiuixDivider()
+            MiuixSwitchRow(
+                title = Lang.t("使用引导", "Onboarding"),
+                subtitle = Lang.t("首次启动的功能说明",
+                        "Feature guide on first launch"),
+                checked = onboarding,
+                onCheckedChange = { v ->
+                    onboarding = v
+                    sp.edit().putBoolean("show_guide", v).commit()
                 },
             )
         }
     }
-}
-
-private const val SP = "cfg"
-private const val KEY_DEMO = "demo_miuix_switch"
-
-private fun demoSwitch(ctx: android.content.Context): Boolean = try {
-    ctx.getSharedPreferences(SP, android.content.Context.MODE_PRIVATE)
-        .getBoolean(KEY_DEMO, false)
-} catch (_: Throwable) { false }
-
-private fun writeDemoSwitch(ctx: android.content.Context, on: Boolean) {
-    try {
-        ctx.getSharedPreferences(SP, android.content.Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_DEMO, on).apply()
-    } catch (_: Throwable) { /* 写不进去就用内存态，不崩 */ }
 }
