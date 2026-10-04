@@ -41,10 +41,54 @@ import top.yukonga.miuix.kmp.theme.ThemeColorSpec
  */
 object MiuixSurface {
 
-    /** 当前是否应走 Miuix 轨。非 MIUIX 时调用方继续用现有 M3 界面。 */
+    /**
+     * ⛔ 3.2.13: Miuix 轨**已停用**（代码保留，随时可恢复）。
+     *
+     * ## 为什么停用
+     *
+     * 用户决定：面板三件套（概览 / 设置 / 导航栏）虽然功能与交互都跑通了，
+     * 但整体观感与参考项目仍有差距（深色下卡片与背景对比偏弱等），
+     * 暂不投入使用，先回到 Material 轨。
+     *
+     * ## 为什么只改这一处
+     *
+     * `enabled()` 是 Miuix 轨的**唯一闸门** —— 全项目只有两处调用它：
+     *   - `MainActivity.showTab()`  : 选 Fragment 时分派
+     *   - `MainActivity.syncNavBarVisibility()` : 决定藏哪根导航栏
+     *
+     * 一处返回 false，Miuix 轨整条链路（含底部导航栏）都不会被进入，
+     * Material 轨行为与停用前**完全一致**。
+     *
+     * ## 怎么恢复
+     *
+     * 把 `DISABLED` 改回 `false` 即可，无需改任何其他文件。
+     * 全部 Miuix 代码仍完整保留在 `ui/miuix/` 与本文件，未删一行。
+     *
+     * ## 为什么不用 R8 剔除
+     *
+     * 那样会让 Miuix 依赖真正从产物消失、恢复时还要重新拉依赖。
+     * 现在这样保留依赖与源码，恢复成本 = 改一个布尔值。
+     */
+    private const val DISABLED = true
+
+    /**
+     * Miuix 轨是否处于停用状态。
+     *
+     * UI 层据此隐藏 Miuix 相关入口（如设置页的「界面风格」下拉），
+     * 避免出现「能点但没反应」。恢复时把它与 [enabled] 的判断一起回退即可。
+     */
+    @JvmStatic
+    val disabled: Boolean get() = DISABLED
+
+    /**
+     * 当前是否应走 Miuix 轨。
+     *
+     * ⛔ 3.2.13 起恒为 `false`：Miuix 轨已停用，见上方 [DISABLED] 说明。
+     * 保留 `UiStyle.current` 的读取逻辑是为了将来恢复时行为完全一致。
+     */
     @JvmStatic
     fun enabled(c: android.content.Context?): Boolean =
-            UiStyle.current(c) == UiStyle.MIUIX
+            !DISABLED && UiStyle.current(c) == UiStyle.MIUIX
 
     /**
      * 亮暗偏好 → Miuix 的 [ColorSchemeMode]。

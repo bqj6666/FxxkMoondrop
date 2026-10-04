@@ -154,6 +154,11 @@ class SettingsFragment : Fragment() {
         // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
         // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
         // 看到的界面与上一版完全一致，不会因为升级就换皮。
+        //
+        // ⛔ 3.2.13: Miuix 轨已停用（见 MiuixSurface.DISABLED）。
+        // 这块 UI 随之隐藏 —— 否则用户选了「HyperOS」界面却毫无变化，
+        // 属于「能点但没反应」的坏体验。停用期间不显示，恢复后自动回来。
+        if (!MiuixSurface.disabled) {
         val styleRow = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("界面风格", "Interface style"),
                 Lang.t("选择控件观感；切换不影响上方亮暗设置", "Control appearance; independent of light/dark"),
@@ -173,6 +178,7 @@ class SettingsFragment : Fragment() {
             (activity as? MainActivity)?.applyStyleSwitch()
         }
         appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
+        }
 
         // 动态取色 / AMOLED 开关（makeSwitchRow 自身即卡片，无需再包）
         val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
