@@ -55,8 +55,27 @@ if [ -z "$LAUNCHER" ]; then
     exit 1
 fi
 
-exec "$JAVA_HOME/bin/java" \
+# ⚠️ 内存：本机手机总内存约 15.8G，但同时运行微信/浏览器/各系统进程。
+# 原来 -Xmx4g 会让 Gradle daemon 吃掉 4G，再加 Kotlin daemon，
+# 构建完完进程不退出（已实测残留 5 个守护进程）。
+# 2g 足够编译本项目（Compose + R8 编译峰值约 1.2G）。
+#
+# 同时在脚本退出时停掉 daemon，避免残留。
+# 大量构建（release + 单测）请走 GitHub Actions，手机不再磁腿。
+GRADLE_OPTS="-Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx2g"
+export GRADLE_OPTS
+
+"$JAVA_HOME/bin/java" \
     -Djava.io.tmpdir="$TMPD" \
-    -Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8 \
+    -Xmx2g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8 \
     -cp "$LAUNCHER" \
     org.gradle.launcher.GradleMain "$@"
+STATUS=$?
+
+# 构建完清场：回收 daemon / Kotlin daemon 的内存。
+# 无条件先 kill 一下 --stop 失败也不影响退出码。
+"$JAVA_HOME/bin/java" -Djava.io.tmpdir="$TMPD" -cp "$LAUNCHER" \
+    org.gradle.launcher.GradleMain --stop >/dev/null 2>&1 || true
+pkill -f 'kotlin-daemon-embeddable' 2>/dev/null || true
+
+exit $STATUS
