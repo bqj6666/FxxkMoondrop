@@ -557,6 +557,16 @@ class OverviewFragment : Fragment() {
         dcControlCard = dcCard
         root.addView(spacer(dp(8)))
 
+        // 3.3.2: 设备被跳过时的主动提示（issue #12 教训）。
+        //
+        // 此前拉黑是**静默**的：界面看不出异常，用户只看到「连不上」，
+        // 自然不会想到去点「刷新状态」自救。
+        val skipped = DeviceMatcher.rejectedNames(requireContext())
+        if (skipped.isNotEmpty()) {
+            root.addView(makeSkippedNotice(skipped))
+            root.addView(spacer(dp(8)))
+        }
+
         // alpha2.52: 点击后短暂禁用，防止连点重复触发刷新
         root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"),
                 R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() })
@@ -771,6 +781,42 @@ class OverviewFragment : Fragment() {
             }
 
     /** alpha2.52: [debounceMs] > 0 时点击后短暂禁用并置灰，防止连点重复触发 */
+    /**
+     * 3.3.2: 「有设备被跳过检测」提示卡。
+     *
+     * 只在 [DeviceMatcher.rejectedNames] 非空时出现，列出来源并指向下方
+     * 的「刷新状态」按钮 —— 一键即 [`DeviceMatcher.clearRejected`]，重新探测。
+     *
+     * 用红色标题而非弹窗：不打断操作，但一眼能看见。
+     */
+    private fun makeSkippedNotice(names: List<String>): View {
+        val ctx = requireContext()
+        val box = LinearLayout(ctx)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(16), dp(14), dp(16), dp(14))
+        box.background = M3Ui.cardBg(ctx, ThemeUtil.Palette(ctx), M3Ui.RADIUS_CARD)
+
+        val title = TextView(ctx)
+        title.text = Lang.t("⚠️ 有设备被跳过检测", "Device(s) skipped")
+        title.textSize = 14f
+        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        title.setTextColor(red)
+        box.addView(title)
+
+        val desc = TextView(ctx)
+        // 列出名字，用户能认出是不是自己的耳机
+        desc.text = Lang.t(
+            names.joinToString("、") + " 在蓝牙服务发现时未返回结果，已被暂时跳过。"
+                    + "若其中有你的耳机，点下方「刷新状态」即可重新检测。",
+            names.joinToString(", ") + " returned no Bluetooth services and were skipped."
+                    + " If one is your headset, tap Refresh below to re-check.")
+        desc.textSize = 13f
+        desc.setTextColor(onVariantColor)
+        desc.setPadding(0, dp(4), 0, 0)
+        box.addView(desc)
+        return box
+    }
+
     private fun makeButton(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                            debounceMs: Long = 0L, l: View.OnClickListener): MaterialButton {
         // alpha2.0: 官方 MaterialButton（Material3 按钮）+ 官方 Material Icons 图标

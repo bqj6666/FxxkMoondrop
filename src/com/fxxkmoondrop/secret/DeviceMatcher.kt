@@ -98,6 +98,26 @@ class DeviceMatcher {
         }
 
         /**
+         * 3.3.2: 被跳过的设备名快照（只读）。
+         *
+         * 供 UI 提示用 —— issue #12 暴露的问题：设备被判为「探测失败」后
+         * 静默拉黑，界面上**完全看不出来**，用户只看到「连不上」，
+         * 当然也不会想到去点「刷新状态」按钮自救。
+         *
+         * 返回副本，调用方改不动内部集合。
+         */
+        @JvmStatic
+        @Synchronized
+        fun rejectedNames(ctx: Context? = null): List<String> {
+            // 懒加载：拒绝名单此前**只**由 HeadsetDetectService.onCreate 恢复
+            // （HeadsetDetectService.kt:122）。概览页可能在服务启动前就查询，
+            // 那时内存集合还是空的，提示条不会出现 —— 实机验证时踩到过。
+            // loadPersisted 自身幂等（if (loaded) return），这里补一次即可。
+            loadPersisted(ctx)
+            return rejected.toList()
+        }
+
+        /**
          * 清空「探测失败」名单，允许对未收录型号重新探测一次。
          *
          * 供主界面「刷新状态」按钮调用 —— 用户主动刷新即明确要求重试，
