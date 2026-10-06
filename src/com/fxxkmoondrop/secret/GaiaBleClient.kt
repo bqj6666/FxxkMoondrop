@@ -158,6 +158,20 @@ class GaiaBleClient private constructor() {
      * 于是永远换不到有效候选。这里按「尝试次数」独立计数，足够多次就判定该地址失效。
      */
     @Volatile private var cachedLeTries = 0
+
+    /**
+     * 3.3.2: 本会话内「服务列表为空」已重试次数。
+     *
+     * issue #12 现场：GATT connected 后仅 37ms 就返回 `services(0)`，
+     * 疑似**连接未真正就绪就抢跑服务发现**（该链路日志反复出现
+     * status=147 GATT_CONN_TIMEOUT，佐证链路不稳）。
+     * 现在空列表不再拉黑，并允许延迟重发 discoverServices() 自救。
+     */
+    @Volatile private var emptySvcRetries = 0
+
+    // 空服务列表的重试策略统一取自 GattProtocolVerdict，
+    // 避免同一份策略在两处各写一套而漂移（issue #12 的教训）。
+    private val EMPTY_SVC_RETRY_DELAY_MS = GattProtocolVerdict.EMPTY_SVC_RETRY_DELAY_MS
     private val scanHits = CopyOnWriteArrayList<ScanResult>()
     @Volatile private var forceDirectConnect = false
     @Volatile private var lastConnectedAddr: String? = null
@@ -1361,6 +1375,7 @@ class GaiaBleClient private constructor() {
                 refreshGattCache(g)
                 AppLog.i(GaiaConstants.TAG, "GATT connected " + deviceAddress + " -> discovering services")
                 gattPendingSince = 0
+                emptySvcRetries = 0   // 3.3.2: 新会话重新开始计数
                 if (deviceAddress != null) lastConnectedAddr = deviceAddress
                 // alpha2.41.9: GATT 已连接 != 服务已验证，持久化统一交给 onServicesDiscovered
                 // 确认 GAIA/9ECA 之后再写（此前这里会把"只有 GATT、没有 GAIA"的地址写进缓存）
@@ -1503,8 +1518,31 @@ class GaiaBleClient private constructor() {
                     val verdict = GattProtocolVerdict.decide(
                             g.services?.size ?: 0, hasGaia, hasSrc9)
                     if (verdict == GattProtocolVerdict.Verdict.INCONCLUSIVE) {
+                        // 3.3.2: 先延迟重发一次 discoverServices() 自救 —— 空列表
+                        // 多半是「连接未就绪就抢跑」，此刻立即可重试。
+                        // 重试用尽后才退回 RFCOMM，避免每次空列表都过早放弃 GATT。
+                        if (GattProtocolVerdict.shouldRetryEmptyServices(emptySvcRetries)) {
+                            emptySvcRetries++
+                            AppLog.w(GaiaConstants.TAG,
+                                    "GATT 服务列表为空（传输层异常，非协议证伪）"
+                                            + " -> 第 " + emptySvcRetries + " 次延迟重试；设备="
+                                            + (g.device?.name ?: "?"))
+                            handler.postDelayed({
+                                if (connected) return@postDelayed   // 已连上就不打扰
+                                try {
+                                    AppLog.i(GaiaConstants.TAG,
+                                            "retry discoverServices() #" + emptySvcRetries)
+                                    g.discoverServices()
+                                } catch (e: Exception) {
+                                    Log.w(GaiaConstants.TAG, "retry discoverServices failed", e)
+                                    tryRfcommFallback(g.device)
+                                }
+                            }, EMPTY_SVC_RETRY_DELAY_MS)
+                            return
+                        }
                         AppLog.w(GaiaConstants.TAG,
-                                "GATT 服务列表为空（传输层异常，非协议证伪）-> keep probing: "
+                                "GATT 服务列表持续为空（已重试 " + emptySvcRetries
+                                        + " 次）-> 退回 RFCOMM；设备="
                                         + (g.device?.name ?: "?"))
                         tryRfcommFallback(g.device)
                         return

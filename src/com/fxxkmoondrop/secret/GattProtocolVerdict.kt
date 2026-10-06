@@ -49,4 +49,24 @@ internal object GattProtocolVerdict {
         serviceCount <= 0 -> Verdict.INCONCLUSIVE
         else -> Verdict.REFUTED
     }
+
+    // ── 空服务列表的重试策略（3.3.2）──
+
+    /** 空列表允许的最大重试次数。 */
+    const val MAX_EMPTY_SVC_RETRIES = 2
+
+    /** 每次重试前的等待时长（毫秒）。 */
+    const val EMPTY_SVC_RETRY_DELAY_MS = 400L
+
+    /**
+     * 空列表时下一步该做什么。
+     *
+     * 抽成纯函数是为了可测：这段策略直接决定「一次连不上会不会被判死」，
+     * 而 issue #12 恰恰是判定策略出的问题，不能再让它只活在 Android 代码里。
+     *
+     * @param retriesSoFar 本会话已重试次数
+     * @return true = 还应再延迟重试一次；false = 重试已用尽，退回 RFCOMM
+     */
+    fun shouldRetryEmptyServices(retriesSoFar: Int): Boolean =
+        retriesSoFar < MAX_EMPTY_SVC_RETRIES
 }
