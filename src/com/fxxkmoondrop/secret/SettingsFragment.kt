@@ -932,8 +932,9 @@ class SettingsFragment : Fragment() {
         t.textSize = 14f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(pal.onSurface)
-        // 左边距对齐 sectionTitle（16dp）：二级标签与分组标题左边缘一致
-        t.setPadding(dp(16), dp(8), dp(16), dp(2))
+        // 3.3.1: 左边距 24dp，与 sectionTitle 及列表行内容**同一条基准线**
+        // （rikkax material-preference 的 listPreferredItemPaddingStart = 24dp）
+        t.setPadding(dp(24), dp(8), dp(16), dp(2))
         return t
     }
 

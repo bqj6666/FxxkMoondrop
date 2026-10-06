@@ -365,13 +365,13 @@ class M3Ui {
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
             if (iconRes != 0) {
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
                 ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
                 val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 16)
+                ilp.marginEnd = dp(act, 8)
                 row.addView(ic, ilp)
             }
             val labels = LinearLayout(act)
@@ -381,7 +381,7 @@ class M3Ui {
             t1.textSize = 16f
             t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             t1.setTextColor(pal.onSurface)
-            labels.addView(t1, LinearLayout.LayoutParams(-2, -2))
+            labels.addView(t1, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(act, 2) })
             if (!sub.isNullOrEmpty()) {
                 val t2 = TextView(act)
                 t2.text = sub
@@ -392,7 +392,7 @@ class M3Ui {
             row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
             val ch = chevron(act, pal.onVariant)
             val clp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-            clp.marginStart = dp(act, 10)
+            clp.marginStart = dp(act, 16)
             row.addView(ch, clp)
             card.addView(row, LinearLayout.LayoutParams(-1, -2))
             if (onClick != null) card.setOnClickListener { onClick.run() }
@@ -410,7 +410,7 @@ class M3Ui {
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
@@ -419,7 +419,7 @@ class M3Ui {
             t1.textSize = 16f
             t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             t1.setTextColor(pal.onSurface)
-            labels.addView(t1, LinearLayout.LayoutParams(-2, -2))
+            labels.addView(t1, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(act, 2) })
             if (sub.isNotEmpty()) {
                 val t2 = TextView(act)
                 t2.text = sub
@@ -808,11 +808,22 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             t.text = text
             t.textSize = 14f
             t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            t.setTextColor(pal.onVariant)
-            // 左边距 16dp = 卡片内文字位置（外层 16 + 卡片内 16 = 绝对 32dp）。
-            // 3.3.1 前是 20dp，与 makeSubLabel(4dp)、卡片文字(16dp) 三种缩进混用，
-            // 同一屏里左边缘参差正是「看着很奇怪」的来源。
-            t.setPadding(dp(act, 16), dp(act, 2), dp(act, 16), dp(act, 6))
+            // 3.3.1: 完全对齐 rikkax material-preference（LSPosed 设置页同款）。
+            //
+            // 依据该库 res/values/values.xml + m3_preference_category.xml 实测：
+            //   preferenceCategoryTitleTextColor = ?colorPrimary   <- 主色，不是 onVariant
+            //   TextAppearance.Rikka.CategoryTitle.Material3      = 14sp
+            //   layout_marginTop                                  = 16dp
+            //   text paddingTop/Bottom                            = 8dp
+            //   左内边距 = listPreferredItemPaddingStart          = 24dp
+            //
+            // 左 24dp 与列表行内容左边缘**完全对齐**，这是「边距对了」的关键：
+            // 分组标题与卡片内文字共用同一条左基准线。
+            //
+            // top 用 24dp = 16dp(原 marginTop) + 8dp(原 paddingTop)：本标签背景透明，
+            // 用 padding 表达 margin 效果一致，且不用改各处 addView 调用。
+            t.setTextColor(pal.primary)
+            t.setPadding(dp(act, 24), dp(act, 24), dp(act, 16), dp(act, 8))
             return t
         }
 
@@ -845,14 +856,14 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             if (iconRes != 0) {
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
                 ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
                 val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 16)
+                ilp.marginEnd = dp(act, 8)
                 row.addView(ic, ilp)
             }
             val labels = LinearLayout(act)
@@ -862,7 +873,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             t1.textSize = 16f
             t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             t1.setTextColor(pal.onSurface)
-            labels.addView(t1, LinearLayout.LayoutParams(-2, -2))
+            labels.addView(t1, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(act, 2) })
             if (!sub.isNullOrEmpty()) {
                 val t2 = TextView(act)
                 t2.text = sub
@@ -873,7 +884,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
             if (trailing != null) {
                 val tlp = LinearLayout.LayoutParams(-2, -2)
-                tlp.marginStart = dp(act, 10)
+                tlp.marginStart = dp(act, 16)
                 row.addView(trailing, tlp)
             }
             if (onClick != null) row.setOnClickListener { onClick.run() }
