@@ -353,19 +353,18 @@ class M3Ui {
             return tv
         }
 
-        /** M3 列表导航行：官方 MaterialCardView 卡片 + Material Icons 图标（无底）+ 标题/副标题 + chevron（LSPosed 同款） */
+        /** M3 列表导航行：图标 + 标题/副标题 + chevron。返回**裸行**，卡片由 groupCard 统一添加 */
         @JvmStatic
         fun navRow(act: Activity, pal: ThemeUtil.Palette,
                    iconRes: Int, title: String, sub: String?,
                    onClick: Runnable?): LinearLayout {
-            val wrap = LinearLayout(act)
-            val card = MaterialCardView(act)
-            applyCardLook(card, act, pal, RADIUS_CARD)
-            card.setRippleColor(ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000))
+            // 3.3.1: 返回**裸行**（不再自带 MaterialCardView）。
+            // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线，
+            // 对齐 LSPosed 实测结构（见 groupCard 注释）。
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             if (iconRes != 0) {
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
@@ -394,23 +393,28 @@ class M3Ui {
             val clp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
             clp.marginStart = dp(act, 16)
             row.addView(ch, clp)
-            card.addView(row, LinearLayout.LayoutParams(-1, -2))
-            if (onClick != null) card.setOnClickListener { onClick.run() }
-            wrap.addView(card, LinearLayout.LayoutParams(-1, -2))
-            return wrap
+            if (onClick != null) {
+                row.isClickable = true
+                row.setOnClickListener { onClick.run() }
+                // 可点击行给系统 ripple（原来由 MaterialCardView 提供）
+                val tv = android.util.TypedValue()
+                if (act.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) {
+                    row.setBackgroundResource(tv.resourceId)
+                }
+            }
+            return row
         }
 
-        /** M3 开关行：官方 MaterialCardView 卡片 + 标题/副标题 + 开关 */
+        /** M3 开关行：标题/副标题 + 开关。返回**裸行**，卡片由 groupCard 统一添加 */
         @JvmStatic
         fun switchRow(act: Activity, pal: ThemeUtil.Palette, title: String, sub: String,
                       sw: com.google.android.material.materialswitch.MaterialSwitch): LinearLayout {
-            val wrap = LinearLayout(act)
-            val card = MaterialCardView(act)
-            applyCardLook(card, act, pal, RADIUS_CARD)
+            // 3.3.1: 返回**裸行**（不再自带 MaterialCardView）。
+            // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线。
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
@@ -429,9 +433,7 @@ class M3Ui {
             }
             row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(sw, LinearLayout.LayoutParams(-2, -2))
-            card.addView(row, LinearLayout.LayoutParams(-1, -2))
-            wrap.addView(card, LinearLayout.LayoutParams(-1, -2))
-            return wrap
+            return row
         }
 
         /**
@@ -823,29 +825,38 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             // top 用 24dp = 16dp(原 marginTop) + 8dp(原 paddingTop)：本标签背景透明，
             // 用 padding 表达 margin 效果一致，且不用改各处 addView 调用。
             t.setTextColor(pal.primary)
-            t.setPadding(dp(act, 24), dp(act, 24), dp(act, 16), dp(act, 8))
+            t.setPadding(dp(act, 16), dp(act, 24), dp(act, 16), dp(act, 8))
             return t
         }
 
         /** 官方分组卡片：GradientDrawable 圆角 LinearLayout（与外观卡同款已验证方案），行间淡分隔线 */
         @JvmStatic
-        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): View {
-            val wrap = LinearLayout(act)
-            wrap.orientation = LinearLayout.VERTICAL
+        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): LinearLayout {
+            // 3.3.1: 改回「每组一整张卡片 + 组内行间细分隔线」。
+            //
+            // 上一版（alpha2.52）注释写「对齐 org.lsposed.manager：每行独立卡片 +
+            // 12dp 间距」，但**实测 LSPosed 并非如此**。用 uiautomator 量
+            // org.lsposed.manager 2.2.0 设置页真实坐标（屏 1216x2640，480dpi=3x）：
+            //
+            //   卡片 [48,1321][1168,1537]   <- 译者
+            //   卡片 [48,1543][1168,1760]   <- 参与翻译
+            //   间隙 1543-1537 = 6px 约 2dp  <- 不是 12dp，实为行分隔线
+            //
+            // 组内是连续一张卡（行间只有细线），组与组之间才留白。
+            // 每行独立卡片会让整页碎成十几块、边距参差，正是「看着很奇怪」的根因。
+            val card = LinearLayout(act)
+            card.orientation = LinearLayout.VERTICAL
+            card.background = cardBg(act, pal, RADIUS_CARD)
             for (i in rows.indices) {
-                // alpha2.52: 对齐 org.lsposed.manager —— 每行独立卡片 + 12dp 间距，
-                // 取代原先"一张大卡 + 行间分隔线"的合并式布局。
                 if (i > 0) {
-                    val gap = View(act)
-                    wrap.addView(gap, LinearLayout.LayoutParams(1, dp(act, 12)))
+                    // 行分隔线：1px 发丝线，色取 pal.divider（低对比）
+                    val line = View(act)
+                    line.setBackgroundColor(pal.divider)
+                    card.addView(line, LinearLayout.LayoutParams(-1, hairline(act)))
                 }
-                val card = LinearLayout(act)
-                card.orientation = LinearLayout.VERTICAL
-                card.background = cardBg(act, pal, RADIUS_CARD)
                 card.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
-                wrap.addView(card, LinearLayout.LayoutParams(-1, -2))
             }
-            return wrap
+            return card
         }
 
         /** 官方列表行：图标 + 标题/副标题 + 尾随控件（switchRow 同款已验证结构） */
@@ -856,7 +867,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 24), dp(act, 16), dp(act, 16), dp(act, 16))
+            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             if (iconRes != 0) {
                 val ic = android.widget.ImageView(act)

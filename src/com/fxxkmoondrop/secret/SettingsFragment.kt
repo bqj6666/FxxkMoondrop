@@ -148,8 +148,6 @@ class SettingsFragment : Fragment() {
             getSP().edit().putInt("theme_mode", mi).commit()
             scheduleRebuild(0L)
         }
-        appear.addView(M3Ui.groupCard(requireActivity(), pal, modeRow), LinearLayout.LayoutParams(-1, -2))
-        appear.addView(spacer(dp(12)))
 
         // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
         // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
@@ -180,17 +178,20 @@ class SettingsFragment : Fragment() {
         appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
         }
 
-        // 动态取色 / AMOLED 开关（makeSwitchRow 自身即卡片，无需再包）
+        // 动态取色 / AMOLED 开关（裸行；卡片由下面的 groupCard 统一添加）
         val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
                 Lang.t("跟随壁纸调色，关闭时使用种子颜色", "Follow the wallpaper; use the seed color when off"), makeThemeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
-        appear.addView(spacer(dp(12)))
-        appear.addView(swDyn, LinearLayout.LayoutParams(-1, -2))
-        appear.addView(spacer(dp(12)))
         // alpha2.52: 副标题只说明开关作用，不反映当前状态（状态由开关自身表达）
         val swAmoled = makeSwitchRow(Lang.t("AMOLED 纯黑", "AMOLED pure black"),
                 Lang.t("深色模式下背景使用纯黑", "Pure black background in dark mode"),
                 makeThemeSwitch("amoled", false, "AMOLED"))
-        appear.addView(swAmoled, LinearLayout.LayoutParams(-1, -2))
+        // 3.3.1: 主题 / 动态取色 / AMOLED 归入**同一张卡片**。
+        // 对齐 LSPosed 实测结构：一组一张卡 + 组内行间细分隔线。
+        appear.addView(spacer(dp(12)))
+        appear.addView(
+            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled),
+            LinearLayout.LayoutParams(-1, -2),
+        )
 
         // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
         seedRow = LinearLayout(requireContext())
@@ -934,7 +935,7 @@ class SettingsFragment : Fragment() {
         t.setTextColor(pal.onSurface)
         // 3.3.1: 左边距 24dp，与 sectionTitle 及列表行内容**同一条基准线**
         // （rikkax material-preference 的 listPreferredItemPaddingStart = 24dp）
-        t.setPadding(dp(24), dp(8), dp(16), dp(2))
+        t.setPadding(dp(16), dp(8), dp(16), dp(2))
         return t
     }
 
@@ -1021,15 +1022,11 @@ class SettingsFragment : Fragment() {
     private fun makeSwitchRow(title: String, sub: String, sw: MaterialSwitch): LinearLayout =
             M3Ui.switchRow(requireActivity(), pal, title, sub, sw)
 
-    /** alpha2.52: 把裸行包成一张独立卡片（对齐 LSPosed：一行一卡 + 12dp 卡间距） */
-    private fun wrapCard(v: View): LinearLayout {
-        val card = LinearLayout(requireContext())
-        card.orientation = LinearLayout.VERTICAL
-        card.setPadding(dp(16), dp(12), dp(16), dp(12))
-        card.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
-        card.addView(v, LinearLayout.LayoutParams(-1, -2))
-        return card
-    }
+    /** 3.3.1: 统一委托 groupCard —— 单行也走同一套卡片样式与内边距。
+     *  原来这里自己 padding(16,12,16,12)，与 groupCard 的行内 16dp 不一致，
+     *  会让"种子颜色"那张卡的文字比相邻卡片偏左/偏上。 */
+    private fun wrapCard(v: View): LinearLayout =
+            M3Ui.groupCard(requireActivity(), pal, v)
 
     /** 官方主题设置开关（MaterialSwitch），改动即存 SP + 重建 */
     private fun makeThemeSwitch(key: String, def: Boolean, label: String): MaterialSwitch {
