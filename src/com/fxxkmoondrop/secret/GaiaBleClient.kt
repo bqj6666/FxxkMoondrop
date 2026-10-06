@@ -823,7 +823,52 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    /**
+     * 3.3.2: 目标设备还值得我们重连吗？
+     *
+     * ## 为什么需要
+     *
+     * 本方法（及其 15 秒延迟重连任务）**从不检查 DeviceMatcher 的判定结果**。
+     * 于是设备早已被证伪拉黑，这里仍每 15~30 秒 `disconnect + connect` 一次。
+     * issue #12 日志里那条尾巴就是它：
+     *
+     * ```
+     * 22:22:06 no GAIA/9ECA in GATT -> rejected: ROBIN'S EARPHONES   <- 已拉黑
+     * 22:22:36 GATT disconnected status=147 -> connect() 同一个地址   <- 还在重连
+     * 22:23:06 GATT disconnected status=147 -> connect()
+     * 22:23:37 GATT disconnected status=147
+     * ```
+     *
+     * 对**别的品牌**耳机，这种无休止的重连会持续抢占它那条 BLE 链路 ——
+     * 很多 TWS 的头部追踪正跑在上面，表现就是「戴上耳机后头部追踪时断时续」。
+     *
+     * ## 判据
+     *
+     * · 水月雨特征名         -> 放行（自己的设备，随便重试）
+     * · 已被证伪（rejected） -> 停手
+     * · 未收录型号           -> 用 ProbeBudget 约束，预算用尽即停手
+     * · 拿不到名字           -> 保持原行为（宁可多试自己的，也不误停真设备）
+     */
+    private fun shouldKeepRetrying(): Boolean {
+        val name = connectedDeviceName ?: cachedLeName ?: deviceAddress?.let { addr ->
+            runCatching {
+                BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(addr)?.name
+            }.getOrNull()
+        }
+        if (name.isNullOrEmpty()) return true
+        if (DeviceMatcher.isMoondrop(name)) return true
+        if (!DeviceMatcher.allowProbe(name)) return false
+        return ProbeBudget.allow(name)
+    }
+
     private fun retryConnect() {
+        // 3.3.2: 非本模块支持的设备不再无休止重连（见 shouldKeepRetrying 说明）。
+        if (!shouldKeepRetrying()) {
+            AppLog.i(GaiaConstants.TAG,
+                    "retryConnect skipped: 设备非本模块支持，停止重连 = "
+                            + (connectedDeviceName ?: cachedLeName ?: "?"))
+            return
+        }
         // 「耳机死机」根因 A：本函数此前直接 gatt = connectGatt(...) 覆盖字段，不像
         // connect() 那样先 disconnectInternal()，于是被覆盖的旧 BluetoothGatt 永不 close
         // —— 它仍挂在协议栈上继续收耳机通知，且与当前连接共用同一个 gattCallback，
@@ -865,6 +910,14 @@ class GaiaBleClient private constructor() {
         val task = Runnable {
             val a = deviceAddress
             if (a == null || connected) return@Runnable
+            // 3.3.2: 延迟任务直接调 connect()，不经过 retryConnect 的守卫，
+            // 所以这里必须再判一次 —— 否则入口挡住的设备仍会被这一次补掉。
+            if (!shouldKeepRetrying()) {
+                AppLog.i(GaiaConstants.TAG,
+                        "delayed reconnect skipped: 设备非本模块支持 = "
+                                + (connectedDeviceName ?: cachedLeName ?: "?"))
+                return@Runnable
+            }
             synchronized(this@GaiaBleClient) { disconnectInternal() }
             connect(context!!, a)
         }

@@ -1514,6 +1514,9 @@ class OverviewFragment : Fragment() {
         // 清空探测失败名单，让此前被判定为「无 GAIA/9ECA」的设备重新走一遍
         // 协议指纹探测（HeadsetDetectService 下一轮轮询内放行，最长约 5 秒）。
         DeviceMatcher.clearRejected(requireContext())
+        // 3.3.2: 同时重置探测预算 —— 否则「用满即停」之后用户点刷新也不会有任何反应，
+        // 按钮看起来是坏的。用户显式要求重试 = 重新给一轮额度。
+        ProbeBudget.reset()
         refreshAnc(true, force = true)
     }
 

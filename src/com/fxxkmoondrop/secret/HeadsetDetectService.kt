@@ -321,9 +321,32 @@ class HeadsetDetectService : Service() {
                     now.add(d.address + "|" + n)
                 } else if (audioAddrs.contains(d.address) && DeviceMatcher.allowProbe(n)) {
                     // alpha2.52: 型号名未收录（如「Robin's Earphones」）但确实是当前已连接
-                    // 的音频设备 -> 放行一次协议指纹探测，由服务发现最终裁定：
-                    // 命中 GAIA/9ECA 则 learn 记住并持久化，失败则 reject 永久剔除。
-                    AppLog.i(TAG, "probe unnamed model: " + n + " " + d.address)
+                    // 的音频设备 -> 放行协议指纹探测，由服务发现裁定：
+                    // 命中 GAIA/9ECA 则 learn 记住并持久化。
+                    //
+                    // 3.3.2 修复「影响其他品牌耳机头部追踪通讯」：
+                    //
+                    // 原来这里**不设次数上限**。而探测失败时并不会拉黑
+                    // （GaiaBleClient: "RFCOMM failed without refutation -> keep probing"），
+                    // 本方法每 5 秒轮询一次 -> 对同一台设备**无限重试**。
+                    // issue #12 日志就是这个形态（5~13 秒一轮，持续数分钟）。
+                    //
+                    // 很多 TWS 的头部追踪跑在同一条 BLE 链路上，且只接受一个 central
+                    // 连接；我们反复发起的 GATT / RFCOMM 尝试会把那条链路拽断 ——
+                    // 用户感知就是「装上本模块后，别的耳机头部追踪会失效」。
+                    //
+                    // 现在用 ProbeBudget 给每个设备名一个每会话的尝试预算，
+                    // 用满即停。不拉黑（避免误伤真正的水月雨新机型），
+                    // 用户点「刷新状态」时预算重置、可再来一轮。
+                    if (!ProbeBudget.allow(n)) {
+                        AppLog.i(TAG, "probe budget exhausted, skip: " + n
+                                + " (uses=" + ProbeBudget.used(n) + ")")
+                        continue
+                    }
+                    ProbeBudget.note(n)
+                    AppLog.i(TAG, "probe unnamed model: " + n + " " + d.address
+                            + " (attempt " + ProbeBudget.used(n)
+                            + "/" + ProbeBudget.MAX_ATTEMPTS + ")")
                     now.add(d.address + "|" + n)
                 }
             }
