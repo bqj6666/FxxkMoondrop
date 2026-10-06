@@ -70,4 +70,18 @@ internal object ProbeBudget {
     fun reset() {
         attempts.clear()
     }
+
+    /**
+     * 已耗尽预算的设备名列表（只读）。
+     *
+     * 供 UI 提示用。**这一点很关键**：预算耗尽并不写入 [DeviceMatcher] 的
+     * rejected 名单（那是「协议已证伪」的专用名单，我们刻意不混用），
+     * 于是概览页原本只看 rejectedNames() —— 预算耗尽的设备**不会出现在提示里**。
+     * 用户看到的现象只是「连不上」，不知道要去点刷新，等于卡死。
+     *
+     * 返回原始设备名（非归一化键），便于直接展示；已去重。
+     */
+    @Synchronized
+    fun exhaustedNames(): List<String> =
+        attempts.filterValues { it >= MAX_ATTEMPTS }.keys.toList()
 }

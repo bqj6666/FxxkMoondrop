@@ -564,7 +564,14 @@ class OverviewFragment : Fragment() {
         //
         // 此前拉黑是**静默**的：界面看不出异常，用户只看到「连不上」，
         // 自然不会想到去点「刷新状态」自救。
-        val skipped = unackedSkipped(DeviceMatcher.rejectedNames(requireContext()))
+        // 3.2.20: 两个来源都要提示 ——
+        //   rejectedNames   = 协议指纹已证伪
+        //   exhaustedNames  = 探测预算用尽（刻意不写 rejected，见 ProbeBudget 说明）
+        // 只提示后者之一都会让用户「看不出为什么要点刷新」。
+        val skipped = unackedSkipped(
+            (DeviceMatcher.rejectedNames(requireContext()) + ProbeBudget.exhaustedNames())
+                .distinct()
+        )
         if (skipped.isNotEmpty()) {
             root.addView(makeSkippedNotice(skipped))
             root.addView(spacer(dp(8)))
@@ -828,9 +835,9 @@ class OverviewFragment : Fragment() {
 
         val desc = TextView(ctx)
         desc.text = Lang.t(
-            names.joinToString("、") + " 在蓝牙服务发现时未返回结果，已被暂时跳过。"
+            names.joinToString("、") + " 已被暂时跳过检测。"
                     + "若其中有你的耳机，点下方「刷新状态」即可重新检测。",
-            names.joinToString(", ") + " returned no Bluetooth services and were skipped."
+            names.joinToString(", ") + " were skipped."
                     + " If one is your headset, tap Refresh below to re-check.")
         desc.textSize = 13f
         desc.setTextColor(onVariantColor)

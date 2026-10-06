@@ -802,6 +802,19 @@ class GaiaBleClient private constructor() {
             val adapter = BluetoothAdapter.getDefaultAdapter()
             if (adapter == null) return
             val device = adapter.getRemoteDevice(leAddress)
+            // 3.2.20 修复：覆盖 gatt 字段前必须先关掉旧的。
+            //
+            // 这是「耳机死机」根因 A 的最后一处漏网 —— `connect()`（行 451）与
+            // `doConnectLe(ScanResult)` 都有 disconnectInternal()，唯独本函数没有。
+            // 调用链 connectFromScanHits() -> doConnectLe(sorted[0])：
+            // 扫描命中时若已有一个活跃 gatt（并发扫描 / 上一轮连接未断），
+            // 直接覆盖字段会让旧 BluetoothGatt **永不 close** ——
+            // 它仍挂在协议栈上继续收通知，且与当前连接共用同一个 gattCallback，
+            // 于是每条通知被处理两遍、耳机端维持两条多余的 BLE 链路。
+            // 实测后果就是固件侧链路剧烈抖动，严重时耳机直接掉电关机。
+            //
+            // 放在参数校验之后：拿不到 adapter / device 时不无谓地断开现有连接。
+            disconnectInternal()
             leAddrVerified = false
             if (Build.VERSION.SDK_INT >= 23) {
                 gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -1580,15 +1593,33 @@ class GaiaBleClient private constructor() {
                                     "GATT 服务列表为空（传输层异常，非协议证伪）"
                                             + " -> 第 " + emptySvcRetries + " 次延迟重试；设备="
                                             + (g.device?.name ?: "?"))
+                            val target = g
                             handler.postDelayed({
+                                // ① 这一轮 gatt 已被替换/关闭 -> 重试没有意义。
+                                //    对失效的 BluetoothGatt 调 discoverServices() 不会报错，
+                                //    只会静默返回 false，白等 400ms 还占掉一次额度。
+                                if (gatt !== target) {
+                                    AppLog.w(GaiaConstants.TAG,
+                                            "retry discoverServices skipped: gatt 已替换")
+                                    return@postDelayed
+                                }
                                 if (connected) return@postDelayed   // 已连上就不打扰
-                                try {
+                                // ② 必须检查返回值：false = 调用未生效。
+                                //    原先忽略返回值，若两次都返回 false，
+                                //    额度耗尽后再无出路 —— 设备会永久卡在「连不上」，
+                                //    既不再重试也不退回 RFCOMM。
+                                val ok = try {
                                     AppLog.i(GaiaConstants.TAG,
                                             "retry discoverServices() #" + emptySvcRetries)
-                                    g.discoverServices()
+                                    target.discoverServices()
                                 } catch (e: Exception) {
-                                    Log.w(GaiaConstants.TAG, "retry discoverServices failed", e)
-                                    tryRfcommFallback(g.device)
+                                    Log.w(GaiaConstants.TAG, "retry discoverServices threw", e)
+                                    false
+                                }
+                                if (!ok) {
+                                    AppLog.w(GaiaConstants.TAG,
+                                            "retry discoverServices 返回 false -> 退回 RFCOMM")
+                                    tryRfcommFallback(target.device)
                                 }
                             }, EMPTY_SVC_RETRY_DELAY_MS)
                             return
