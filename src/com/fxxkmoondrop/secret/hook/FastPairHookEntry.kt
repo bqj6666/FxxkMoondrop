@@ -342,10 +342,44 @@ class FastPairHookEntry {
      */
     private fun isOurSheetActivity(a: android.app.Activity?): Boolean {
         if (a == null) return false
-        try {
-            if (a.intent?.getBooleanExtra(EXTRA_OUR_SHEET, false) == true) return true
-        } catch (_: Throwable) { }
+        val it = try { a.intent } catch (_: Throwable) { null }
+
+        // ① 权威判据：本模块自己 startActivity 时打的归属标记。
+        //    Intent 是 Parcelable，跨进程会完整传递 —— 这正是当初引入它的原因
+        //    （弹窗渲染在 GMS 的另一个进程，静态字段跨不了进程）。
+        if (it?.getBooleanExtra(EXTRA_OUR_SHEET, false) == true) return true
+
+        // ② 同进程场景：已认领过的那个实例（赋值前必已通过本判定，故安全）。
         if (a === sHalfSheetActivity && !a.isFinishing) return true
+
+        // ③ 启动时间窗兜底。
+        //
+        // ⚠️ 3.3.2 修复「影响其他品牌耳机连接」：
+        //
+        // 此前这一级只判「距本模块上次拉起弹窗 < 8s」，**没有任何正向证据**。
+        // 而 Google 给真正支持 Fast Pair 的耳机（Sony / Pixel Buds / Nothing）
+        // 弹的原生卡片用的是**同一个** HalfSheetActivity。只要用户在这 8 秒窗口内
+        // 触发原生配对，那张卡片就会被误认成我们的：
+        //   · onResume    -> injectIconOverlay() 覆盖人家图标、同步我们的电量
+        //   · central_btn -> 被短路成假连接，**直接干扰对方耳机正常配对/连接**
+        //
+        // 原注释其实自陈了这一点（「避免 Google 原生卡片恰好在此窗口内出现时被误认领」），
+        // 但那靠的是「窗口够短」的概率防护，不是保证。产品要求是
+        // 「对其他耳机零影响」，所以这里补上正向证据：
+        //
+        //   本模块构造的 Intent 一定会带电量 extra（真卡片不会）。
+        //   Intent 读不到、或没有该 extra -> 无法证明是自己的弹窗 -> 不认领。
+        //
+        // 代价：极少数「Intent 可取但 EXTRA_OUR_SHEET 缺失」的异常路径不再被兜底。
+        // 取舍明确 —— 宁可漏认领自己的弹窗，也不误伤别人的耳机。
+        val hasOurIntentTrace = try {
+            it?.hasExtra(EXTRA_BATTERY_LEFT) == true
+        } catch (_: Throwable) { false }
+        if (!hasOurIntentTrace) {
+            Log.d(TAG, "[FastPairHook] 时间窗内但无本模块 Intent 痕迹，"
+                    + "不认领（防误伤其他品牌卡片）")
+            return false
+        }
         val t = sOurSheetLaunchAt
         return t > 0 && System.currentTimeMillis() - t < OUR_SHEET_WINDOW_MS
     }

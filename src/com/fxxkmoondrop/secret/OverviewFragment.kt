@@ -66,6 +66,9 @@ class OverviewFragment : Fragment() {
     /** alpha2.53: 手动刷新期间的线性进度条（BLE 重连要数秒，给了真实进度反馈） */
     private var refreshBar: com.google.android.material.progressindicator.LinearProgressIndicator? = null
 
+    /** 用户已确认过的「被跳过设备」名单（3.3.2），关闭提示卡时写入。 */
+    private val KEY_SKIPPED_ACK = "skipped_notice_ack"
+
     private val hideRefreshBar = Runnable { refreshBar?.visibility = View.GONE }
     private var surfaceColor = 0
     private var onVariantColor = 0
@@ -561,7 +564,7 @@ class OverviewFragment : Fragment() {
         //
         // 此前拉黑是**静默**的：界面看不出异常，用户只看到「连不上」，
         // 自然不会想到去点「刷新状态」自救。
-        val skipped = DeviceMatcher.rejectedNames(requireContext())
+        val skipped = unackedSkipped(DeviceMatcher.rejectedNames(requireContext()))
         if (skipped.isNotEmpty()) {
             root.addView(makeSkippedNotice(skipped))
             root.addView(spacer(dp(8)))
@@ -782,29 +785,48 @@ class OverviewFragment : Fragment() {
 
     /** alpha2.52: [debounceMs] > 0 时点击后短暂禁用并置灰，防止连点重复触发 */
     /**
-     * 3.3.2: 「有设备被跳过检测」提示卡。
+     * 「有设备被跳过检测」提示卡。
      *
-     * 只在 [DeviceMatcher.rejectedNames] 非空时出现，列出来源并指向下方
-     * 的「刷新状态」按钮 —— 一键即 [`DeviceMatcher.clearRejected`]，重新探测。
+     * 只在有**尚未确认**的被跳过设备时出现；右上角可手动关闭。
+     * 关闭后记住这些设备名，不再重复打扰；若之后又出现**新的**被跳过设备，
+     * 会重新提示（自动只列新的那部分）。
      *
-     * 用红色标题而非弹窗：不打断操作，但一眼能看见。
+     * 用文字标题而非符号：项目 UI 不放 emoji / 装饰性符号。
      */
     private fun makeSkippedNotice(names: List<String>): View {
         val ctx = requireContext()
+        val scheme = ThemeUtil.Palette(ctx)
+
         val box = LinearLayout(ctx)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), dp(14), dp(16), dp(14))
-        box.background = M3Ui.cardBg(ctx, ThemeUtil.Palette(ctx), M3Ui.RADIUS_CARD)
+        box.background = M3Ui.cardBg(ctx, scheme, M3Ui.RADIUS_CARD)
+
+        // 标题行：标题（占满剩余宽度）+ 关闭按钮
+        val header = LinearLayout(ctx)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
 
         val title = TextView(ctx)
-        title.text = Lang.t("⚠️ 有设备被跳过检测", "Device(s) skipped")
+        title.text = Lang.t("有设备被跳过检测", "Device(s) skipped")
         title.textSize = 14f
         title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         title.setTextColor(red)
-        box.addView(title)
+        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val close = ImageView(ctx)
+        close.setImageResource(R.drawable.ic_close)
+        close.imageTintList = ColorStateList.valueOf(onVariantColor)
+        close.contentDescription = Lang.t("关闭提示", "Dismiss")
+        close.setPadding(dp(4), dp(4), dp(4), dp(4))
+        close.setOnClickListener {
+            ackSkipped(names)
+            box.visibility = View.GONE
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(28), dp(28)))
+        box.addView(header)
 
         val desc = TextView(ctx)
-        // 列出名字，用户能认出是不是自己的耳机
         desc.text = Lang.t(
             names.joinToString("、") + " 在蓝牙服务发现时未返回结果，已被暂时跳过。"
                     + "若其中有你的耳机，点下方「刷新状态」即可重新检测。",
@@ -815,6 +837,26 @@ class OverviewFragment : Fragment() {
         desc.setPadding(0, dp(4), 0, 0)
         box.addView(desc)
         return box
+    }
+
+    /** 记下用户已确认过的被跳过设备名，之后同一设备不再重复提示。 */
+    private fun ackSkipped(names: List<String>) {
+        try {
+            requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
+                .edit().putString(KEY_SKIPPED_ACK, names.joinToString("|")).apply()
+        } catch (_: Throwable) { /* 存不下就下次再提示，不影响功能 */ }
+    }
+
+    /** 从全部被跳过设备里，筛出**用户还没确认过**的那些 —— 只有这些值得提示。 */
+    private fun unackedSkipped(all: List<String>): List<String> {
+        if (all.isEmpty()) return emptyList()
+        val ack = try {
+            requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
+                .getString(KEY_SKIPPED_ACK, null)
+                ?.split("|")?.filter { it.isNotEmpty() }?.toSet()
+                ?: emptySet()
+        } catch (_: Throwable) { emptySet<String>() }
+        return all.filter { it !in ack }
     }
 
     private fun makeButton(text: String, iconRes: Int, bgColor: Int, textColor: Int,
@@ -939,7 +981,7 @@ class OverviewFragment : Fragment() {
 
         // 标题：缺失用主题色，全就绪用绿色（均已随深浅色取值）
         val head = TextView(requireContext())
-        head.text = if (missing == 0) Lang.t("✅  所有必要权限均已就绪", "✅  All required permissions ready") else Lang.t("⚠️  发现 ", "⚠️  Found ") + missing + Lang.t(" 项权限缺失", " permission(s) missing")
+        head.text = if (missing == 0) Lang.t("所有必要权限均已就绪", "All required permissions ready") else Lang.t("发现 ", "Found ") + missing + Lang.t(" 项权限缺失", " permission(s) missing")
         head.textSize = 22f
         head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         head.setTextColor(if (missing == 0) green else accent)
@@ -1056,19 +1098,19 @@ class OverviewFragment : Fragment() {
         val svc = HeadsetDetectService.RUNNING
         var ancSt = moonProcState
         if (ancSt == null) ancSt = Lang.t("未知", "Unknown")
-        val ancOk = ancSt.contains("✅")
-        val ancFrozen = ancSt.contains("❄️")
+        val ancOk = ancSt.contains("运行中")
+        val ancFrozen = ancSt.contains("冻结")
         val text: String
         if (svc && ancOk) {
-            text = Lang.t("✅  运行中", "✅  Running")
+            text = Lang.t("运行中", "Running")
         } else if (svc && ancFrozen) {
-            text = Lang.t("❄️  运行中（降噪控制已冻结）", "❄️  Running (ANC frozen)")
+            text = Lang.t("运行中（降噪控制已冻结）", "Running (ANC frozen)")
         } else if (svc) {
-            text = Lang.t("⚠️  监听运行中 · 降噪控制未运行", "⚠️  Monitor running · ANC not running")
+            text = Lang.t("监听运行中 · 降噪控制未运行", "Monitor running · ANC not running")
         } else if (ancOk) {
-            text = Lang.t("⚠️  监听未运行 · 降噪控制运行中", "⚠️  Monitor not running · ANC running")
+            text = Lang.t("监听未运行 · 降噪控制运行中", "Monitor not running · ANC running")
         } else {
-            text = Lang.t("⛔  未运行", "⛔  Not running")
+            text = Lang.t("未运行", "Not running")
         }
         setHeroStatus(text)
     }
@@ -1087,19 +1129,24 @@ class OverviewFragment : Fragment() {
 
     private fun setHeroStatus(text: String) {
         var iconRes = R.drawable.ic_hourglass_empty
-        var label = text
-        if (text.startsWith("✅")) {
-            iconRes = R.drawable.ic_check
-            label = text.substring(2).trim()
-        } else if (text.startsWith("❄️")) {
+        val label = text
+        // 3.3.2: 判据从 emoji 前缀改为**文字前缀**。
+        //
+        // 原实现靠 "✅" / "❄️" / "⚠️" / "⛔" 前缀区分状态 —— 等于把「状态」
+        // 编码进「展示文案」再解析回来：既脆弱（改文案就静默失效），
+        // 又逼着 UI 文案必须带 emoji。文案去掉 emoji 后这几行会全部落空，
+        // 状态一律显示成「检查中」+ 沙漏，属严重回归。
+        //
+        // 「冻结」必须**先于**「运行中」判断 —— 冻结态的文案是
+        // 「运行中（降噪控制已冻结）」，同样以「运行中」开头。
+        if (text.contains("冻结")) {
             iconRes = R.drawable.ic_ac_unit
-            label = text.substring(2).trim()
-        } else if (text.startsWith("⚠️")) {
+        } else if (text.startsWith("运行中")) {
+            iconRes = R.drawable.ic_check
+        } else if (text.startsWith("监听")) {
             iconRes = R.drawable.ic_warning
-            label = text.substring(2).trim()
-        } else if (text.startsWith("⛔")) {
+        } else if (text.startsWith("未运行")) {
             iconRes = R.drawable.ic_block
-            label = text.substring(2).trim()
         }
         // 官方 StatusHeader：品牌后跟短状态词（Active/…），完整说明交给 detail 行
         val shortWord: String
@@ -1207,7 +1254,7 @@ class OverviewFragment : Fragment() {
         cardBody.addView(head, lp(false))
         cardBody.addView(spacer(dp(10)))
 
-        val items = if (custom) arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"), Lang.t("🧹  恢复默认图标", "🧹  Restore default icon")) else arrayOf(Lang.t("📷  从相册选择", "📷  Choose from gallery"))
+        val items = if (custom) arrayOf(Lang.t("从相册选择", "Choose from gallery"), Lang.t("恢复默认图标", "Restore default icon")) else arrayOf(Lang.t("从相册选择", "Choose from gallery"))
         val subs = if (custom) arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"), Lang.t("恢复软件默认图标", "Restore the built-in default icon"))
         else arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"))
         for (i in items.indices) {
@@ -1586,7 +1633,7 @@ class OverviewFragment : Fragment() {
     private fun serviceState(): String =
             if (HeadsetDetectService.RUNNING ||
                     requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("enable", true))
-                Lang.t("✅ 运行中", "✅  Running") else Lang.t("❌ 未运行", "❌  Not running")
+                Lang.t("运行中", "Running") else Lang.t("未运行", "Not running")
 
     /** alpha2.4: 左右耳电量 → 运行状态面板（与弹窗同源 BatteryStore）
      *  alpha2.52: 显隐判据绑定耳机「实时连接态」，与同一卡片内「耳机连接」行完全一致。

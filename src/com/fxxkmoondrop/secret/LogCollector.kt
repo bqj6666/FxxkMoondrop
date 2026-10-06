@@ -37,12 +37,12 @@ class LogCollector {
                 if (Lang.isZh(ctx))
                     "日志将打包为 ZIP（含多分类日志），包含：设备型号与系统版本、应用与模块版本、" +
                     "应用设置、Root/环境检测状态、蓝牙连接信息与系统日志等。\n\n" +
-                    "\u26a0\ufe0f 这些信息可能涉及设备隐私，仅供您本人调试与设备适配使用；" +
+                    "这些信息可能涉及设备隐私，仅供您本人调试与设备适配使用；" +
                     "请勿上传至公开平台或分享给不可信的人。"
                 else
                     "Logs will be packaged as ZIP (multiple categories): device model & OS version, app & module version, " +
                     "app settings, Root/env status, Bluetooth connection info, and system logs.\n\n" +
-                    "\u26a0\ufe0f These may contain device privacy info, only for your own debugging & adaptation; " +
+                    "These may contain device privacy info, only for your own debugging & adaptation; " +
                     "please do not upload publicly or share with untrusted people."
 
         private const val ZIP_PREFIX = "FxxkMoondrop_logs_"

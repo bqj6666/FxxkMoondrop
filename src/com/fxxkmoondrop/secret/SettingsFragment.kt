@@ -1171,7 +1171,7 @@ class SettingsFragment : Fragment() {
     private fun resetCustomIcon() {
         // 3.0.5: 只删本应用内的图标文件（无需 Root）
         val ok = IconStore.clear(requireContext().applicationContext)
-        toast(if (ok) "✅ 已恢复默认图标（下次连接生效）" else "恢复失败")
+        toast(if (ok) "已恢复默认图标（下次连接生效）" else "恢复失败")
     }
 
     private fun saveIconFromUri(uri: Uri) {
@@ -1219,7 +1219,7 @@ class SettingsFragment : Fragment() {
                 // 有 Root 时 IconStore 内部额外写一份 GMS 老路径（纯增强，失败不影响）。
                 val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
                 requireActivity().runOnUiThread {
-                    toast(if (ok) "✅ 弹窗图标已更新（下次连接生效）" else "写入图标失败")
+                    toast(if (ok) "弹窗图标已更新（下次连接生效）" else "写入图标失败")
                 }
                 if (scaled !== bmp && !scaled.isRecycled) scaled.recycle()
                 // bmp 已在上方判空（null 时 return@Thread），此处编译器已智能转换为非空，
