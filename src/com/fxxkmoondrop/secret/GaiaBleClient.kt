@@ -1490,6 +1490,25 @@ class GaiaBleClient private constructor() {
                     }
                 } catch (e: Exception) { Log.e(GaiaConstants.TAG, "src service lookup failed", e) }
                 if (!hasGaia && !hasSrc9) {
+                    // 3.3.2 修 issue #12：**空服务列表不得判为证伪**。
+                    //
+                    // 此前不区分「列表为空」与「有服务但缺协议」，一律拉黑。
+                    // 实测 ROBIN'S EARPHONES 反复出现 "GATT services(0):"（空，
+                    // 且距连接仅数十毫秒），一次就被永久拉黑，之后连探测都进不来，
+                    // 表现为「除电量外全部不可用」。
+                    //
+                    // 空列表是传输层异常（GATT 未就绪 / Android GATT 缓存为空 /
+                    // 连到错误 LE 地址），与本文件既有的
+                    // 「传输层失败不能判断设备是否支持协议」一致。
+                    val verdict = GattProtocolVerdict.decide(
+                            g.services?.size ?: 0, hasGaia, hasSrc9)
+                    if (verdict == GattProtocolVerdict.Verdict.INCONCLUSIVE) {
+                        AppLog.w(GaiaConstants.TAG,
+                                "GATT 服务列表为空（传输层异常，非协议证伪）-> keep probing: "
+                                        + (g.device?.name ?: "?"))
+                        tryRfcommFallback(g.device)
+                        return
+                    }
                     // 服务发现成功、但 GATT 里两个协议服务都没有 -> 协议指纹证伪（唯一可拉黑依据）
                     protocolRefuted = true
                     Log.d(GaiaConstants.TAG, "no GATT services found, trying RFCOMM/SPP fallback")
