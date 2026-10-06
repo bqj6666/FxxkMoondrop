@@ -7,7 +7,10 @@
     <color name="m3_on_primary_container">#FF21005D</color>
     <color name="m3_secondary_container">#FFE8DEF8</color>
     <color name="m3_on_secondary_container">#FF1D192B</color>
-    <color name="m3_surface">#FFFBF8FF</color>
+    <!-- 页面底色。M3 官方 neutral94（3.3.1 从 neutral98 调整）：
+         原值 #FBF8FF 与卡片 #FFFFFF 亮度仅差 2%，卡片边界消失。
+         neutral94 带紫调，与纯白卡片形成清晰层级。 -->
+    <color name="m3_surface">#FFF3EDF7</color>
     <color name="m3_surface_container">#FFFFFFFF</color>
     <color name="m3_surface_container_high">#FFF7F2FA</color>
     <color name="m3_surface_container_highest">#FFE6E0E9</color>
@@ -16,4 +19,11 @@
     <color name="m3_on_surface_variant">#FF49454F</color>
     <color name="m3_outline">#FF79747E</color>
     <color name="m3_outline_variant">#FFCAC4D0</color>
+    <color name="m3_green">#FF2E7D32</color>
+    <color name="m3_red">#FFB3261E</color>
+
+    <!-- AMOLED 纯黑模式专用（card/surface 同为纯黑，靠极低抬高区分层级） -->
+    <color name="m3_amoled_card">#FF101010</color>
+    <color name="m3_amoled_container">#FF1C1C1C</color>
+    <color name="m3_amoled_surface_container_highest">#FF262626</color>
 </resources>

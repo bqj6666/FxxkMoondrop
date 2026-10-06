@@ -16,4 +16,10 @@
     <color name="m3_on_surface_variant">#FFCAC4D0</color>
     <color name="m3_outline">#FF938F99</color>
     <color name="m3_outline_variant">#FF49454F</color>
+    <color name="m3_green">#FF8FD89B</color>
+    <color name="m3_red">#FFF2B8B5</color>
+
+    <color name="m3_amoled_card">#FF101010</color>
+    <color name="m3_amoled_container">#FF1C1C1C</color>
+    <color name="m3_amoled_surface_container_highest">#FF262626</color>
 </resources>

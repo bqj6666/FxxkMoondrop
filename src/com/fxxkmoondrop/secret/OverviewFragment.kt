@@ -288,7 +288,7 @@ class OverviewFragment : Fragment() {
         // alpha2.26.2: Material Experience —— M3 圆角卡片容器（card 色 + 28dp 圆角）
         ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
         // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
-        ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
+        ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
         // 出场顺序与通知栏按钮同源（[AncProfileLib.ANC_UI_ORDER]）：降噪 / 关闭 / 通透 打头，
         // 自适应、抗风随后。数组仍按档位 id 索引，这里只改列的先后。
         // 直播(5) 在主界面没有槽位，仍只在通知里出现。
@@ -371,7 +371,7 @@ class OverviewFragment : Fragment() {
         val dcCard = LinearLayout(requireContext())
         dcCard.orientation = LinearLayout.VERTICAL
         dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
-        dcCard.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 28)
+        dcCard.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
 
         // 空间音频行（总开关）
         val dcSpatialRow = LinearLayout(requireContext())
@@ -1611,7 +1611,7 @@ class OverviewFragment : Fragment() {
     private fun buildStatusPanel(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 20)
+        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
         card.addView(makeStatusRow(R.drawable.ic_bluetooth, Lang.t("GAIA 状态", "GAIA Status"), 0),
                 LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
@@ -1670,7 +1670,7 @@ class OverviewFragment : Fragment() {
     private fun buildDeviceInfoCard(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), 20)
+        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
         card.addView(makeStatusRow(R.drawable.ic_devices,
                 Lang.t("设备名称", "Device name"), 3), LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_settings_ethernet,

@@ -68,6 +68,32 @@ class ThemeUtil {
             }
         }
 
+        /**
+         * 按**应用自己的**亮暗偏好解析 @color 资源。
+         *
+         * ## 为什么不能直接 c.getColor()
+         *
+         * 本应用亮暗由 theme_mode 偏好决定（0 跟随系统 / 1 浅色 / 2 深色），
+         * 不是系统 uiMode。但资源限定符（values vs values-night）**只认系统 uiMode**。
+         * 两者不一致时（典型：手机深色、用户把 app 设成浅色）直接 getColor
+         * 会拿到 night 的值，界面串色。全项目没有
+         * AppCompatDelegate.setDefaultNightMode，不能指望系统同步。
+         *
+         * 这里按 dark 参数重写 Configuration.uiMode 再取色，保证「app 说了算」，
+         * 同时色值集中在 values / values-night 的 colors.xml，Kotlin 里不出现颜色字面量。
+         */
+        @JvmStatic
+        fun themedColor(c: Context, dark: Boolean, resId: Int): Int = try {
+            val cfg = android.content.res.Configuration(c.resources.configuration)
+            val mask = android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            cfg.uiMode = (cfg.uiMode and mask.inv()) or
+                    (if (dark) android.content.res.Configuration.UI_MODE_NIGHT_YES
+                    else android.content.res.Configuration.UI_MODE_NIGHT_NO)
+            c.createConfigurationContext(cfg).getColor(resId)
+        } catch (_: Throwable) {
+            c.getColor(resId)   // 兜底：宁可串色也不要崩
+        }
+
         /** Android 12+ 系统莫奈动态色（动态色开启时）；关闭或低版本回退 fallback */
         @JvmStatic
         fun dyn(c: Context, resName: String, fallback: Int): Int {
@@ -133,42 +159,38 @@ class ThemeUtil {
             val cardC: Int
 
             if (dynColor(c)) {
-                prim = dyn(c, "system_accent1_400", if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
+                prim = dyn(c, "system_accent1_400", themedColor(c, dark, R.color.m3_primary))
                 // 浅色下 primary 是深色，文字必须用白；深色下 primary 是浅色，文字用深色
-                onPrim = if (dark) dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-                else 0xFFFFFFFF.toInt()
-                cont = if (dark) dyn(c, "system_accent1_800", 0xFF4F378B.toInt())
-                else dyn(c, "system_accent1_50", 0xFFE8DEF8.toInt())
-                onCont = if (dark) dyn(c, "system_accent1_50", 0xFFEADDFF.toInt())
-                else dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-                surf = if (dark) (if (on) 0xFF000000.toInt() else dyn(c, "system_neutral1_900", 0xFF141218.toInt()))
-                else dyn(c, "system_neutral1_10", 0xFFFBF8FF.toInt())
+                onPrim = dyn(c, "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary))
+                cont = dyn(c, if (dark) "system_accent1_800" else "system_accent1_50", themedColor(c, dark, R.color.m3_primary_container))
+                onCont = dyn(c, if (dark) "system_accent1_50" else "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary_container))
+                surf = if (on) android.graphics.Color.BLACK
+                else dyn(c, "system_neutral1_900", themedColor(c, dark, R.color.m3_surface))
                 // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相
-                cardC = if (dark) (if (on) 0xFF101010.toInt() else dyn(c, "system_neutral1_800", 0xFF1E1B22.toInt()))
-                else 0xFFFFFFFF.toInt()
-                onSurface = if (dark) dyn(c, "system_neutral1_0", 0xFFE6E0E9.toInt())
-                else dyn(c, "system_neutral1_900", 0xFF1C1B1F.toInt())
+                cardC = if (on) c.getColor(R.color.m3_amoled_card)
+                else dyn(c, "system_neutral1_800", themedColor(c, dark, R.color.m3_surface_container))
+                onSurface = dyn(c, if (dark) "system_neutral1_0" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
             } else {
                 // 种子色生成（官方 LSPosed seed 近似调色）
                 val seed = seedColor(c)
                 prim = if (dark) mix(seed, 0.55f, false) else seed
-                onPrim = if (dark) mix(seed, 0.55f, true) else 0xFFFFFFFF.toInt()
+                onPrim = if (dark) mix(seed, 0.55f, true) else themedColor(c, dark, R.color.m3_on_primary)
                 cont = if (dark) mix(seed, 0.60f, false) else mix(seed, 0.72f, true)
                 onCont = if (dark) mix(seed, 0.60f, true) else mix(seed, 0.55f, false)
-                surf = if (dark) (if (on) 0xFF000000.toInt() else 0xFF141218.toInt()) else 0xFFFBF8FF.toInt()
-                cardC = if (dark) (if (on) 0xFF101010.toInt() else 0xFF1E1B22.toInt()) else 0xFFFFFFFF.toInt()
-                onSurface = if (dark) 0xFFE6E0E9.toInt() else 0xFF1C1B1F.toInt()
+                surf = if (on) android.graphics.Color.BLACK else themedColor(c, dark, R.color.m3_surface)
+                cardC = if (on) c.getColor(R.color.m3_amoled_card) else themedColor(c, dark, R.color.m3_surface_container)
+                onSurface = themedColor(c, dark, R.color.m3_on_surface)
             }
 
-            onVariant = if (dark) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt()
-            outline = if (dark) 0xFF938F99.toInt() else 0xFF79747E.toInt()
-            green = if (dark) 0xFF8FD89B.toInt() else 0xFF2E7D32.toInt()
-            red = if (dark) 0xFFF2B8B5.toInt() else 0xFFB3261E.toInt()
+            onVariant = themedColor(c, dark, R.color.m3_on_surface_variant)
+            outline = themedColor(c, dark, R.color.m3_outline)
+            green = themedColor(c, dark, R.color.m3_green)
+            red = themedColor(c, dark, R.color.m3_red)
 
             if (on) {
                 // alpha2.52: 纯黑底上不放强调色容器，改用中性抬高色，
                 // 避免纯黑页面上残留暖／彩色块（旧实现 = 强调色 x0.55，仍是暖棕）
-                cont = 0xFF1C1C1C.toInt()
+                cont = c.getColor(R.color.m3_amoled_container)
                 onCont = onSurface
             }
             // alpha2.52: 对齐 org.lsposed.manager —— 卡片一律不画描边，
@@ -180,9 +202,8 @@ class ThemeUtil {
             // 注：Android 的 tonal palette 只提供 tone 0/10/50/100/200…/1000，没有 90。
             // 原先写 system_neutral1_90 会 getIdentifier 失败 → 永远走 fallback，
             // 等于浅色下这格从未跟随壁纸。改用最接近的有效 tone 100。
-            surfaceContainerHighest = if (on) 0xFF262626.toInt()
-            else if (dark) dyn(c, "system_neutral1_700", 0xFF36343B.toInt())
-            else dyn(c, "system_neutral1_100", 0xFFE6E0E9.toInt())
+            surfaceContainerHighest = if (on) c.getColor(R.color.m3_amoled_surface_container_highest)
+            else dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_100", themedColor(c, dark, R.color.m3_surface_container_highest))
 
             primary = prim
             onPrimary = onPrim

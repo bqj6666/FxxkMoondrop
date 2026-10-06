@@ -57,7 +57,7 @@ class AboutFragment : Fragment() {
         val box = LinearLayout(requireContext())
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(18), dp(16), dp(18), dp(16))
-        box.background = M3Ui.cardBg(requireContext(), pal, 20)
+        box.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
         val t1 = TextView(requireContext())
         t1.text = lead
         t1.textSize = 16f
@@ -350,7 +350,7 @@ class AboutFragment : Fragment() {
         header.orientation = LinearLayout.VERTICAL
         header.gravity = Gravity.CENTER_HORIZONTAL
         header.setPadding(dp(24), dp(28), dp(24), dp(26))
-        header.background = M3Ui.cardBg(requireContext(), pal, 28)
+        header.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
 
         val iconWrap = LinearLayout(requireContext())
         iconWrap.gravity = Gravity.CENTER

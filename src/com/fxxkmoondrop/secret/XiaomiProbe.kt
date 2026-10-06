@@ -44,6 +44,28 @@ import java.util.Locale
 class XiaomiProbe private constructor() {
 
     companion object {
+        /**
+         * 小米系统性集成的**总开关**（A2：整块隐藏）。
+         *
+         * ## 为什么停用
+         *
+         * 用户决定：小米集成尚未在真机验证过（本机非小米设备），
+         * 且设置页里那块「小米系统集成」在非小米机上空占一整屏、
+         * 只显示一行置灰说明，属于无效信息。于是整块隐藏。
+         *
+         * ## 保留了什么
+         *
+         * `isXiaomi()` 的三级判据、设备 ID 映射、hook 入口**全部保留未删**，
+         * 只是设置页不再渲染该分组。恢复 = 把本常量改回 true。
+         *
+         * ## 注意
+         *
+         * 这只是 UI 门禁。真正调用小米集成代码的路径本来就被
+         * `isXiaomi()` 挡着（非小米设备一个字节都不执行），
+         * 所以关掉它不会改变任何运行行为，只是少显示一块 UI。
+         */
+        const val INTEGRATION_ENABLED = false
+
         private const val TAG = "FxxkMoondrop/Xiaomi"
 
         /** 负结果缓存时长：与 EnvProbe 保持同一量级。 */

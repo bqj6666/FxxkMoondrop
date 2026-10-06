@@ -261,6 +261,27 @@ class M3Ui {
             }
         }
 
+        /**
+         * 卡片圆角 —— Material3 官方规范值。
+         *
+         * 依据 material-1.14.0.aar 实测：
+         *   Base.Widget.Material3.CardView
+         *     → shapeAppearance = ?attr/shapeAppearanceCornerMedium
+         *     → m3_sys_shape_corner_value_medium = 12dp
+         *
+         * 3.3.1 之前各处散落 20 / 24 / 28 三种值（属 largeIncreased 等非 Card 档），
+         * 同一屏里圆角不一致正是「看着很奇怪」的来源。现统一到规范档。
+         */
+        const val RADIUS_CARD = 12
+
+        /**
+         * 对话框圆角 —— Material3 官方规范值。
+         *
+         * m3_sys_shape_corner_value_extra_large = 28dp，
+         * 与 Card 的 12dp 是两个不同档位，不要混用。
+         */
+        const val RADIUS_DIALOG = 28
+
         /** 圆角卡片背景（M3 surfaceContainer 色） */
         @JvmStatic
         fun cardBg(c: Context, pal: ThemeUtil.Palette, radiusDp: Int): GradientDrawable {
@@ -302,7 +323,7 @@ class M3Ui {
             }
             val density = c.resources.displayMetrics.density
             val card = MaterialCardView(c)
-            card.setRadius(28 * density)
+            card.setRadius(dp(c, RADIUS_DIALOG).toFloat())
             card.setCardBackgroundColor(cardColor)
             // alpha2.52: 弹窗描边弱化（0x33 -> 0x1F、1.5dp -> 1dp）。
             // 浮层已有 0.5f scrim 与背景分离，原先的强调色描边在纯黑下过于抢眼。
@@ -339,7 +360,7 @@ class M3Ui {
                    onClick: Runnable?): LinearLayout {
             val wrap = LinearLayout(act)
             val card = MaterialCardView(act)
-            applyCardLook(card, act, pal, 20)
+            applyCardLook(card, act, pal, RADIUS_CARD)
             card.setRippleColor(ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000))
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
@@ -385,7 +406,7 @@ class M3Ui {
                       sw: com.google.android.material.materialswitch.MaterialSwitch): LinearLayout {
             val wrap = LinearLayout(act)
             val card = MaterialCardView(act)
-            applyCardLook(card, act, pal, 20)
+            applyCardLook(card, act, pal, RADIUS_CARD)
             val row = LinearLayout(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
@@ -788,7 +809,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             t.textSize = 14f
             t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             t.setTextColor(pal.onVariant)
-            t.setPadding(dp(act, 20), dp(act, 2), dp(act, 20), dp(act, 6))
+            // 左边距 16dp = 卡片内文字位置（外层 16 + 卡片内 16 = 绝对 32dp）。
+            // 3.3.1 前是 20dp，与 makeSubLabel(4dp)、卡片文字(16dp) 三种缩进混用，
+            // 同一屏里左边缘参差正是「看着很奇怪」的来源。
+            t.setPadding(dp(act, 16), dp(act, 2), dp(act, 16), dp(act, 6))
             return t
         }
 
@@ -806,7 +830,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 }
                 val card = LinearLayout(act)
                 card.orientation = LinearLayout.VERTICAL
-                card.background = cardBg(act, pal, 20)
+                card.background = cardBg(act, pal, RADIUS_CARD)
                 card.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
                 wrap.addView(card, LinearLayout.LayoutParams(-1, -2))
             }

@@ -302,7 +302,7 @@ class OnboardingActivity : Activity() {
 
         val card = LinearLayout(this)
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(this, pal, 20)
+        card.background = M3Ui.cardBg(this, pal, M3Ui.RADIUS_CARD)
         card.setPadding(dp(18), dp(16), dp(18), dp(16))
         card.addView(body(Lang.t(this,
                 "本应用为 Moondrop 系列蓝牙耳机提供系统级控制能力，将耳机状态接入 Android 系统界面。",
