@@ -1225,7 +1225,13 @@ class GaiaBleClient private constructor() {
         // 无档案时拿不到证据，宣告出去就是「点了没反应」；宁可少一档也不给死按钮。
         GaiaCommands.ANC_PATH_ANC_V2 -> AncProfileLib.supportedAncV2UiModes(connectedDeviceName)
                 ?: AncProfileLib.BASIC_UI_MODES
-        GaiaCommands.ANC_PATH_AUDIO_CURATION -> AncProfileLib.BASIC_UI_MODES
+        // 3.2.20: AudioCuration 也要读型号档案的档位，不能再一律宣告 4 档。
+        //
+        // 此前这里直接返回 BASIC_UI_MODES，于是只有 2 档的设备（如知更鸟）会多出
+        // 「关闭」「抗风噪」两个死按钮 —— issue #12 的「透传按钮是摆设」正是同类问题：
+        // 按钮在、发出去的档位设备不认。档案里 setMap 为 -1 的槽位即不支持。
+        GaiaCommands.ANC_PATH_AUDIO_CURATION ->
+            AncProfileLib.supportedUiModes(connectedDeviceName) ?: AncProfileLib.BASIC_UI_MODES
         GaiaCommands.ANC_PATH_ANC_V1 -> intArrayOf(0, 1)
         else -> IntArray(0)
     }

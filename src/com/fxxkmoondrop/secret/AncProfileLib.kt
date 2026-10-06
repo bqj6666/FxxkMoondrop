@@ -55,6 +55,24 @@ object AncProfileLib {
         // SET（UI[关,降,透,抗] → dev）：1=关闭 2=降噪 4=透传 3=抗风（同 GA2，非默认顺序）
         // GET（dev → UI）：0=关闭 1=降噪 2=透传 3=抗风（0-based 直传）
         Profile("SPACE TRAVEL 2", intArrayOf(1, 2, 4, 3), intArrayOf(0, 1, 2, 3))
+        ,
+        // 知更鸟 / Robin（ROBIN'S EARPHONES）—— 2026-10-06 issue #12 日志实测。
+        //
+        // SET（UI[关,降,透,抗] → dev）：-1 / 1 / 2 / -1
+        //   —— 只有「降噪」与「透传」两档，与用户描述一致
+        //      （「耳机本身也就只有降噪和透传模式」）。关闭档与抗风噪档不存在，
+        //      用 -1 标记，UI 据此不显示这两列 —— 免得又长出点了没反应的死按钮。
+        //
+        // 为什么是 1=降噪、2=透传（而不是沿用默认的 1=关、2=降）：
+        //   日志里耳机上报过 dev=1 与 dev=2 两个值，且整段使用期间只在两者间切换；
+        //   用户明确说只有降噪/透传两档 —— 那么 dev=2 只能是较常用的那一档（降噪），
+        //   dev=1 即透传。这与同路径的 GOLDEN AGES 2 一致：
+        //   该型号的 getMap 也是 0-based 直传（dev 值 = 档位序号），setMap 才偏移。
+        //
+        // 默认映射 [1,2,3,4] 下的错误后果（issue #12 的「透传按钮是摆设」）：
+        //   耳机在透传(dev=1) -> 被解成 ui=0「关闭」；点 UI「透传」(ui=2) -> 发 dev=3，
+        //   而该耳机只认 1/2，命令被忽略，按钮自然毫无反应。
+        Profile("ROBIN", intArrayOf(-1, 1, 2, -1), null)
     )
 
     /**
@@ -104,6 +122,25 @@ object AncProfileLib {
             }
         }
         return null
+    }
+
+    /**
+     * AudioCuration 路径下、型号档案实际支持的 UI 档位。
+     *
+     * 约定与 [supportedAncV2UiModes] 一致：**setMap 里为 -1 的槽位即不支持**。
+     * 未命中型号返回 null，调用方回退 [BASIC_UI_MODES]（不限制）。
+     *
+     * 存在的意义：AudioCuration 是 GA2 系设备的现行路径，此前该路径完全不查档案，
+     * 一律宣告 4 档 —— 于是像知更鸟这类只有 2 档的耳机会多出两个死按钮
+     * （issue #12 的「透传按钮是摆设」正是其中一例：发出去的档位设备根本不认）。
+     */
+    fun supportedUiModes(deviceName: String?): IntArray? {
+        val n = deviceName?.uppercase()?.trim()
+        if (n.isNullOrEmpty()) return null
+        val prof = PROFILES.firstOrNull { n.contains(it.nameKey) } ?: return null
+        val out = ArrayList<Int>(prof.map.size)
+        for (ui in prof.map.indices) if (prof.map[ui] >= 0) out.add(ui)
+        return out.toIntArray()
     }
 
     /** 当前连接命中的档案名（调试/设置页展示用）；未命中返回 "默认" */

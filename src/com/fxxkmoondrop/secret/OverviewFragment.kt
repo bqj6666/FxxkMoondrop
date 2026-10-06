@@ -87,6 +87,9 @@ class OverviewFragment : Fragment() {
     private var battRowShown = false // alpha2.8: 电量行当前视觉状态（驱动出现/消失动画）
     private var ancBtns: Array<View?>? = null   // alpha1.20: 弹窗同款按钮 holder
     private var ancLabels: Array<TextView?>? = null
+
+    /** 3.2.20: 各档位的**整列**（含图标与文字），用于按型号档案统一控制显隐。 */
+    private var ancCols: Array<View?>? = null
     private var eqRow: View? = null   // 3.2.12: 均衡器入口行（按 9ECA 服务能力显隐）
     private var ancWindCol: View? = null
     /** 3.0.5: 自适应(4) 列。只有设备能力确证支持时显示（与设备详情页同规则）。 */
@@ -285,6 +288,7 @@ class OverviewFragment : Fragment() {
         // （与设备详情页面板同一规则：能力未确证支持就不出现，避免点了没反应的空档位）。
         ancBtns = arrayOfNulls(5)
         ancLabels = arrayOfNulls(5)
+        ancCols = arrayOfNulls(5)   // 3.2.20: 记录整列，供按档案收敛档位
         val ancRow = LinearLayout(requireContext())
         ancRow.orientation = LinearLayout.HORIZONTAL
         ancRow.gravity = Gravity.CENTER
@@ -325,6 +329,7 @@ class OverviewFragment : Fragment() {
             ancBtns!![fm] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
+            ancCols!![fm] = col         // 3.2.20: 统一显隐用
             // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
             val sz = dp(72)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
@@ -1599,16 +1604,36 @@ class OverviewFragment : Fragment() {
             }
             it.visibility = if (hasEq) View.VISIBLE else View.GONE
         }
-        // 3.0.5: 自适应(4) 列只在设备能力确证支持时出现；能力未知/不支持一律隐藏。
-        // 只门控这一档：其余 0..3 维持既有行为，不改动现有设备的表现。
-        ancAdaptCol?.let { col ->
+        // 3.2.20: 档位可见性统一按「型号档案声明支持」+「用户设置」决定。
+        //
+        // 原来只门控自适应(4) 一档，0..3 恒显示 —— 于是像知更鸟这类只有 2 档的设备
+        // （档案 setMap=[-1,1,2,-1]）会多出「关闭」「抗风噪」两个点了没反应的死按钮。
+        // 用户的原话是「透传按钮貌似是个摆设」，正是同一类问题。
+        //
+        // 规则（与设备详情面板、通知栏共用同一份 supportedUiModes）：
+        //   · 档案声明支持该档 -> 显示；声明不支持(-1) -> 隐藏
+        //   · 能力尚未探明（空数组）-> 维持既有「显示但置灰」，避免连接期间闪烁
+        //   · 抗风(3) 另受用户开关 show_wind 约束（沿用既有设置项）
+        //   · 自适应(4) 另要求 realConnected（连接后能力才会被探到；断开即收回）
+        ancCols?.let { cols ->
             val uiModes = try {
                 GaiaBleClient.getInstance().supportedUiModes()
             } catch (_: Throwable) {
                 IntArray(0)
             }
-            // 3.0.5: 未连接一律不显示（连接后能力才会被探到；断开即收回）
-            col.visibility = if (realConnected && uiModes.contains(4)) View.VISIBLE else View.GONE
+            val windByUser = try {
+                requireContext().getSharedPreferences("cfg", Context.MODE_PRIVATE)
+                    .getBoolean("show_wind", true)
+            } catch (_: Exception) {
+                true
+            }
+            for (i in cols.indices) {
+                val col = cols[i] ?: continue
+                val supported = uiModes.isEmpty() || uiModes.contains(i)
+                val byUser = if (i == 3) windByUser else true
+                val needsConn = if (i == 4) realConnected else true
+                col.visibility = if (supported && byUser && needsConn) View.VISIBLE else View.GONE
+            }
         }
         ancBtns?.let { btns ->
             for (i in btns.indices) {
