@@ -164,11 +164,19 @@ class ThemeUtil {
                 onPrim = dyn(c, "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary))
                 cont = dyn(c, if (dark) "system_accent1_800" else "system_accent1_50", themedColor(c, dark, R.color.m3_primary_container))
                 onCont = dyn(c, if (dark) "system_accent1_50" else "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary_container))
+                // 页面底色：深色取 neutral1_900，浅色取 neutral1_10。
+                // ⚠️ 两个 key 必须按 dark 分支 —— system_neutral1_900 **恒为深色**，
+                //    浅色模式下也用它，整页会变黑而文字仍是深色，糊成一团。
+                //    （3.3.1 引入过这个回归，别再把 if (dark) 去掉。）
                 surf = if (on) android.graphics.Color.BLACK
-                else dyn(c, "system_neutral1_900", themedColor(c, dark, R.color.m3_surface))
-                // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相
+                else dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_10",
+                        themedColor(c, dark, R.color.m3_surface))
+                // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相。
+                // 同上：neutral1_800 恒为深色，浅色分支必须单独走。
                 cardC = if (on) c.getColor(R.color.m3_amoled_card)
-                else dyn(c, "system_neutral1_800", themedColor(c, dark, R.color.m3_surface_container))
+                else if (dark) dyn(c, "system_neutral1_800",
+                        themedColor(c, true, R.color.m3_surface_container))
+                else themedColor(c, false, R.color.m3_surface_container)
                 onSurface = dyn(c, if (dark) "system_neutral1_0" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
             } else {
                 // 种子色生成（官方 LSPosed seed 近似调色）
@@ -193,10 +201,20 @@ class ThemeUtil {
                 cont = c.getColor(R.color.m3_amoled_container)
                 onCont = onSurface
             }
-            // alpha2.52: 对齐 org.lsposed.manager —— 卡片一律不画描边，
-            // 层级由"卡片填充色 vs 页面底色"和卡间距表达（用户反馈描边"突兀"）。
-            // AMOLED 下卡片改用极低抬高的 #101010：无线条、不破坏纯黑背景观感。
-            cardStroke = 0
+            // 3.3.1: 卡片改为 M3 **Outlined** 规范（= org.lsposed.manager 的做法）。
+            //
+            // 依据 material-1.14.0.aar 实测：
+            //   Widget.Material3.CardView.Outlined
+            //     strokeWidth = m3_comp_outlined_card_outline_width = **1dp**
+            //   描边色用 M3 的 outlineVariant（低对比，不是 outline）。
+            //
+            // 上一次（alpha2.52）把描边整个去掉，用户反馈"卡片选项还是一样丑"——
+            // 纯靠填充色差分层在浅色下几乎看不见（#FFFFFF 卡片 vs #F3EDF7 底）。
+            // 现在按 M3 规范补回细描边，与 LSPosed 设置页观感一致。
+            //
+            // AMOLED 纯黑下同样保留：卡片 #101010 与纯黑背景几乎同色，
+            // 没有描边就彻底分不出层级。
+            cardStroke = themedColor(c, dark, R.color.m3_outline_variant)
             // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
             divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())
             // 注：Android 的 tonal palette 只提供 tone 0/10/50/100/200…/1000，没有 90。
