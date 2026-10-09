@@ -125,7 +125,7 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 |---|---|---|
 | 支持 | 类原生 / 原生系统（需完整 GMS） | 功能完全正常 |
 | 需额外模块 | ColorOS（OPPO / realme / 一加） | 需搭配 [oplus-cn2global（Magisk 模块）](https://github.com/AndroPlus-org/magisk-module-oplus-cn2global) + [Luckytool（Xposed，解除 GMS 限制）](https://github.com/Xposed-Modules-Repo/com.luckyzyx.luckytool) 后 Fast Pair 弹窗才可用 |
-| 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证） |
+| 待实测 | 其他系统 | 只要是支持完整 GMS 的系统，理论上均支持（尚未逐一实机验证）可尝试[unlock-cn-gms](https://github.com/fei-ke/unlock-cn-gms) |
 
 ### 启用作用域与 Hook 覆盖
 
