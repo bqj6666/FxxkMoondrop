@@ -33,7 +33,7 @@
 5. 单测基线 **135 项不得减少**
 6. **不自绘像素**：能用 Miuix 官方组件的都用官方组件
 7. 圆角统一 **16dp**（= 官方 `CardDefaults.CornerRadius`）
-8. 构建：`./g9.sh testDebugUnitTest` / `./g9.sh :app:assembleRelease -PfxxkKeypass=fxxk2026`
+8. 构建：`./g9.sh testDebugUnitTest` / `./g9.sh :app:assembleRelease -PfxxkKeypass=$FXXK_KEYPASS`
 9. 装机：`pm install -r /data/local/tmp/eta/FxxkMoondrop-repo/app/build/outputs/apk/release/app-release.apk`
 10. **未获用户明确同意不得 push**
 
@@ -512,7 +512,7 @@ cd /workspace/FxxkMoondrop-repo
 ./g9.sh testDebugUnitTest 2>&1 | grep -E 'BUILD'
 N=0; for f in app/build/test-results/testDebugUnitTest/*.xml; do
   n=$(grep -o 'tests="[0-9]*"' "$f"|head -1|grep -o '[0-9]*'); N=$((N+n)); done; echo "测试数: $N"
-./g9.sh :app:assembleRelease -PfxxkKeypass=fxxk2026 2>&1 | grep -E 'BUILD'
+./g9.sh :app:assembleRelease -PfxxkKeypass=$FXXK_KEYPASS 2>&1 | grep -E 'BUILD'
 ```
 
 Expected: 测试数 **≥ 135**，BUILD SUCCESSFUL
