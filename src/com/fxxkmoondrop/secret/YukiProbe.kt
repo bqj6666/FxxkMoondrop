@@ -1,6 +1,7 @@
 package com.fxxkmoondrop.secret
 
 import android.util.Log
+import com.highcapable.yukihookapi.YukiHook
 import com.highcapable.yukihookapi.annotation.xposed.YukiHookLibXposedEntry
 import com.highcapable.yukihookapi.hook.xposed.YukiHookXposedModule
 
@@ -39,7 +40,10 @@ object YukiProbe : YukiHookXposedModule {
         Log.i(TAG, "YukiProbe.onInit 已执行")
     }
 
-    override fun onHook() = encase {
+    // 注意：encase 不是 YukiHookXposedModule 的成员，而是
+    // com.highcapable.yukihookapi.hook.factory 下的顶层函数（需 import 才能简写）。
+    // 这里直接用官方 demo 里被验证过的完整形式 YukiHook.encase{}。
+    override fun onHook() = YukiHook.encase {
         loadApp("com.android.settings") {
             // 刻意什么都不 hook：本分支只证明「基座能挂上、入口能被加载」。
             Log.i(TAG, "YukiProbe 已在设置进程加载（未做任何 hook，属预期）")
