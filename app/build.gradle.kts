@@ -174,6 +174,11 @@ dependencies {
     implementation(platform("com.highcapable.yukihookapi:yukihook-bom:1.5.0"))
     implementation("com.highcapable.yukihookapi:yukihook-core")
     implementation("com.highcapable.yukihookapi:yukihook-runtime-libxposed")
+    // ⚠️ BOM 只约束 implementation 相关配置，管不到 ksp 配置：
+    // 只写 implementation(platform(...)) 时，下面这行的版本会解析成空字符串，
+    // 报 `Could not find com.highcapable.yukihookapi:yukihook-compiler:.`
+    // 所以必须给 ksp 配置单独加一次 platform，保证 core / compiler 永远同源同版本。
+    ksp(platform("com.highcapable.yukihookapi:yukihook-bom:1.5.0"))
     ksp("com.highcapable.yukihookapi:yukihook-compiler")
 
     // DexKit（org.luckypray:dexkit）：运行时解析目标 APK 的 dex，
