@@ -3,4 +3,8 @@
     <!-- 快捷设置磁贴的默认名。只要清单里引用，应用内显示名由
          Lang.t 在运行时按中英文切换，不读这里。 -->
     <string name="qs_tile_label">降噪</string>
+    <!-- LSPosed（libxposed API）模块列表里显示的描述取自 manifest 的
+         android:description，**不是** META-INF/xposed/module.prop 的 description 字段。
+         两行：功能概述 + 进入模块设置的路径（仿常见模块的写法）。 -->
+    <string name="module_description">水月雨耳机助手：降噪切换、电量与配对弹窗增强\n设置-蓝牙-已连接的设备 进入模块控制</string>
 </resources>

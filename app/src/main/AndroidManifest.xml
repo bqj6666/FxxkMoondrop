@@ -36,6 +36,7 @@
 
     <application
         android:label="Fxxkmoondrop"
+        android:description="@string/module_description"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.FxxkMoondrop"
         android:allowBackup="false">
