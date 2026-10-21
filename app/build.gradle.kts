@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application")
+    // exp/yukihook-1.5：YukiHook 的 yukihook-compiler 需要 KSP 才能工作
+    id("com.google.devtools.ksp")
     // 3.2.13: AGP 9.0 起 Kotlin 支持由 AGP 内置，
     // 不能再声明 org.jetbrains.kotlin.android（会直接报错，见 kotl.in/gradle/agp-built-in-kotlin）
     id("org.jetbrains.kotlin.plugin.compose")
@@ -157,11 +159,22 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     // Kotlin（与旧链 libs/ 版本一致）
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.10")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.21")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Xposed API：仅编译期（运行时由 LSPosed 提供）
     compileOnly("io.github.libxposed:api:102.0.0")
+
+    // ── exp/yukihook-1.5：YukiHook 1.5.0 试验 ──────────────────────────────
+    // core + compiler + 底座模块，三者缺一不可（官方明确要求）。
+    // 底座二选一，同一构建变体里只能存在一个：
+    //   yukihook-runtime-libxposed -> libxposed API 101+（我们用的就是它）
+    //   yukihook-runtime-xposed82  -> Xposed Framework API 82
+    // 版本由 BOM 统一管理；compiler 与 core 版本必须严格一致。
+    implementation(platform("com.highcapable.yukihookapi:yukihook-bom:1.5.0"))
+    implementation("com.highcapable.yukihookapi:yukihook-core")
+    implementation("com.highcapable.yukihookapi:yukihook-runtime-libxposed")
+    ksp("com.highcapable.yukihookapi:yukihook-compiler")
 
     // DexKit（org.luckypray:dexkit）：运行时解析目标 APK 的 dex，
     // 用特征（字符串/调用关系/修饰符）反查被混淆的类与方法，

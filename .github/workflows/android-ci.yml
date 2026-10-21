@@ -2,10 +2,10 @@ name: Android CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, exp/yukihook-1.5]  # 试验分支临时放开，合并前必须删除
     tags: ['*']
   pull_request:
-    branches: [main]
+    branches: [main, exp/yukihook-1.5]  # 试验分支临时放开，合并前必须删除
   # 预发布改为**手动触发**（Actions 页面 -> Run workflow）。
   # 原先 push main 就自动发 ci-N：改一行 README 也会多出一个 Release 和一次镜像同步，
   # Releases 列表很快被无意义的构建淹没，真正的改动反而不好找。
