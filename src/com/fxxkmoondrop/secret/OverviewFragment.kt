@@ -1869,6 +1869,7 @@ class OverviewFragment : Fragment() {
             val act = activity ?: return
             act.runOnUiThread {
                 if (!isAdded) return@runOnUiThread
+                DeviceNotif.cancelAll(act.applicationContext)
                 moonProcState = serviceState()
                 updateAncStatus()
                 updateBatteryStatus()
