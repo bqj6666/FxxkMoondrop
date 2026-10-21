@@ -86,10 +86,7 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
                             or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
         }
 
-        if (KeepAlive.enabled(this) && !HeadsetDetectService.RUNNING) {
-            KeepAlive.wake(this)
-            try { startService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
-        }
+        recoverMonitoring()
 
         if (savedInstanceState == null) showTab(curTab)
 
@@ -105,6 +102,18 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
         // Non-waking recovery only; battery exemptions require the user's consent.
         try { KeepAlive.ensure(this) } catch (_: Throwable) { }
         try { KeepAlive.requestWhitelistOnce(this) } catch (_: Throwable) { }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        recoverMonitoring()
+    }
+
+    private fun recoverMonitoring() {
+        if (KeepAlive.enabled(this) && !HeadsetDetectService.RUNNING) {
+            KeepAlive.wake(this)
+            try { startService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
+        }
     }
 
     /** 官方 M3 切换：Fragment fade 过渡（内容动，底栏静止） */

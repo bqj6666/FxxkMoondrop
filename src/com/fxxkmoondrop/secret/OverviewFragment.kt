@@ -109,9 +109,9 @@ class OverviewFragment : Fragment() {
             val mac = i.getStringExtra("mac") ?: return
             requireActivity().runOnUiThread {
                 val gaia = GaiaBleClient.getInstance()
-                gaia.setCallback(gaiaUiCallback)
+                val generation = gaia.setCallback(gaiaUiCallback)
                 val appContext = c.applicationContext
-                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback) }.start()
+                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback, generation) }.start()
                 updateStatus()
             }
         }
@@ -1186,6 +1186,7 @@ class OverviewFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        GaiaBleClient.getInstance().setCallback(gaiaUiCallback)
         try {
             requireContext().registerReceiver(macUpdReceiver,
                     IntentFilter(HeadsetGate.ACTION_MAC_UPDATED))
@@ -1554,11 +1555,11 @@ class OverviewFragment : Fragment() {
         } else {
             val mac = HeadsetGate.getConnectedMac(requireContext())
             if (mac != null) {
-                gaia.setCallback(gaiaUiCallback)
+                val generation = gaia.setCallback(gaiaUiCallback)
                 // alpha1.4: 前台刷新强制重连（重新解析 LE 地址/扫描）
                 // alpha1.36: 移出主线程（原主线程 BLE 重连 + 阻塞探测导致 ANR）
                 val appContext = requireContext().applicationContext
-                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback) }.start()
+                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback, generation) }.start()
             } else if (showToast) {
                 // alpha1.35: 移除"未检测到 Moondrop 耳机"toast（用户反馈打扰）
             }
@@ -1882,6 +1883,7 @@ class OverviewFragment : Fragment() {
                 if (!isAdded) return@runOnUiThread
                 val addr = GaiaBleClient.getInstance().deviceAddress
                 if (addr != null) BatteryStore.setGaiaLevel(addr, batteryId, level)
+                DeviceNotif.refreshBattery(act.applicationContext)
                 updateBatteryStatus()
             }
         }

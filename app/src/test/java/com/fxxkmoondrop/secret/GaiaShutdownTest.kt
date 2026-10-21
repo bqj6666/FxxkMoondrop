@@ -80,15 +80,17 @@ class GaiaShutdownTest {
     }
 
     @Test
-    fun `queued reconnect from a departed UI cannot disturb the detector session`() {
+    fun `queued reconnect from an older registration cannot disturb a resumed UI session`() {
         val service = Listener()
         val ui = Listener()
         client.setMonitorCallback(service)
-        client.setCallback(ui)
+        val oldGeneration = client.setCallback(ui)
         client.releaseCallback(ui)
+        val resumedGeneration = client.setCallback(ui)
+        assertTrue(resumedGeneration > oldGeneration)
         client.deviceAddress = "00:11:22:33:44:55"
         val context = DiscoveryContext()
-        client.forceReconnect(context, "00:11:22:33:44:66", ui)
+        client.forceReconnect(context, "00:11:22:33:44:66", ui, oldGeneration)
         assertEquals("00:11:22:33:44:55", client.deviceAddress)
         assertEquals(0, context.registrations)
     }
@@ -97,18 +99,34 @@ class GaiaShutdownTest {
     fun `explicit shutdown releases both owners and rejects queued UI work`() {
         val service = Listener()
         val ui = Listener()
+        val eq = Any()
         client.setMonitorCallback(service)
-        client.setCallback(ui)
+        val generation = client.setCallback(ui)
+        client.retainConnection(eq)
         client.deviceAddress = "00:11:22:33:44:55"
         client.shutdown()
         assertNull(client.deviceAddress)
         val context = DiscoveryContext()
-        client.forceReconnect(context, "00:11:22:33:44:55", ui)
+        client.forceReconnect(context, "00:11:22:33:44:55", ui, generation)
         assertEquals(0, context.registrations)
+        client.releaseConnection(eq)
         client.releaseCallback(ui)
         client.disconnect()
         assertEquals(0, service.disconnects)
         assertEquals(0, ui.disconnects)
+    }
+
+    @Test
+    fun `EQ connection lease keeps the link after the overview releases its callback`() {
+        val ui = Listener()
+        val eq = Any()
+        client.setCallback(ui)
+        client.deviceAddress = "00:11:22:33:44:55"
+        client.retainConnection(eq)
+        client.releaseCallback(ui)
+        assertEquals("00:11:22:33:44:55", client.deviceAddress)
+        client.releaseConnection(eq)
+        assertNull(client.deviceAddress)
     }
 
     @Test

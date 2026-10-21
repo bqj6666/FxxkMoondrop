@@ -26,6 +26,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.ArrayDeque
+import java.util.HashSet
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -71,6 +72,8 @@ class GaiaBleClient private constructor() {
     private var context: Context? = null
     private var callback: Callback? = null
     private var monitorCallback: Callback? = null
+    private var callbackGeneration = 0L
+    private val connectionLeases = HashSet<Any>()
     private var gatt: BluetoothGatt? = null
     private var cmdChar: BluetoothGattCharacteristic? = null
     private var respChar: BluetoothGattCharacteristic? = null
@@ -340,29 +343,50 @@ class GaiaBleClient private constructor() {
     fun isConnecting(): Boolean = gatt != null && !connected
 
     @Synchronized
-    fun setCallback(cb: Callback?) { this.callback = cb }
+    fun setCallback(cb: Callback?): Long {
+        callback = cb
+        return ++callbackGeneration
+    }
 
     @Synchronized
     fun setMonitorCallback(cb: Callback) {
         val previous = monitorCallback
         monitorCallback = cb
-        if (callback == null || callback === previous) callback = cb
+        if (callback == null || callback === previous) {
+            callback = cb
+            callbackGeneration++
+        }
+    }
+
+    /** Non-callback users such as EQ retain the shared link while Overview is stopped. */
+    @Synchronized
+    fun retainConnection(owner: Any) { connectionLeases.add(owner) }
+
+    @Synchronized
+    fun releaseConnection(owner: Any) {
+        if (connectionLeases.remove(owner) && callback == null && monitorCallback == null &&
+                connectionLeases.isEmpty()) disconnect()
     }
 
     /** UI departure hands control back to the detector; the last owner releases all work. */
     @Synchronized
     fun releaseCallback(cb: Callback) {
         if (monitorCallback === cb) monitorCallback = null
-        if (callback === cb) callback = monitorCallback
+        if (callback === cb) {
+            callback = monitorCallback
+            callbackGeneration++
+        }
         // Controller release is not a physical headset disconnect; retain manual controls.
-        if (callback == null && monitorCallback == null) disconnect()
+        if (callback == null && monitorCallback == null && connectionLeases.isEmpty()) disconnect()
     }
 
-    /** Explicit disable wins over both owners and any queued UI reconnect request. */
+    /** Explicit disable wins over all owners and any queued reconnect request. */
     @Synchronized
     fun shutdown() {
         callback = null
         monitorCallback = null
+        connectionLeases.clear()
+        callbackGeneration++
         disconnect()
     }
 
@@ -1016,8 +1040,8 @@ class GaiaBleClient private constructor() {
     }
 
     @Synchronized
-    fun forceReconnect(ctx: Context, address: String?, owner: Callback) {
-        if (callback !== owner) return
+    fun forceReconnect(ctx: Context, address: String?, owner: Callback, generation: Long) {
+        if (callback !== owner || callbackGeneration != generation) return
         disconnectInternal()
         deviceAddress = null
         connected = false
