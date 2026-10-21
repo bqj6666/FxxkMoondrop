@@ -6,5 +6,8 @@
     <!-- LSPosed（libxposed API）模块列表里显示的描述取自 manifest 的
          android:description，**不是** META-INF/xposed/module.prop 的 description 字段。
          两行：功能概述 + 进入模块设置的路径（仿常见模块的写法）。 -->
-    <string name="module_description">水月雨耳机助手：降噪切换、电量与配对弹窗增强\n设置-蓝牙-已连接的设备 进入模块控制</string>
+    <!-- LSPosed（libxposed API）模块列表里显示的描述取自 manifest 的
+         android:description，**不是** META-INF/xposed/module.prop 的 description 字段。
+         内容与 GitHub 仓库描述保持一致，避免两处说法分叉。 -->
+    <string name="module_description">A dedicated pop-up connection tool for Moondrop Bluetooth headphones on Android, optimized for AOSP; it supports both rooted (LSPosed) and non-rooted environments.</string>
 </resources>
