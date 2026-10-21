@@ -1,7 +1,6 @@
 package com.fxxkmoondrop.secret
 
 import android.util.Log
-import com.highcapable.yukihookapi.YukiHook
 import com.highcapable.yukihookapi.annotation.xposed.YukiHookLibXposedEntry
 import com.highcapable.yukihookapi.hook.xposed.YukiHookXposedModule
 
@@ -14,12 +13,16 @@ import com.highcapable.yukihookapi.hook.xposed.YukiHookXposedModule
  *   这些类会被追加在生成入口之后写进 java_init.list。
  *   所以我们把原有的 XposedEntry 挂在这里，老功能与 YukiHook 同时被 LSPosed 加载。
  *
- * 各参数刻意与迁移前手写的 module.prop 对齐，便于逐字段比对生成结果：
- *   minApiVersion=101 / targetApiVersion=102 / staticScope=true
- *   ⚠️ 但 autoHotReload 拿不到：YukiHook 明确要求「热重载必须只有一个 Java 入口」，
- *      javaEntries 会追加一个入口，二者互斥。本试验选择保住老功能（挂 javaEntries）、
- *      放弃热重载。想同时拿热重载，就必须把 XposedEntry 整体改写成 YukiHook 入口。
- *   作用域 com.google.android.gms + com.android.settings
+ * 与迁移前手写 module.prop 的对齐情况，便于逐字段比对生成结果：
+ *   minApiVersion=101 / targetApiVersion=102 / staticScope=true 已对齐；
+ *   作用域 com.google.android.gms + com.android.settings 已对齐。
+ *   ⚠️ autoHotReload 拿不到：YukiHook 要求「热重载必须只有一个 Java 入口」，
+ *      javaEntries 会追加一个入口，二者互斥。本试验选择保住老功能、放弃热重载。
+ *      想两者兼得，就必须把 XposedEntry 整体改写成 YukiHook 入口（后续正式迁移）。
+ *
+ * 刻意不做的事：
+ *   不调用 YukiHook.configure{} —— 自定义日志 TAG 属可选配置，
+ *   最小面上先跑通，配置项逐个再加。
  */
 @YukiHookLibXposedEntry(
     minApiVersion = 101,
@@ -33,11 +36,6 @@ object YukiProbe : YukiHookXposedModule {
     private const val TAG = "FxxkMoondrop-Yuki"
 
     override fun onInit() {
-        YukiHook.configure {
-            logging {
-                tag = TAG
-            }
-        }
         Log.i(TAG, "YukiProbe.onInit 已执行")
     }
 
