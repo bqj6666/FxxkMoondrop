@@ -16,11 +16,12 @@ class NotifActionReceiver : BroadcastReceiver() {
         val mode = intent.getIntExtra(DeviceNotif.EXTRA_MODE, -1)
         if (mode !in 0..5) return
         Log.i("MoondropNotif", "notif action -> anc mode " + mode)
-        // 3.0.5: 保活默认常开且不依赖 Root（开机自启 + 30s 看门狗 + 白名单），进程仍可能被厂商 ROM 回收。
+        // Explicit user controls may reconnect even when automatic monitoring is disabled.
         // 这里先把服务拉起来（幂等：已在跑则只是一次 onStartCommand），
         // 让 GAIA 重连；本次点击仍立即下发，不等连接完成。
         try {
-            context.startService(Intent(context, HeadsetDetectService::class.java))
+            context.startService(Intent(context, HeadsetDetectService::class.java)
+                    .setAction(HeadsetDetectService.ACTION_MANUAL_CONTROL))
         } catch (t: Throwable) {
             Log.w("MoondropNotif", "ensure service from notif fail", t)
         }

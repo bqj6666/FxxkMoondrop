@@ -529,8 +529,7 @@ class SettingsFragment : Fragment() {
         box.addView(spacer(dp(14)))
 
 
-        // （3.0.5：原「Root 强力保活」开关已移除 —— 保活改为默认常开且不再需要 Root，
-        //   无 root 走开机自启 + 看门狗 + 系统电池优化白名单，有 root 时静默做额外增强。）
+        // Background monitoring no longer changes battery exemptions through root.
 
         // ── 后台隐藏 ──
         val swBg = makeTintedSwitch()
@@ -545,20 +544,12 @@ class SettingsFragment : Fragment() {
         // ── 后台监听总开关（alpha2.41.10: 合并原主界面「开始/停止后台监听」按钮）──
         val swAuto = makeTintedSwitch()
         // 总开关状态 = enable && auto_service，两键始终同步写入
-        swAuto.isChecked = getSP().getBoolean("enable", true) && getSP().getBoolean("auto_service", true)
+        swAuto.isChecked = KeepAlive.enabled(requireContext())
         val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_sensors, Lang.t("后台监听", "Background monitor"),
                 Lang.t("开启后立即开始监听，启动与开机时自动恢复；连接耳机后直连 GAIA",
                         "Start monitoring immediately; resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
-            getSP().edit().putBoolean("auto_service", checked).putBoolean("enable", checked).commit()
-            if (checked) {
-                HeadsetDetectService.RUNNING = true
-                try { requireContext().startService(Intent(requireContext(), HeadsetDetectService::class.java)) } catch (_: Exception) { }
-            } else {
-                AliveReceiver.cancel(requireContext())
-                HeadsetDetectService.RUNNING = false
-                try { requireContext().stopService(Intent(requireContext(), HeadsetDetectService::class.java)) } catch (_: Exception) { }
-            }
+            KeepAlive.setEnabled(requireContext(), checked)
         }
 
 

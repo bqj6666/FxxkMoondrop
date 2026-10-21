@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import java.util.HashSet
 
@@ -28,7 +29,8 @@ class HeadsetDetectService : Service() {
 
         private const val TAG = "MoondropHeadset"
         private const val POLL_MS = 5000L
-        private const val SLEEP_MS = 30000L // 自动休眠：无连接 30 秒后自停
+        const val ACTION_MANUAL_CONTROL = "com.fxxkmoondrop.secret.MANUAL_CONTROL"
+        const val ACTION_CONNECTION = "com.fxxkmoondrop.secret.HEADSET_CONNECTED"
 
         /** alpha1.17: 静态共享（服务进程与主界面同进程），供 HeadsetGate 复用已连接的 proxy
          *  ColorOS 上 BluetoothManager.getConnectedDevices(A2DP/HEADSET) 抛
@@ -75,18 +77,39 @@ class HeadsetDetectService : Service() {
     private var a2dpReady = false
     private var headsetReady = false
     private var lastSeen = HashSet<String>()
-    private var lastMoondropMs = 0L // 上次检测到 Moondrop 连接的时间戳
+    private var idleTimeout = HeadsetIdleTimeout(SystemClock.elapsedRealtime())
+    private var lastStartId = 0
+    private var stopping = false
 
-    private val sleepCheck = Runnable {
-        if (lastMoondropMs > 0 && System.currentTimeMillis() - lastMoondropMs > SLEEP_MS) {
-            Log.i(TAG, "no Moondrop for 30s, auto-sleep")
-            RUNNING = false
-            stopSelf()
+    private val sleepCheck = Runnable { updateIdle(false) }
+
+    private fun updateIdle(connected: Boolean) {
+        handler.removeCallbacks(sleepCheck)
+        if (stopping) return
+        val remaining = idleTimeout.remainingMs(
+            SystemClock.elapsedRealtime(), connected, KeepAlive.enabled(this)
+        ) ?: return
+        if (remaining == 0L) {
+            // A connection start already submitted to Android must win over this old idle deadline.
+            if (stopSelfResult(lastStartId)) {
+                Log.i(TAG, "monitor idle/manual lease expired")
+                stopping = true
+                RUNNING = false
+                if (KeepAlive.enabled(this)) DeviceNotif.cancelAll(this)
+                KeepAlive.markIdle(this)
+            }
+        } else {
+            handler.postDelayed(sleepCheck, remaining)
         }
     }
 
     private val profileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+            if (stopping) {
+                try { BluetoothAdapter.getDefaultAdapter()?.closeProfileProxy(profile, proxy) }
+                catch (e: Exception) { Log.w(TAG, "close late profile proxy failed", e) }
+                return
+            }
             if (profile == BluetoothProfile.A2DP) {
                 a2dpProxy = proxy as BluetoothA2dp
                 a2dpReady = true
@@ -99,6 +122,7 @@ class HeadsetDetectService : Service() {
         }
 
         override fun onServiceDisconnected(profile: Int) {
+            if (stopping) return
             if (profile == BluetoothProfile.A2DP) {
                 a2dpProxy = null
                 a2dpReady = false
@@ -118,9 +142,8 @@ class HeadsetDetectService : Service() {
         AppLog.init(this)
         AppLog.i(TAG, "HeadsetDetectService created (multi-path detect)")
         AncBridge.bind(this) // alpha1.20: 绑定广播 Context（模式状态同步通道）
-        GaiaBleClient.getInstance().init(this) // alpha1.32: 注册 LE 地址 receiver + 无缓存时请求发现
         DeviceMatcher.loadPersisted(this) // alpha2.52: 恢复指纹探测的学习/拒绝名单
-        // 3.0.5: 服务起来即确保保活链（看门狗 + 白名单），不再依赖 Root 开关
+        // A non-waking fallback covers process death only until intentional idle shutdown.
         try { KeepAlive.ensure(this) } catch (_: Throwable) { }
 
         receiver = HeadsetReceiver()
@@ -157,11 +180,27 @@ class HeadsetDetectService : Service() {
             }
         }
 
-        handler.postDelayed(pollRunnable, POLL_MS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand")
+        lastStartId = startId
+        val manual = intent?.action == ACTION_MANUAL_CONTROL
+        if (manual && KeepAlive.enabled(this)) KeepAlive.wake(this)
+        val monitoring = KeepAlive.shouldRecover(this)
+        if (!monitoring && !manual) {
+            AliveReceiver.cancel(this)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        stopping = false
+        GaiaBleClient.getInstance().setMonitorCallback(gaiaCallback)
+        // Legacy exported BT_EVENT input cannot indefinitely extend the deadline by itself.
+        if (intent?.action != BootReceiver.ACTION_BT_EVENT) {
+            idleTimeout = HeadsetIdleTimeout(SystemClock.elapsedRealtime())
+            updateIdle(false)
+        }
+        if (intent?.action == ACTION_CONNECTION) pollConnected()
         // v3.17: 处理蓝牙 hook 组件发来的 BT_EVENT（连接/断开事件）
         if (intent != null && BootReceiver.ACTION_BT_EVENT == intent.action) {
             val evt = intent.getStringExtra("evt")
@@ -172,19 +211,25 @@ class HeadsetDetectService : Service() {
                 pollConnected()
             }
         }
-        if (getSharedPreferences("cfg", MODE_PRIVATE).getBoolean("enable", true)) {
+        if (stopping) return START_NOT_STICKY
+        handler.removeCallbacks(pollRunnable)
+        handler.postDelayed(pollRunnable, POLL_MS)
+        if (monitoring) {
             AliveReceiver.scheduleNext(this)
+        } else {
+            AliveReceiver.cancel(this)
         }
-        return START_STICKY
+        return if (monitoring) START_STICKY else START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        stopping = true
         RUNNING = false
-        if (!getSharedPreferences("cfg", MODE_PRIVATE).getBoolean("enable", true)) {
+        if (!KeepAlive.enabled(this)) {
             AliveReceiver.cancel(this)
         }
-        handler.removeCallbacks(pollRunnable)
-        handler.removeCallbacks(sleepCheck)
+        handler.removeCallbacksAndMessages(null)
+        GaiaBleClient.instance?.releaseCallback(gaiaCallback)
         if (registered) {
             try { unregisterReceiver(receiver) } catch (_: Exception) { }
             registered = false
@@ -198,6 +243,8 @@ class HeadsetDetectService : Service() {
                 if (headsetReady && hp != null) adapter.closeProfileProxy(BluetoothProfile.HEADSET, hp)
             }
         } catch (_: Exception) { }
+        if (sSharedA2dp === a2dpProxy) sSharedA2dp = null
+        if (sSharedHeadset === headsetProxy) sSharedHeadset = null
         super.onDestroy()
     }
 
@@ -267,7 +314,9 @@ class HeadsetDetectService : Service() {
 
     private val pollRunnable = object : Runnable {
         override fun run() {
+            if (stopping) return
             pollConnected()
+            if (stopping) return
             // alpha1.0: GAIA 已连接时每 30 秒刷新一次电量
             val gaia = GaiaBleClient.getInstance()
             if (gaia.isConnected()) {
@@ -283,9 +332,15 @@ class HeadsetDetectService : Service() {
 
     private fun pollConnected() {
         try {
-            if (!hasBtPermission()) return
+            if (!hasBtPermission()) {
+                updateIdle(false)
+                return
+            }
             val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter == null || !adapter.isEnabled) return
+            if (adapter == null || !adapter.isEnabled) {
+                updateIdle(false)
+                return
+            }
 
             val all = ArrayList<BluetoothDevice>()
             // alpha2.52: 只有真正在放音的 A2DP/HFP 设备参与协议指纹探测，
@@ -385,7 +440,6 @@ class HeadsetDetectService : Service() {
                 if (!gaia.isConnected() && gaia.deviceAddress == null) {
                     // 与下面同一处防护：已有在途连接尝试时不要重复发起
                     if (gaia.isConnecting()) continue
-                    gaia.setCallback(gaiaCallback)
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
                 } else if (!gaia.isConnected()) {
@@ -407,7 +461,6 @@ class HeadsetDetectService : Service() {
                         AppLog.i(TAG, "gaia idle but connecting, skip redundant reconnect")
                         continue
                     }
-                    gaia.setCallback(gaiaCallback)
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
                 }
@@ -438,13 +491,7 @@ class HeadsetDetectService : Service() {
                 }
             }
 
-            // 更新 Moondrop 连接时间戳，用于自动休眠检测
-            if (hasMoondrop) {
-                lastMoondropMs = System.currentTimeMillis()
-                handler.removeCallbacks(sleepCheck)
-            } else if (lastMoondropMs > 0) {
-                handler.postDelayed(sleepCheck, SLEEP_MS)
-            }
+            updateIdle(hasMoondrop)
             if (hasMoondrop) {
                 // alpha1.14fix1: 真实耳机在位 → 退出 GAIA 模拟态（防模拟连接遗留导致降噪/电量假更新）
                 GaiaBleClient.setSimConnected(false)

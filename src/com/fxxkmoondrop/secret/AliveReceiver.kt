@@ -12,15 +12,20 @@ class AliveReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent?) {
         if (i == null || ACTION != i.action) return
         // 用户主动停止过监听：不再拉起，也不排下一次
-        if (!c.getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("enable", true)) {
+        if (!KeepAlive.shouldRecover(c)) {
+            cancel(c)
             Log.i(TAG, "keepalive skipped (user stopped)")
             return
         }
-        try {
-            c.startService(Intent(c, HeadsetDetectService::class.java))
-            Log.i(TAG, "keepalive: service ensured")
-        } catch (e: Exception) {
-            Log.e(TAG, "keepalive start failed: $e")
+        if (!HeadsetDetectService.RUNNING) {
+            try {
+                c.startService(Intent(c, HeadsetDetectService::class.java))
+                Log.i(TAG, "keepalive: service ensured")
+            } catch (e: Exception) {
+                cancel(c)
+                Log.e(TAG, "keepalive start failed: $e")
+                return
+            }
         }
         scheduleNext(c)
     }
@@ -46,12 +51,17 @@ class AliveReceiver : BroadcastReceiver() {
 
         @JvmStatic
         fun scheduleNext(c: Context) {
+            if (!KeepAlive.shouldRecover(c)) {
+                cancel(c)
+                return
+            }
             try {
                 val am = c.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
                 val i = Intent(c, AliveReceiver::class.java).setAction(ACTION)
                 val pi = PendingIntent.getBroadcast(c, 0, i,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                // Recovery may wait for the next wake; an idle detector must not wake the phone.
+                am.set(AlarmManager.ELAPSED_REALTIME,
                         SystemClock.elapsedRealtime() + INTERVAL_MS, pi)
                 Log.i(TAG, "keepalive alarm scheduled")
             } catch (e: Exception) {

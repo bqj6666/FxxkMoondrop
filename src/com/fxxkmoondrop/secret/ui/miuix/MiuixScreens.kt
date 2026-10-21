@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.fxxkmoondrop.secret.KeepAlive
 import com.fxxkmoondrop.secret.Lang
 import com.fxxkmoondrop.secret.ThemeUtil
 import com.fxxkmoondrop.secret.MainActivity
@@ -51,7 +52,7 @@ internal fun MiuixSettingsScreen(bottomBar: (@Composable () -> Unit)? = null) {
     var dynColor by remember { mutableStateOf(ThemeUtil.dynColor(ctx)) }
     var amoled by remember { mutableStateOf(ThemeUtil.amoled(ctx)) }
     var officialPanel by remember { mutableStateOf(sp.getBoolean("feat_official_panel", true)) }
-    var autoService by remember { mutableStateOf(sp.getBoolean("auto_service", true)) }
+    var autoService by remember { mutableStateOf(KeepAlive.enabled(ctx)) }
     var bgHide by remember { mutableStateOf(sp.getBoolean("bg_hide", false)) }
     var featPopup by remember { mutableStateOf(sp.getBoolean("feat_popup", true)) }
     var onboarding by remember { mutableStateOf(sp.getBoolean("show_guide", true)) }
@@ -127,7 +128,7 @@ internal fun MiuixSettingsScreen(bottomBar: (@Composable () -> Unit)? = null) {
                 checked = autoService,
                 onCheckedChange = { v ->
                     autoService = v
-                    sp.edit().putBoolean("auto_service", v).commit()
+                    KeepAlive.setEnabled(ctx, v)
                 },
             )
             MiuixDivider()

@@ -1,37 +1,52 @@
 package com.fxxkmoondrop.secret
 
+import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-/**
- * v3.17: 事件驱动版。
- * 监听开机广播（保留）与蓝牙 hook 组件发出的 BT_EVENT：
- *  - 开机：启动后台监听服务（保留 v3.15 功能）
- *  - BT_EVENT connected：Moondrop 耳机已连接 -> 唤醒服务做增量轮询
- *  - BT_EVENT disconnected：已断开 -> 唤醒服务清理状态
- * 服务本身带 30 秒无连接自动休眠，不驻留。
- */
+/** Restart on real headset connections, including when the idle service/process is gone. */
 class BootReceiver : BroadcastReceiver() {
+    @Suppress("DEPRECATION")
     override fun onReceive(c: Context, i: Intent?) {
         if (i == null) return
-        val action = i.action
-        Log.i(TAG, "BootReceiver: $action")
+        if (i.action == Intent.ACTION_MY_PACKAGE_REPLACED || !KeepAlive.enabled(c)) {
+            AliveReceiver.cancel(c)
+        }
+        if (!KeepAlive.enabled(c)) return
         try {
-            if (Intent.ACTION_BOOT_COMPLETED == action) {
-                if (c.getSharedPreferences("cfg", 0).getBoolean("enable", true)) {
-                    c.startService(Intent(c, HeadsetDetectService::class.java))
-                    Log.i(TAG, "service started on boot")
+            val start = Intent(c, HeadsetDetectService::class.java)
+            when (i.action) {
+                Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Unit
+                BluetoothDevice.ACTION_ACL_CONNECTED,
+                BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
+                    DeviceMatcher.loadPersisted(c)
+                    val name = i.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)?.name
+                        ?: i.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                    if (!acceptsConnection(i.action, i.getIntExtra(BluetoothProfile.EXTRA_STATE, -1), name)) {
+                        return
+                    }
+                    start.action = HeadsetDetectService.ACTION_CONNECTION
                 }
-            } else if (ACTION_BT_EVENT == action) {
-                // 蓝牙事件唤醒（连接/断开时由 Xposed hook 发出）
-                c.startService(Intent(c, HeadsetDetectService::class.java)
-                        .setAction(ACTION_BT_EVENT)
-                        .putExtra("evt", i.getStringExtra("evt")))
-                Log.i(TAG, "service woken by BT_EVENT")
+                ACTION_BT_EVENT -> {
+                    val event = i.getStringExtra("evt")
+                    if (event != "connected" && event != "disconnected") return
+                    if (event == "disconnected" && !HeadsetDetectService.RUNNING) return
+                    start.putExtra("evt", event)
+                    start.action = ACTION_BT_EVENT
+                }
+                else -> return
             }
+            KeepAlive.wake(c)
+            c.startService(start)
+            Log.i(TAG, "service requested: ${i.action}")
         } catch (e: Exception) {
+            // Background-start restrictions still apply; never bypass them with root or wake alarms.
             Log.e(TAG, "start failed: $e")
         }
     }
@@ -39,5 +54,14 @@ class BootReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "MoondropHeadset"
         const val ACTION_BT_EVENT = "com.fxxkmoondrop.secret.BT_EVENT"
+
+        internal fun acceptsConnection(action: String?, state: Int, name: String?): Boolean =
+            when (action) {
+                BluetoothDevice.ACTION_ACL_CONNECTED -> DeviceMatcher.isMoondrop(name)
+                BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED ->
+                    state == BluetoothProfile.STATE_CONNECTED && DeviceMatcher.allowProbe(name)
+                else -> false
+            }
     }
 }

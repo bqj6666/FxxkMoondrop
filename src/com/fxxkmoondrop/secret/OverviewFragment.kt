@@ -110,7 +110,8 @@ class OverviewFragment : Fragment() {
             requireActivity().runOnUiThread {
                 val gaia = GaiaBleClient.getInstance()
                 gaia.setCallback(gaiaUiCallback)
-                Thread { gaia.forceReconnect(requireActivity(), mac) }.start()
+                val appContext = c.applicationContext
+                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback) }.start()
                 updateStatus()
             }
         }
@@ -1119,6 +1120,8 @@ class OverviewFragment : Fragment() {
             text = Lang.t("运行中（降噪控制已冻结）", "Running (ANC frozen)")
         } else if (svc) {
             text = Lang.t("监听运行中 · 降噪控制未运行", "Monitor running · ANC not running")
+        } else if (context?.let { KeepAlive.enabled(it) && !KeepAlive.shouldRecover(it) } == true) {
+            text = Lang.t("等待耳机连接", "Waiting for headset")
         } else if (ancOk) {
             text = Lang.t("监听未运行 · 降噪控制运行中", "Monitor not running · ANC running")
         } else {
@@ -1208,6 +1211,7 @@ class OverviewFragment : Fragment() {
 
     override fun onStop() {
         super.onStop()
+        GaiaBleClient.instance?.releaseCallback(gaiaUiCallback)
         try {
             requireContext().unregisterReceiver(macUpdReceiver)
         } catch (_: Exception) { }
@@ -1553,7 +1557,8 @@ class OverviewFragment : Fragment() {
                 gaia.setCallback(gaiaUiCallback)
                 // alpha1.4: 前台刷新强制重连（重新解析 LE 地址/扫描）
                 // alpha1.36: 移出主线程（原主线程 BLE 重连 + 阻塞探测导致 ANR）
-                Thread { gaia.forceReconnect(requireActivity(), mac) }.start()
+                val appContext = requireContext().applicationContext
+                Thread { gaia.forceReconnect(appContext, mac, gaiaUiCallback) }.start()
             } else if (showToast) {
                 // alpha1.35: 移除"未检测到 Moondrop 耳机"toast（用户反馈打扰）
             }

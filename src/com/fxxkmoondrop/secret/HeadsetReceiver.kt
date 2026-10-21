@@ -125,17 +125,17 @@ class HeadsetReceiver : BroadcastReceiver() {
     /**
      * 立即唤醒检测服务做一次增量轮询（复用既有的 BT_EVENT 通道，不新增机制）。
      *
-     * 服务没在跑时后台 startService 会受限，所以整段 try 住 —— 这种情况本来就有
-     * 轮询兜底，不影响功能。
+     * Background starts remain subject to Android policy; do not bypass it with wakeup polling.
      */
     private fun wakeDetectService(c: Context) {
+        if (!KeepAlive.enabled(c)) return
         val now = System.currentTimeMillis()
         if (now - sLastWakeMs < 1000L) return
         sLastWakeMs = now
         try {
+            KeepAlive.wake(c)
             c.startService(Intent(c, HeadsetDetectService::class.java)
-                    .setAction(BootReceiver.ACTION_BT_EVENT)
-                    .putExtra("evt", "connected"))
+                    .setAction(HeadsetDetectService.ACTION_CONNECTION))
             Log.d(TAG, "wake detect service (connected event)")
         } catch (t: Throwable) {
             Log.d(TAG, "wake detect service failed: " + t)

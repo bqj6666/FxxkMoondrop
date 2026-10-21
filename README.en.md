@@ -35,7 +35,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 - **Material 3 UI**: home page (hero card + status panel + ANC buttons), settings page (Appearance / Features / Custom Mapping / Background / Diagnostics, follows system dark/light + Material You dynamic color), about page; all using Material 3 components.
 - **Permission check** (full secondary screen): 6 real-time checks grouped into **required** (Bluetooth / notifications / GAIA direct link) and **optional** (battery whitelist / root / FastPairHook module), each with one-tap jump to fix; the verdict only counts required items, so a missing optional one is not treated as "permissions not set up".
 - **Log capture** (device adaptation): one-tap collect system info / app settings / Bluetooth / runtime environment / logcat — six categories packaged as a ZIP.
-- **Keep-alive is on by default and needs no root**: auto-start on boot + a 30-second watchdog + the system battery optimisation whitelist (asked only once); on a rooted device `deviceidle` / `appops` tweaks are applied silently and failures are non-fatal. A separate optional "hide in background" switch is also available.
+- **Background monitoring is on by default and needs no root**: start on boot/headset connection, then stop the service and watchdog after 30 seconds without a headset. The active detector has a non-waking fallback. Battery exemptions require user consent; there are no silent `deviceidle` / `appops` changes. Background recovery remains subject to system restrictions; see [background monitoring](docs/BACKGROUND_MONITORING.md). A separate optional "hide in background" switch is also available.
 - **Getting started tour**: shown automatically on first launch, a horizontally paged tour with one feature area per page — About / Permissions / Connection / System integration / Headset control / Adaptation & diagnostics / Welcome. Every switch inside is the same switch as in Settings and takes effect immediately. It never auto-opens again after you finish or skip it, and can be replayed from the bottom of Settings.
 - **Display-layer language switching (Chinese/English)**: language preference (Follow system / Chinese / English); main-screen tabs, settings items, ANC panel, log popup, and permission-check page text follow the language; exposed via an exported ContentProvider for the GMS popup to read cross-process.
 
@@ -71,7 +71,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 1. Install the APK.
 2. In **LSPosed**, enable it and check the scope `com.google.android.gms` (optionally `com.android.settings`).
 3. On first launch a **getting-started tour** appears, where you can grant permissions directly (the Settings "Check permissions" page works too); if you skipped it, reopen it from the bottom of Settings.
-4. **Root is optional**: it works without root — when no root is detected the app enters no-root mode and still reads battery and switches ANC over GAIA BLE direct; only the official panel injection, popup icon customization and root keep-alive are disabled.
+4. **Root is optional**: it works without root — when no root is detected the app enters no-root mode and still reads battery and switches ANC over GAIA BLE direct; only enhancements such as official panel injection and popup icon customization are disabled.
 
 > ## More real-device feedback on Moondrop models is welcome
 >

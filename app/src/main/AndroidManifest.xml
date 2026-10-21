@@ -23,7 +23,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 不声明 FOREGROUND_SERVICE / FOREGROUND_SERVICE_CONNECTED_DEVICE：
          HeadsetDetectService 从不调用 startForeground()，实为普通后台服务
-         （靠 START_STICKY + AlarmManager 保活），该权限无任何作用。 -->
+         （连接广播 + START_STICKY + 非唤醒 AlarmManager 兜底），该权限无任何作用。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 3.0.5: 无 Root 保活 —— 用系统弹窗申请电池优化白名单（旧实现只能用 root 的 deviceidle 命令） -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -83,6 +83,11 @@
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <!-- These Bluetooth actions are exempt from implicit-broadcast restrictions. -->
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" />
+                <action android:name="android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED" />
                 <action android:name="com.fxxkmoondrop.secret.BT_EVENT" />
             </intent-filter>
         </receiver>

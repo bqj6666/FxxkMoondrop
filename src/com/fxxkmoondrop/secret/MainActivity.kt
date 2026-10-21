@@ -86,10 +86,8 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
                             or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
         }
 
-        if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("auto_service", true)
-                && getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("enable", true)
-                && !HeadsetDetectService.RUNNING) {
-            HeadsetDetectService.RUNNING = true
+        if (KeepAlive.enabled(this) && !HeadsetDetectService.RUNNING) {
+            KeepAlive.wake(this)
             try { startService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
         }
 
@@ -104,9 +102,7 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
             try { startActivity(Intent(this, OnboardingActivity::class.java)) } catch (_: Exception) { }
         }
 
-        // 3.0.5: 保活默认常开（不再有开关、不再需要 Root）。
-        // 无 root 路径 = 开机自启 + 30s 看门狗 + 系统电池优化白名单弹窗（只主动问一次）；
-        // 有 root 时 KeepAlive 内部再静默做一次 deviceidle/appops 增强。
+        // Non-waking recovery only; battery exemptions require the user's consent.
         try { KeepAlive.ensure(this) } catch (_: Throwable) { }
         try { KeepAlive.requestWhitelistOnce(this) } catch (_: Throwable) { }
     }

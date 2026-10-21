@@ -72,10 +72,10 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | GMS Hook（LSPosed） | 不注入；设置页「官方集成」开关置灰 |
 | 弹窗图标自定义（由 GMS 进程内 `readIconBytes()` 读取） | 置灰并说明 |
 | `su` 拉起官方 App（`MoondropBooter`） | 直接跳过，不重试、不刷日志 |
-| 保活（开机自启 + 看门狗 + 电池优化白名单） | **默认常开且无需 Root**；已 Root 时静默追加 `deviceidle` / `appops` 增强，失败不影响使用 |
-| 启动时的 Fast Pair Hook 探测 | 跳过（原本要 ping 等满 4 秒超时），直接走内置 BLE 自扫 |
+| 后台监听（开机 / 蓝牙连接广播 + 非唤醒看门狗） | 由后台监听开关控制；无耳机时停止服务及看门狗，电池优化白名单只由用户授权，不再通过 Root 自动恢复 |
+| LE 地址发现 | 不在服务冷启动时盲扫；发现已连接的候选耳机或用户显式请求连接后，才按需扫描 |
 
-保活链在无 Root 下依然完整：`BootReceiver` 开机自启 + `AliveReceiver` AlarmManager 30s 循环；通知按钮被点击时也会顺带 `startService`（幂等），进程被回收后点一下通知即可恢复 GAIA 连接。
+`BootReceiver` 接收开机和系统 ACL / A2DP / HEADSET 连接广播，无需启用蓝牙进程 Hook。服务无耳机 30s 后停止并取消看门狗；连接时再恢复。`AliveReceiver` 仅用非唤醒 `ELAPSED_REALTIME` 兜底进程回收，不会每 30s 唤醒 CPU，也不反复启动已运行的服务。通知按钮仍可显式请求连接。后台启动仍受 Android / OEM 限制，恢复可能延迟到下一次系统唤醒；详见 [后台监听与验证](docs/BACKGROUND_MONITORING.md)。
 
 ### 权限
 
@@ -91,7 +91,7 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 | 模块 | 文件 | 职责 |
 |---|---|---|
 | **GaiaBleClient** | `GaiaBleClient.kt` | BLE GATT / RFCOMM 直连耳机单例；连接管理、GAIA V3 + GAIA V4 + 9ECA 三协议自动识别、电量读取、ANC 控制 |
-| **HeadsetDetectService** | `HeadsetDetectService.kt` | 常驻后台服务（普通 Service，非前台服务）；监听蓝牙连接状态，驱动 GaiaBleClient 连接/断开，轮询 ANC。保活链：`BootReceiver` 开机自启 → `AliveReceiver` AlarmManager 30s 循环 `startService` → `MoondropBooter` 以 `su -c am start` 静默拉起 |
+| **HeadsetDetectService** | `HeadsetDetectService.kt` | 普通后台 Service：连接期间轮询及驱动 GaiaBleClient，无耳机时停止；系统蓝牙广播恢复监听，非唤醒看门狗兜底进程回收 |
 | **HeadsetGate** | `HeadsetGate.kt` | 蓝牙连接守卫；A2DP/HEADSET profile 代理获取已连接设备 MAC |
 | **AncBridge** | `AncBridge.kt` | ANC 模式状态桥接；向 GMS 进程广播当前模式 + ANC 可用性 |
 | **PopupGate** | `PopupGate.kt` | 弹窗触发控制；管理弹窗超时、去重、延迟触发 |
