@@ -14,8 +14,9 @@ command implementation.
 `BLUETOOTH_CONNECT` is a runtime permission on API 31 and newer. It is **not guaranteed to be granted
 before monitoring starts**: `MainActivity` starts the service when monitoring is enabled before
 showing its tab, and the overview requests permission when it is created. Boot, app-update and
-Bluetooth receivers do not gate starts on the grant or request it in the background. The permission
-checker reports “Not granted, cannot scan / connect earbuds”; tapping its Bluetooth item or the
+Bluetooth receivers do not gate starts on the grant or request it in the background. Android requires
+that grant to deliver the native ACL/profile connection broadcasts to this manifest receiver, so
+those events cannot provide recovery while permission is denied. The permission checker reports “Not granted, cannot scan / connect earbuds”; tapping its Bluetooth item or the
 onboarding permission repair requests both `BLUETOOTH_CONNECT` and `BLUETOOTH_SCAN`. The overview
 requests both when `BLUETOOTH_CONNECT` itself is missing.
 
@@ -46,16 +47,21 @@ broadcasts in a particular way.
 - Intentional idle shutdown records a persisted idle marker and cancels the fallback alarm.
   A queued alarm cannot undo that stop. `stopSelfResult(startId)` protects a newer pending start;
   a stopped instance cannot re-arm the alarm after its last poll. A qualifying connection, opening
-  the app or explicitly enabling monitoring clears idle and allows detection again. Automatic idle
+  or resuming the app, or explicitly enabling monitoring clears idle and allows detection again.
+  Foreground recovery leaves an already-running detector alone. Automatic idle
   also removes stale headset notifications (including Bluetooth-off/permission-loss paths); a manual
   lease expiring with monitoring off does not withdraw the control buttons.
 - Service creation no longer starts a blind LE scan or hook probe. Connection attempts still use
   the existing targeted discovery and protocol fallback. Shutdown releases detector-owned GAIA
   work: scans, queued retries, the LE-address receiver and the control connection. Stale GATT/scan
   callbacks are ignored; an in-flight RFCOMM result is closed rather than adopted after shutdown.
-  The overview hands its callback back to an active detector in `onStop`; if neither owner remains,
-  the connection is released. A delayed reconnect from a departed UI is ignored. Explicitly turning
-  monitoring off releases both owners, including an in-progress UI connection.
+  The overview hands its callback back to an active detector in `onStop`. The equalizer retains a
+  separate connection lease until `onDestroy`, so opening it with monitoring off does not sever its
+  link. With no callback owner or lease remaining, the connection is released. Registration generations
+  reject delayed reconnects even if the same overview callback is registered again after resume.
+  Explicitly turning monitoring off releases all owners and leases, including an in-progress UI
+  connection. While the overview owns the callback, battery readings also refresh notifications and
+  pending popups; physical disconnection clears stale controls.
 - While monitoring is active, the existing one-shot fallback uses **ELAPSED_REALTIME**, not
   ELAPSED_REALTIME_WAKEUP. It does not restart an already-running service. It attempts process-death
   recovery when Android next delivers it, subject to background-start restrictions; it cannot wake
@@ -81,9 +87,11 @@ set to off is now really off, even if the old UI left `enable=true`.
 `HeadsetIdleTimeoutTest` covers cold disconnected startup, a fixed deadline across repeated polls,
 connection/disconnection, reconnection, a long elapsed-time gap, bounded manual control and a fresh
 service instance. `BackgroundMonitoringTest` covers both flags, shared start/stop, filtered native
-and legacy routing, ignored events, recovery, persisted idle and background-start failures.
-`GaiaShutdownTest` covers both owner-departure orders, callback handoff, explicit shutdown, rejected
-late UI reconnects, LE receiver release/re-registration and rejection of retired GATT callbacks.
+and legacy routing, ignored events, recovery, persisted idle and background-start failures. It also
+covers same-address bonded-name lookup, permission failures and strict ACL name filtering.
+`GaiaShutdownTest` covers both owner-departure orders, callback handoff, the equalizer connection lease,
+explicit shutdown, rejected reconnects from earlier callback registrations, LE receiver
+release/re-registration and rejection of retired GATT callbacks.
 These use JVM Android stubs, **not** an emulated AlarmManager, real Bluetooth transport or Android
 service lifecycle. No UI tests are added.
 
@@ -102,9 +110,14 @@ flip `DISABLED` back to false and resume that existing saved-style routing.
 
 ## Validation status
 
-Only source review and JVM tests are available here. No device/headset is attached, so the required
-device checklist and matched battery/awake measurements remain **blocked before merge**; no battery
-measurements or savings are claimed. ACL versus A2DP/HEADSET broadcast ordering is also unverified.
+The combined follow-up passed a clean `:app:clean :app:testDebugUnitTest :app:assembleDebug` run:
+**204 tests, zero failures or skipped tests**. The debug APK contains its manifest and compiled
+resources. `git diff --check` also passed. `:app:lintDebug` remains blocked by a `PrivateApiDetector`
+crash in unchanged `XposedEntry.kt`; no lint suppression was added.
+
+No device/headset is attached, so the required device checklist and matched battery/awake measurements
+remain **blocked before merge**; no battery measurements or savings are claimed. ACL versus
+A2DP/HEADSET broadcast ordering and real Activity/transport behavior are also unverified.
 
 ## Device validation checklist (requires a device, not covered by JVM tests)
 
@@ -122,7 +135,11 @@ measurements or savings are claimed. ACL versus A2DP/HEADSET broadcast ordering 
    must not restart it. Confirm GAIA scans/retries stop, including disable during connection setup.
    Explicit ANC actions must remain usable without automatic monitoring and must stop detector
    polling after their bounded lease, even with a connected headset. Test UI takeover, leaving the
-   overview, then disabling monitoring. Repeat with a UI reconnect thread still pending.
+   overview, then disabling monitoring. Repeat with a UI reconnect thread still pending, including
+   stop/resume of the same overview. With monitoring off, open EQ from the overview and verify its
+   controls keep working; after closing EQ and leaving the overview, verify the link is released.
+   Resume an existing task after idle and check recovery. During a service-triggered reconnect while
+   the overview is visible, verify battery-only notifications and pending connection popups update.
 5. Upgrade from the old app while a wakeup alarm is armed; verify any remaining watchdog is
    non-waking. With root available, manually restrict battery use and verify a new process does
    not silently restore the exemption.
