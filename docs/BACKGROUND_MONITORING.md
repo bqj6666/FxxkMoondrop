@@ -9,12 +9,36 @@ The existing notification behavior is unchanged: it attempts the command immedia
 reconnection. If the transport/capabilities are not ready, retry once connected; this is not a queued
 command implementation.
 
+## Android 12+ Bluetooth permission
+
+`BLUETOOTH_CONNECT` is a runtime permission on API 31 and newer. It is **not guaranteed to be granted
+before monitoring starts**: `MainActivity` starts the service when monitoring is enabled before
+showing its tab, and the overview requests permission when it is created. Boot, app-update and
+Bluetooth receivers do not gate starts on the grant or request it in the background. The permission
+checker reports “Not granted, cannot scan / connect earbuds”; tapping its Bluetooth item or the
+onboarding permission repair requests both `BLUETOOTH_CONNECT` and `BLUETOOTH_SCAN`. The overview
+requests both when `BLUETOOTH_CONNECT` itself is missing.
+
+If `BLUETOOTH_CONNECT` is denied, the service can still be started, but it skips Bluetooth profile
+proxy setup and each poll takes the idle path. With automatic monitoring enabled and no qualifying
+connection, the service stops after the 30-second idle deadline and removes stale headset
+notifications; background headset detection and GAIA battery/ANC updates do not work. Background
+starts do not display a permission dialog; the foreground overview/onboarding and permission-check
+flows are the user-facing request paths. An ACL
+event is accepted only with a Moondrop name; when the remote name is unavailable, the receiver may
+read the bonded device with the **same address** as a fallback. Address/name or bonded-list permission
+failures produce no fallback name, so the event fails closed unless the broadcast itself supplies a
+matching `EXTRA_NAME`. This is code behavior, not a claim that Android always orders or delivers these
+broadcasts in a particular way.
+
 ## Lifecycle
 
 - Boot and app replacement can start the detector. ACL connections must match a known/learned
-  headset name; A2DP/HEADSET connections also allow unrejected audio models for protocol probing.
-  Unrelated BLE links do not restart it. These native Bluetooth actions are manifest-broadcast
-  exceptions and do not depend on LSPosed's Bluetooth-process hook (outside the default scope).
+  headset name, using only a same-address bonded-device fallback when the remote name is missing;
+  they never use generic protocol probing. A2DP/HEADSET connections also allow unrejected audio models
+  for protocol probing. Unrelated BLE links or other bonded devices do not restart it. These native
+  Bluetooth actions are manifest-broadcast exceptions and do not depend on LSPosed's Bluetooth-process
+  hook (outside the default scope). ACL/profile broadcast ordering has not been verified on a device.
 - A new service gets a 30-second inactivity deadline even if no headset has ever been seen.
   Connected observations refresh it. Missing Bluetooth permission and Bluetooth-off also take the
   idle path. The deadline uses elapsed realtime, not wall-clock time. Handler delivery itself
@@ -65,6 +89,22 @@ service lifecycle. No UI tests are added.
 
 The repository's `android.aapt2FromMavenOverride` is an upstream ARM64-host setting. On other hosts,
 override it locally with an AGP-matched native aapt2; do not commit a machine-specific replacement.
+
+## Miuix remains disabled
+
+`MiuixSurface.DISABLED` is `true`; `enabled()` therefore returns `false` even if the saved style is
+Miuix. `MainActivity` uses that gate for both fragment selection and navigation-bar visibility, so
+Miuix screens and navigation are inert and the Material screens/navbar remain active. The settings
+fragment also hides the style selector while `MiuixSurface.disabled` is true. The existing JVM
+`MiuixDisabledGateTest` asserts `enabled()` is false and `disabled` is true. Miuix source remains in
+the app and the saved style is left intact; after visual refinement, the intended restoration is to
+flip `DISABLED` back to false and resume that existing saved-style routing.
+
+## Validation status
+
+Only source review and JVM tests are available here. No device/headset is attached, so the required
+device checklist and matched battery/awake measurements remain **blocked before merge**; no battery
+measurements or savings are claimed. ACL versus A2DP/HEADSET broadcast ordering is also unverified.
 
 ## Device validation checklist (requires a device, not covered by JVM tests)
 

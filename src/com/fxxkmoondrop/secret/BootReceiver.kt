@@ -1,6 +1,7 @@
 package com.fxxkmoondrop.secret
 
 import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothProfile
@@ -26,8 +27,17 @@ class BootReceiver : BroadcastReceiver() {
                 BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
                 BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
                     DeviceMatcher.loadPersisted(c)
-                    val name = i.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)?.name
-                        ?: i.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                    val device = i.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                    val remoteName = try { device?.name } catch (_: SecurityException) { null }
+                    val name = if (i.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+                        val address = if (remoteName == null) {
+                            try { device?.address } catch (_: SecurityException) { null }
+                        } else null
+                        resolveAclName(remoteName, address) { target -> bondedName(target) }
+                            ?: i.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                    } else {
+                        remoteName ?: i.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                    }
                     if (!acceptsConnection(i.action, i.getIntExtra(BluetoothProfile.EXTRA_STATE, -1), name)) {
                         return
                     }
@@ -54,6 +64,18 @@ class BootReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "MoondropHeadset"
         const val ACTION_BT_EVENT = "com.fxxkmoondrop.secret.BT_EVENT"
+
+        internal fun resolveAclName(
+            deviceName: String?, address: String?, bondedName: (String) -> String?,
+        ): String? {
+            if (deviceName != null) return deviceName
+            if (address == null) return null
+            return try { bondedName(address) } catch (_: SecurityException) { null }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun bondedName(address: String): String? =
+            BluetoothAdapter.getDefaultAdapter()?.bondedDevices?.firstOrNull { it.address == address }?.name
 
         internal fun acceptsConnection(action: String?, state: Int, name: String?): Boolean =
             when (action) {

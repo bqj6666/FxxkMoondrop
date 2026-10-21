@@ -12,6 +12,7 @@ import java.lang.reflect.Proxy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -149,6 +150,40 @@ class BackgroundMonitoringTest {
         }
         assertEquals(0, context.starts)
         assertFalse(KeepAlive.shouldRecover(context))
+    }
+
+    @Test
+    fun `ACL connections require a Moondrop name and never use generic probing`() {
+        assertTrue(BootReceiver.acceptsConnection(BluetoothDevice.ACTION_ACL_CONNECTED, -1, "MOONDROP"))
+        assertFalse(BootReceiver.acceptsConnection(BluetoothDevice.ACTION_ACL_CONNECTED, -1, "Uncatalogued audio model"))
+        assertFalse(BootReceiver.acceptsConnection(BluetoothDevice.ACTION_ACL_CONNECTED, -1, null))
+        assertTrue(BootReceiver.acceptsConnection(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+            BluetoothProfile.STATE_CONNECTED, "Uncatalogued audio model"))
+    }
+
+    @Test
+    fun `ACL null-name fallback only resolves the bonded device at the same address`() {
+        val bondedNames = mapOf("target" to "MOONDROP Golden Ages", "other" to "Fitness Band")
+        val lookedUp = mutableListOf<String>()
+        val name = BootReceiver.resolveAclName(null, "target") { address ->
+            lookedUp += address
+            bondedNames[address]
+        }
+
+        assertEquals("MOONDROP Golden Ages", name)
+        assertEquals(listOf("target"), lookedUp)
+        assertFalse(BootReceiver.acceptsConnection(BluetoothDevice.ACTION_ACL_CONNECTED, -1,
+            BootReceiver.resolveAclName(null, "other", bondedNames::get)))
+        assertNull(BootReceiver.resolveAclName(null, "unpaired") { bondedNames[it] })
+    }
+
+    @Test
+    fun `ACL name fallback fails closed when address is missing or Bluetooth access is denied`() {
+        assertNull(BootReceiver.resolveAclName(null, null) { error("must not query without an address") })
+        assertNull(BootReceiver.resolveAclName(null, "target") { throw SecurityException("permission denied") })
+        assertEquals("MOONDROP", BootReceiver.resolveAclName("MOONDROP", null) {
+            error("a readable remote name needs no bonded lookup")
+        })
     }
 
     @Test
