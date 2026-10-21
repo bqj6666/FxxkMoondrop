@@ -1883,7 +1883,10 @@ class OverviewFragment : Fragment() {
             act.runOnUiThread {
                 if (!isAdded) return@runOnUiThread
                 val addr = GaiaBleClient.getInstance().deviceAddress
-                if (addr != null) BatteryStore.setGaiaLevel(addr, batteryId, level)
+                if (addr != null) {
+                    BatteryStore.setGaiaLevel(addr, batteryId, level)
+                    PopupGate.flushPendingIfReady()
+                }
                 DeviceNotif.refreshBattery(act.applicationContext)
                 updateBatteryStatus()
             }
