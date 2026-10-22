@@ -64,12 +64,14 @@ class OverviewFragment : Fragment() {
     private var heroFg = 0
 
     /** alpha2.53: 手动刷新期间的线性进度条（BLE 重连要数秒，给了真实进度反馈） */
-    private var refreshBar: com.google.android.material.progressindicator.LinearProgressIndicator? = null
+    /** 刷新按钮本体与其内部的官方 LoadingIndicator */
+    private var refreshBtn: com.google.android.material.button.MaterialButton? = null
+    private var refreshSpin: View? = null
 
     /** 用户已确认过的「被跳过设备」名单（3.3.2），关闭提示卡时写入。 */
     private val KEY_SKIPPED_ACK = "skipped_notice_ack"
 
-    private val hideRefreshBar = Runnable { refreshBar?.visibility = View.GONE }
+    private val hideRefreshBar = Runnable { stopRefreshSpinner() }
     private var surfaceColor = 0
     private var onVariantColor = 0
     private var cardSurfaceColor = 0
@@ -306,28 +308,40 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            // 官方 M3 Expressive Icon Button（toggle 用法，M 档 56dp 容器），图标仍用我们自绘的。
-            // 原先是 FrameLayout + 手绘 GradientDrawable 圆：没有官方状态层、没有按压缩放形变，
-            // 选中态还得自己画描边（M3 里选中靠容器色切换，不描边）。
-            val holder = com.google.android.material.button.MaterialButton(requireContext(), null,
+            // 官方 MaterialButton 只负责**形状 / 状态层 / 按压形变**，图标用一张居中的 ImageView 叠上去。
+            // 之前把自绘 drawable 塞进 MaterialButton.icon，走的是「文字前图标」布局：
+            // 没有文字时图标会被 paddingStart 顶到左边（也就是这次看到的“偏左、不在正中”）。
+            // 叠一层 ImageView + Gravity.CENTER，位置就是几何中心，与图标尺寸、padding 全部解耦。
+            val holder = android.widget.FrameLayout(requireContext())
+            val btn = com.google.android.material.button.MaterialButton(requireContext(), null,
                     com.google.android.material.R.attr.materialIconButtonStyle)
-            holder.isCheckable = true
-            holder.isChecked = false
-            holder.insetTop = 0
-            holder.insetBottom = 0
-            holder.iconSize = dp(28)
-            holder.iconTint = ColorStateList.valueOf(onContainerColor)
-            holder.setPadding(0, 0, 0, 0)
-            holder.icon = buildMainModeIcon(fm, dp(28), onContainerColor)
+            btn.text = ""
+            btn.isCheckable = true
+            btn.isChecked = false
+            btn.insetLeft = 0
+            btn.insetRight = 0
+            btn.insetTop = 0
+            btn.insetBottom = 0
+            btn.setPadding(0, 0, 0, 0)
+            btn.tag = "anc_btn"
             // 未选中 = surfaceContainer 圆底 / 选中 = primary 底（M3 filled icon button toggle 的配色）
-            holder.backgroundTintList = ColorStateList(
+            btn.backgroundTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(primaryColor, containerColor))
-            holder.setOnClickListener {
+            btn.setOnClickListener {
                 AncBridge.setAncMode(fm)
                 ancMode = fm
                 updateAncStatus()
             }
+            holder.addView(btn, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val icon = ImageView(requireContext())
+            icon.tag = "fxxk_main_icon"
+            icon.isClickable = false          // 触摸交给底下的按钮，图标只负责画
+            icon.setImageDrawable(buildMainModeIcon(fm, dp(28), onContainerColor))
+            holder.addView(icon, android.widget.FrameLayout.LayoutParams(
+                    dp(28), dp(28), Gravity.CENTER))
             ancBtns!![fm] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
@@ -585,8 +599,24 @@ class OverviewFragment : Fragment() {
         }
 
         // alpha2.52: 点击后短暂禁用，防止连点重复触发刷新
-        root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"),
-                R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() })
+        // 3.3.x: 加载反馈改为**按钮内部**替换成官方 LoadingIndicator（M3 Expressive 加载组件），
+        // 不再在页面顶部单独挂一条 linear 进度条 —— 进度就该长在触发它的那个控件上。
+        val refreshBox = android.widget.FrameLayout(requireContext())
+        val refreshBtn = makeButton(Lang.t("刷新状态", "Refresh"),
+                R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() }
+        refreshBox.addView(refreshBtn, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+        val refreshSpin = com.google.android.material.loadingindicator.LoadingIndicator(requireContext())
+        refreshSpin.indicatorSize = dp(22)
+        refreshSpin.setIndicatorColor(onContainerColor)
+        refreshSpin.visibility = View.GONE
+        refreshBox.addView(refreshSpin, android.widget.FrameLayout.LayoutParams(
+                dp(22), dp(22), Gravity.CENTER))
+        refreshBox.addView(View(requireContext()), android.widget.FrameLayout.LayoutParams(-1, dp(2)))
+        this.refreshBtn = refreshBtn
+        this.refreshSpin = refreshSpin
+        root.addView(refreshBox, LinearLayout.LayoutParams(-1, -2))
 
         root.addView(spacer(dp(12)))
 
@@ -600,10 +630,6 @@ class OverviewFragment : Fragment() {
         outer.orientation = LinearLayout.VERTICAL
         outer.setBackgroundColor(surface)
         outer.setPadding(0, statusBarH, 0, 0)
-
-        refreshBar = M3Ui.linearLoader(requireContext(), container)
-        refreshBar!!.visibility = View.GONE
-        outer.addView(refreshBar, LinearLayout.LayoutParams(-1, -2))
 
         outer.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -1428,11 +1454,27 @@ class OverviewFragment : Fragment() {
     }
 
     /** alpha2.53: 刷新进度条显隐（超时兜底，避免状态回包丢失时长亮） */
+    /**
+     * 点击刷新的加载反馈：把按钮文字换成官方 LoadingIndicator，刷新结果回来自动复原。
+     * 位置就在按钮里面（替代原先挂在页面顶部、跟触发点分离的 linear 进度条）。
+     */
     private fun showRefreshBar() {
-        val b = refreshBar ?: return
+        val b = refreshBtn ?: return
+        val spin = refreshSpin ?: return
+        b.text = ""
+        b.icon = null
+        spin.visibility = View.VISIBLE
         b.removeCallbacks(hideRefreshBar)
-        b.visibility = View.VISIBLE
         b.postDelayed(hideRefreshBar, 6000L)
+    }
+
+    /** 复原按钮文案与图标（刷新完成/超时都走这里） */
+    private fun stopRefreshSpinner() {
+        val b = refreshBtn ?: return
+        if (b.text.isNullOrEmpty()) b.text = Lang.t("刷新状态", "Refresh")
+        if (b.icon == null) b.icon = androidx.core.content.ContextCompat.getDrawable(
+                requireContext(), R.drawable.ic_refresh)
+        refreshSpin?.visibility = View.GONE
     }
 
     /**
@@ -1628,15 +1670,15 @@ class OverviewFragment : Fragment() {
                 val hol = btns[i] ?: continue
                 hol.isEnabled = ancEnabled   // 官方 disabled 态自带 38% 视觉，不额外压 alpha
                 val sel = (i == ancMode)
-                // 选中态交给官方 MaterialButton：isChecked 驱动容器色（state list），
-                // 图标只换一次颜色，不描边、不自己画状态层。
-                val mb = hol as? com.google.android.material.button.MaterialButton
-                if (mb != null) {
-                    mb.isChecked = sel
-                    mb.iconTint = ColorStateList.valueOf(if (sel) onPrimaryColor else onContainerColor)
-                    mb.icon = buildMainModeIcon(i, dp(28),
-                            if (sel) onPrimaryColor else onContainerColor)
-                }
+                // 选中态交给官方 MaterialButton（isChecked 驱动容器色），图标单独换色
+                val mb = hol.findViewWithTag<View>("anc_btn")
+                        as? com.google.android.material.button.MaterialButton
+                mb?.isChecked = sel
+                mb?.isEnabled = ancEnabled
+                val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
+                iv?.setImageDrawable(buildMainModeIcon(i, dp(28),
+                        if (sel) onPrimaryColor else onContainerColor))
+                iv?.alpha = if (ancEnabled) 1f else 0.38f
                 ancLabels?.get(i)?.let {
                     it.setTextColor(if (sel) primaryColor else onContainerColor)
                     it.alpha = if (ancEnabled) 1f else 0.4f
