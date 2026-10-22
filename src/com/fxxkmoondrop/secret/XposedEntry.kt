@@ -932,6 +932,19 @@ class XposedEntry : XposedModule() {
                         " ready=$ready -> sliceVis=${vis.slice} loadingVis=${vis.loading}" +
                         " panelVis=${vis.panel} slicePref=${sp != null}" +
                         " parentIsScreen=$parentIsScreen sliceVisible=$spVisible count=$cnt")
+                // 把页面上所有 preference 的 key 全打出来：看官方到底用哪个 key 承载
+                // 「耳机控制」（不同 ROM 可能换成别的 key，我们的 KEY_SLICE_CONTROL 就落空了）
+                val sb = StringBuilder()
+                try {
+                    val n = (HookHelper.callMethod(screen, "getPreferenceCount") as? Int) ?: 0
+                    for (pi in 0 until Math.min(n, 40)) {
+                        val pf = HookHelper.callMethod(screen, "getPreference", pi)
+                        val k = HookHelper.callMethod(pf, "getKey") as? String
+                        val v = HookHelper.callMethod(pf, "isVisible") as? Boolean
+                        sb.append(pi).append(':').append(k).append('(').append(v).append(") ")
+                    }
+                } catch (_: Throwable) { }
+                android.util.Log.i("FxxkMoondrop", "prefKeys: " + sb)
             } catch (t: Throwable) { android.util.Log.e("FxxkMoondrop", "detailRows log fail", t) }
         } catch (th: Throwable) { Log.e(TAG, "applyControlSliceState failed", th) }
     }
