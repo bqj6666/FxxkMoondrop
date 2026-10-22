@@ -394,7 +394,7 @@ class OverviewFragment : Fragment() {
         // alpha2.32: 扩展设备控制（空间音频/增益/LED）—— 圆形图标按钮 + 型号档案
         val dcCard = LinearLayout(requireContext())
         dcCard.orientation = LinearLayout.VERTICAL
-        dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
+        dcCard.setPadding(dp(16), dp(16), dp(16), dp(16))   // M3：卡片内容内边距 16dp（原 10/12 是散值）
 
 
         // 空间音频行（总开关）

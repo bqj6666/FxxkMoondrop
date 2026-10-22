@@ -327,7 +327,7 @@ class EqActivity : Activity() {
             val t = TextView(this)
             t.text = Lang.t(this, "这副耳机不提供参量均衡数据。",
                     "This headset does not provide parametric EQ data.")
-            t.textSize = 13f
+            t.textSize = 14f
             t.setTextColor(pal.onVariant)
             content.addView(M3Ui.groupCard(this, pal, pad(t)), LinearLayout.LayoutParams(-1, -2))
         }
@@ -353,7 +353,7 @@ class EqActivity : Activity() {
         val pre = TextView(this)
         pre.text = Lang.t(this, "前级增益 " + fmtDb(cfg.preGainRaw * GAIN_UNIT_DB) + " dB",
                 "Pre-gain " + fmtDb(cfg.preGainRaw * GAIN_UNIT_DB) + " dB")
-        pre.textSize = 13f
+        pre.textSize = 14f
         pre.setTextColor(pal.onVariant)
         pre.setPadding(0, dp(10), 0, 0)
         box.addView(pre)
@@ -361,7 +361,7 @@ class EqActivity : Activity() {
         val cnt = TextView(this)
         cnt.text = Lang.t(this, "读到 " + points.size + " / " + cfg.pointCount + " 段",
                 "Read " + points.size + " of " + cfg.pointCount + " bands")
-        cnt.textSize = 13f
+        cnt.textSize = 14f
         cnt.setTextColor(pal.onVariant)
         cnt.setPadding(0, dp(2), 0, 0)
         box.addView(cnt)
@@ -380,7 +380,7 @@ class EqActivity : Activity() {
             val t = TextView(this)
             t.text = Lang.t(this, "所有频点增益都是 0（未做任何调整）。",
                     "Every band has 0 dB gain (no adjustment applied).")
-            t.textSize = 13f
+            t.textSize = 14f
             t.setTextColor(pal.onVariant)
             listBox.addView(pad(t), LinearLayout.LayoutParams(-1, -2))
         } else {
@@ -437,7 +437,7 @@ class EqActivity : Activity() {
         box.addView(a, LinearLayout.LayoutParams(-1, -2))
         val b = TextView(this)
         b.text = body
-        b.textSize = 13f
+        b.textSize = 14f
         b.setTextColor(pal.onVariant)
         b.setLineSpacing(dp(2).toFloat(), 1.25f)
         b.setPadding(0, dp(6), 0, 0)

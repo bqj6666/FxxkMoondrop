@@ -651,6 +651,50 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         }
 
         /**
+         * M3 对话框内的动作行（list item）：**前导图标 24dp 单色、无彩色底片、无卡片**。
+         *
+         * 设置页列表用「彩色圆形底片」是对的（那是 Settings 的分组列表语汇），
+         * 但对话框是临时浮层，里面再出现彩色底片会抢掉标题与动作按钮的层级。
+         * 官方 dialog 里的动作列表就是：24dp 图标 + 16sp 标题 + 14sp 说明 + chevron。
+         */
+        @JvmStatic
+        fun dialogRow(act: Activity, pal: ThemeUtil.Palette,
+                      iconRes: Int, title: String, sub: String?,
+                      trailing: View?, onClick: Runnable?): LinearLayout {
+            val row = LinearLayout(act)
+            row.background = selectableBackground(act)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            if (iconRes != 0) {
+                val ic = android.widget.ImageView(act)
+                ic.setImageResource(iconRes)
+                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
+                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(ic, ilp)
+            }
+            val labels = LinearLayout(act)
+            labels.orientation = LinearLayout.VERTICAL
+            val t1 = TextView(act)
+            t1.text = title
+            t1.textSize = 16f
+            t1.setTextColor(pal.onSurface)
+            labels.addView(t1, LinearLayout.LayoutParams(-2, -2))
+            if (!sub.isNullOrEmpty()) {
+                val t2 = TextView(act)
+                t2.text = sub
+                t2.textSize = 14f
+                t2.setTextColor(pal.onVariant)
+                labels.addView(t2, LinearLayout.LayoutParams(-2, -2))
+            }
+            row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+            if (trailing != null) row.addView(trailing)
+            if (onClick != null) row.setOnClickListener { onClick.run() }
+            return row
+        }
+
+        /**
          * 行组进出的标准动效：淡入 + 上滑 8dp。
          *
          * 与设置页「种子颜色」行用的是同一组 token（进场 MEDIUM1 + decelerate，

@@ -283,12 +283,33 @@ class SettingsFragment : Fragment() {
         val iconSlot = FrameLayout(requireContext())
         val iconSpin = M3Ui.circularLoader(requireContext(), 18, pal.primary)
         iconState.visibility = View.GONE
-        iconSlot.addView(iconState, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        // 「恢复默认」直接放在这一行右侧（有自定义图标时才出现），不再藏进二级弹窗。
+        val restoreBtn = TextView(requireContext())
+        restoreBtn.text = Lang.t("恢复默认", "Restore")
+        restoreBtn.textSize = 14f
+        restoreBtn.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        restoreBtn.setTextColor(pal.primary)
+        restoreBtn.gravity = Gravity.CENTER
+        restoreBtn.setPadding(dp(12), dp(8), dp(12), dp(8))
+        restoreBtn.background = M3Ui.pressRipple(requireContext(), null)
+        restoreBtn.visibility = View.GONE
+        restoreBtn.setOnClickListener {
+            resetCustomIcon()
+            restoreBtn.visibility = View.GONE
+            iconState.text = Lang.t("默认", "Default")
+        }
+        val iconTrail = LinearLayout(requireContext())
+        iconTrail.orientation = LinearLayout.HORIZONTAL
+        iconTrail.gravity = Gravity.CENTER_VERTICAL
+        iconTrail.addView(iconState, LinearLayout.LayoutParams(-2, -2))
+        iconTrail.addView(restoreBtn, LinearLayout.LayoutParams(-2, -2))
+        iconSlot.addView(iconTrail, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         iconSlot.addView(iconSpin, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         val showIconState: (Boolean) -> Unit = { exists ->
             iconSpin.visibility = View.GONE
             iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
             iconState.visibility = View.VISIBLE
+            restoreBtn.visibility = if (exists) View.VISIBLE else View.GONE
         }
         iconCustomExistsAsync(showIconState)
         // 自定义图标由 GMS 进程内的 Hook 读取（readIconBytes，经 PrefsProvider）：
@@ -301,10 +322,7 @@ class SettingsFragment : Fragment() {
                     Lang.t("Google 弹窗显示的耳机图标",
                             "Earbud icon shown in the Google popup"),
                 iconSlot) {
-            iconCustomExistsAsync { exists ->
-                showIconState(exists)
-                showIconDialog(exists)
-            }
+            pickIcon()
         }
         if (hookOff) {
             iconRow.isEnabled = false
@@ -949,9 +967,9 @@ class SettingsFragment : Fragment() {
 
     private fun makeM3Button(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                              l: View.OnClickListener): MaterialButton {
-        // 同 OverviewFragment.makeButton：尺寸档/触摸区/形变交给官方 expressive 按钮，
-        // 不再手写 inset + cornerRadius（那样触摸区只有 40dp）。
-        return M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l)
+        // 与概览页「刷新状态」同一尺寸档（Medium：视觉 56dp / 图标 24dp / 16sp），
+        // 页面上同等重要的主操作按钮尺寸必须一致，Small 40dp 在这页会显得又扁又小。
+        return M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l, medium = true)
     }
 
     private fun makeTintedSwitch(): MaterialSwitch {
@@ -1081,54 +1099,17 @@ class SettingsFragment : Fragment() {
     ) { uri -> if (uri != null) saveIconFromUri(uri) }
 
     /**
-     * 3.3.1: 改用 M3 官方 MaterialAlertDialogBuilder + M3Ui.listRow。
+     * 点「弹窗图标」整行 = 直接选图（不再弹二级弹窗）。
      *
-     * 此前是自绘外壳（M3Ui.materialDialog + GradientDrawable 圆角行 + 手搓按钮行），
-     * 与已改官方组件的其它弹窗风格不统一：标题排版、按钮顺序、圆角、无障碍语义都要自己维护。
-     * 现在标题/按钮交给官方 AlertDialog，行内容用 M3 列表项规范（56dp / 16dp 内边距 /
-     * 24dp 图标 / 16sp-14sp 双行文字 / 尾随 chevron）。
+     * 原来的二级弹窗只是为了塞「从相册选择 / 恢复默认图标」两个动作，等于让用户多走一步；
+     * 现在「从相册选择」= 点行本身，「恢复默认」= 行右侧的次要按钮，两者都在一级页面上。
      */
-    private fun showIconDialog(custom: Boolean) {
-        val act = requireActivity()
-        val ctx = requireContext()
-        var dlg: androidx.appcompat.app.AlertDialog? = null
-
-        val box = LinearLayout(ctx)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(0, dp(8), 0, dp(8))
-
-        box.addView(M3Ui.listRow(act, pal, R.drawable.ic_image,
-                Lang.t("从相册选择", "Choose from gallery"),
-                Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon shown in the Google popup"),
-                M3Ui.chevron(ctx, pal.onVariant),
-                Runnable {
-                    dlg?.dismiss()
-                    try {
-                        iconPicker.launch("image/*")
-                    } catch (t: Throwable) {
-                        toast("无法打开选择器：${t.message}")
-                    }
-                }), LinearLayout.LayoutParams(-1, -2))
-
-        if (custom) {
-            box.addView(M3Ui.listRow(act, pal, R.drawable.ic_restart_alt,
-                    Lang.t("恢复默认图标", "Restore default icon"),
-                    Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"),
-                    M3Ui.chevron(ctx, pal.onVariant),
-                    Runnable {
-                        dlg?.dismiss()
-                        resetCustomIcon()
-                    }), LinearLayout.LayoutParams(-1, -2))
+    private fun pickIcon() {
+        try {
+            iconPicker.launch("image/*")
+        } catch (t: Throwable) {
+            toast("无法打开选择器：${t.message}")
         }
-
-        val title = Lang.t("弹窗图标（当前：", "Popup icon (current: ") +
-                (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + "）"
-
-        dlg = MaterialAlertDialogBuilder(ctx)
-                .setTitle(title)
-                .setView(box)
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
-                .show()
     }
 
     private fun showLogDialog() {
@@ -1199,6 +1180,8 @@ class SettingsFragment : Fragment() {
                 val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
                 requireActivity().runOnUiThread {
                     toast(if (ok) "弹窗图标已更新（下次连接生效）" else "写入图标失败")
+                    // 选完立刻刷新本页：行右侧要从「默认」切到「已自定义 + 恢复默认」
+                    if (ok) scheduleRebuild(250L)
                 }
                 if (scaled !== bmp && !scaled.isRecycled) scaled.recycle()
                 // bmp 已在上方判空（null 时 return@Thread），此处编译器已智能转换为非空，
