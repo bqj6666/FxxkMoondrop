@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ 莫奈动态色；资源名与 ThemeUtil.dyn() 完全一致（实测 tone 0=最亮 / 1000=最暗）。 -->
+<!-- Android 12+ 莫奈动态色；资源名与 ThemeUtil.dyn() 完全一致。
+     框架 tone 命名是**反的**（实测，aapt2 解 framework-res 确认）：
+       system_neutral1_0 = #FFFFFF（tone100）、_10 = tone98、_50 = tone94、_100 = tone90、
+       … 、_900 = tone10、_1000 = #000000（tone0）。
+     角色映射按 M3 规范：页面底 = surfaceContainer(t94)、卡片 = surface(t98)、
+     次级文字 t30、outline t50、outlineVariant t80。 -->
 <resources>
     <color name="m3_primary">@android:color/system_accent1_400</color>
     <color name="m3_on_primary">#FFFFFFFF</color>
@@ -7,14 +12,13 @@
     <color name="m3_on_primary_container">@android:color/system_accent1_900</color>
     <color name="m3_secondary_container">@android:color/system_accent1_50</color>
     <color name="m3_on_secondary_container">@android:color/system_accent1_900</color>
-    <color name="m3_surface">@android:color/system_neutral1_10</color>
-    <color name="m3_surface_container">#FFFFFFFF</color>
-    <color name="m3_surface_container_high">@android:color/system_neutral1_50</color>
-    <!-- ThemeUtil 用 system_neutral1_90（框架无此 tone，恒回落）→ 写实测回落值，与 App 内色板一致 -->
-    <color name="m3_surface_container_highest">#FFE6E0E9</color>
+    <color name="m3_surface">@android:color/system_neutral1_50</color>
+    <color name="m3_surface_container">@android:color/system_neutral1_10</color>
+    <color name="m3_surface_container_high">@android:color/system_neutral1_100</color>
+    <color name="m3_surface_container_highest">@android:color/system_neutral1_100</color>
     <color name="m3_surface_variant">@android:color/system_neutral1_100</color>
     <color name="m3_on_surface">@android:color/system_neutral1_900</color>
-    <color name="m3_on_surface_variant">#FF49454F</color>
-    <color name="m3_outline">#FF79747E</color>
-    <color name="m3_outline_variant">#FFCAC4D0</color>
+    <color name="m3_on_surface_variant">@android:color/system_neutral1_700</color>
+    <color name="m3_outline">@android:color/system_neutral1_500</color>
+    <color name="m3_outline_variant">@android:color/system_neutral1_200</color>
 </resources>

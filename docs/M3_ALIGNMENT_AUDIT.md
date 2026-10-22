@@ -97,3 +97,53 @@
 ### 无需改动
 
 P2 的两个自绘视图颜色已全部取自主题 token（`pal.primary` / `pal.onVariant` / `pal.outline`），尺寸取 M3 carousel 指示器与数据可视化惯例；M3 没有对应组件，保留自绘。
+
+---
+
+## 附：动态取色的正确接法（2026-10-22 实测定稿）
+
+### 一句话
+
+页面底色不是「手调出来的灰」，而是**官方 M3 角色 + 系统动态 neutral 调色板**：页面底 = surfaceContainer、
+卡片 = surface。两者都随壁纸变化；不要再往底色里掺黑，也不要给卡片写死纯白。
+
+### 框架 tone 命名是反的（关键坑）
+
+`aapt2 dump resources /system/framework/framework-res.apk` 实测：
+
+| 资源名 | tone | 浅色下的用途 |
+|---|---|---|
+| `system_neutral1_0` | 100 | 最亮（卡片最上层） |
+| `system_neutral1_10` | 98 | **surface（卡片）** |
+| `system_neutral1_50` | 94~95 | **surfaceContainer（页面底）** |
+| `system_neutral1_100` | 90 | surfaceContainerHighest / surfaceVariant |
+| `system_neutral1_200` | 80 | outlineVariant |
+| `system_neutral1_400` | 60 | outline（深色） |
+| `system_neutral1_500` | 50 | outline（浅色） |
+| `system_neutral1_700` | 30 | onSurfaceVariant（浅色）/ outlineVariant（深色） |
+| `system_neutral1_800` | 20 | 深色卡片 |
+| `system_neutral1_900` | 10 | onSurface（浅色）/ 深色页面底 |
+| `system_neutral1_1000` | 0 | 纯黑 |
+
+> 即 index 越大越暗。写 `system_neutral1_90` 之类不存在的索引会 `getIdentifier` 失败并静默回落——这是历史上多次「改了没反应」的真凶。
+
+### 动态色是否真的在线，一条命令验
+
+```sh
+cmd overlay lookup android android:color/system_neutral1_50
+cmd overlay lookup android android:color/system_accent1_400
+```
+
+设备当前（壁纸取色开、TONAL_SPOT）实测：
+
+- `neutral1_50` → `#fff5eff5`（框架静态默认是 `#fff1f0f6`，纯灰）
+- `accent1_400` → `#ff968ab4`（默认是 `#ff7e90c4` 蓝）
+
+两者都偏离 AOSP 默认值 ⇒ 系统全局动态 overlay **确实生效**，`ThemeUtil.dyn()` 读到的就是壁纸色。
+（`/product/overlay/FrameworkOverlayThemePicker.apk` 里只有一个字符串资源，不带颜色，别去那找值。）
+
+### 落地规则
+
+1. `ThemeUtil.Palette`：页面底 `neutral1_900/50`（深/浅），卡片 `neutral1_800/10`，卡片永远比页面底亮一档。
+2. `values-v31`、`values-night-v31` 里同名 token 指向同样的 index；`values`、`values-night` 的静态兜底必须保持**同一套 tone 关系**（底 t94 / 卡 t98），否则开关动态色会跳变。
+3. 描边、分隔线、次级文字也走同一条链（t80 / t50 / t30），否则动态色下只有文字变、线还是基线紫。
