@@ -1161,7 +1161,9 @@ class XposedEntry : XposedModule() {
                         try { smCls.getDeclaredMethod(name, *types).apply { isAccessible = true } }
                         catch (_: Throwable) { null }
                     val getInstance = declared("getInstance", Context::class.java)
-                    val sm = if (getInstance != null) getInstance.invoke(null, ctx) else null
+                    // getInstance 在 UWU 上不存在 -> 试 getSystemService("slice") 拿实例
+                    val sm = if (getInstance != null) getInstance.invoke(null, ctx)
+                             else runCatching { ctx.getSystemService("slice") }.getOrNull()
                     val bind = declared("bindSlice", android.net.Uri::class.java, java.util.Set::class.java)
                     var items = -3
                     if (sm != null && bind != null) {
