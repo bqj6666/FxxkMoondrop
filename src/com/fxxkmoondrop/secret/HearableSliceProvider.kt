@@ -32,10 +32,9 @@ class HearableSliceProvider : SliceProvider() {
         if (!AncProfileLib.isMoondrop(name) && !AncProfileLib.isMoondrop(nameOf(address))) return null
 
         val labels = AncProfileLib.modeNamesFull(ctx)
-        val lb = ListBuilder(ctx).apply {
-            setSliceUri(sliceUri)
-            setTtl(60_000L)
-        }
+        // androidx.slice 1.0.0 的真实 API：ListBuilder(Context, Uri[, ttl])；
+        // 没有 setSliceUri/setTtl 的 Builder 链式写法（CI 编译报错实测）。
+        val lb = ListBuilder(ctx, sliceUri)
         for (m in intArrayOf(1, 0, 2)) {
             val pi = PendingIntent.getBroadcast(
                 ctx, 2000 + m,
@@ -44,9 +43,9 @@ class HearableSliceProvider : SliceProvider() {
                     .putExtra(DeviceNotif.EXTRA_MODE, m)
                     .setPackage(ctx.packageName),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val action = SliceAction.Builder(pi, IconCompat.createWithResource(ctx, iconOf(m)), 0)
-                .setTitle(labels.getOrNull(m) ?: "")
-                .build()
+            val action = SliceAction.create(
+                pi, IconCompat.createWithResource(ctx, iconOf(m)), m + 1,
+                labels.getOrNull(m) ?: "")
             lb.addAction(action)
         }
         return lb.build()
