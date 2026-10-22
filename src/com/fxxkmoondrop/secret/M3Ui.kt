@@ -392,15 +392,25 @@ class M3Ui {
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             if (iconRes != 0) {
-                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
+                // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
+                // 色相族取自主题的 primary container，保证与动态取色同源。
                 val chip = android.widget.FrameLayout(act)
+                val tintHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.container, tintHsv)
+                tintHsv[0] = (tintHsv[0] + (iconRes % 5) * 52f) % 360f
+                val chipBg = android.graphics.Color.HSVToColor(tintHsv)
+                val glyphHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.onContainer, glyphHsv)
+                glyphHsv[0] = tintHsv[0]
+                val chipFg = android.graphics.Color.HSVToColor(glyphHsv)
                 chip.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(pal.container)
+                    setColor(chipBg)
                 }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onContainer)
+                ic.imageTintList = ColorStateList.valueOf(chipFg)
                 chip.addView(ic, android.widget.FrameLayout.LayoutParams(
                         dp(act, 24), dp(act, 24), Gravity.CENTER))
                 val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
@@ -860,7 +870,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //
             // top 用 24dp = 16dp(原 marginTop) + 8dp(原 paddingTop)：本标签背景透明，
             // 用 padding 表达 margin 效果一致，且不用改各处 addView 调用。
-            t.setTextColor(pal.primary)
+            t.setTextColor(pal.onVariant)
             t.setPadding(dp(act, 16), dp(act, 24), dp(act, 16), dp(act, 8))
             return t
         }
@@ -905,15 +915,25 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             if (iconRes != 0) {
-                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
+                // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
+                // 色相族取自主题的 primary container，保证与动态取色同源。
                 val chip = android.widget.FrameLayout(act)
+                val tintHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.container, tintHsv)
+                tintHsv[0] = (tintHsv[0] + (iconRes % 5) * 52f) % 360f
+                val chipBg = android.graphics.Color.HSVToColor(tintHsv)
+                val glyphHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.onContainer, glyphHsv)
+                glyphHsv[0] = tintHsv[0]
+                val chipFg = android.graphics.Color.HSVToColor(glyphHsv)
                 chip.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(pal.container)
+                    setColor(chipBg)
                 }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onContainer)
+                ic.imageTintList = ColorStateList.valueOf(chipFg)
                 chip.addView(ic, android.widget.FrameLayout.LayoutParams(
                         dp(act, 24), dp(act, 24), Gravity.CENTER))
                 val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
