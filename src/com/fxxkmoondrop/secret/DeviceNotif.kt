@@ -140,7 +140,6 @@ object DeviceNotif {
                 .setSmallIcon(R.drawable.ic_headphones)
                 .setContentTitle(title)
                 .setContentText(if (line.isEmpty()) null else line)
-                .setSubText(if (line.isEmpty()) null else line)
                 .setContentIntent(openApp(c))
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -153,14 +152,20 @@ object DeviceNotif {
             // 之前是 DecoratedCustomViewStyle + 自绘 RemoteViews：颜色、圆角、字号全是手写的，
             // 系统的深色/动态取色/无障碍字号放大一律不生效，展开态的按钮排布也不跟系统走。
             // 现在交给系统模板：Android 12+ 会把 action 渲染成 M3 按钮，颜色自动跟随主题。
-            if (line.isNotEmpty()) {
-                b.setStyle(NotificationCompat.BigTextStyle().bigText(line))
-            }
             if (actions.isNotEmpty()) {
-                // 当前档位写进 subText，避免再靠自绘高亮表达「现在是哪个」
+                // 当前档位写进 subText（只在有档位时才有意义，否则会和正文电量重复两次）
                 val cur = if (mode in names.indices) names[mode] else null
                 if (cur != null) b.setSubText(cur)
                 for (m in actions) b.addAction(modeIcon(m), names[m], actionPi(c, m))
+                // 注：NotificationCompat.Builder 没有 setShowActionsInCompactView（那是 platform
+                // Notification.Builder 的 API），所以折叠态不显示按钮，展开后才有 3 个官方按钮。
+            }
+            if (line.isNotEmpty()) {
+                // 折叠看摘要（电量），展开补细节（当前档位），不再「展开还是同一句话」
+                val detail = if (actions.isNotEmpty() && mode in names.indices)
+                    line + "\n" + Lang.t(c, "当前：%s", "Current: %s").format(names[mode])
+                else line
+                b.setStyle(NotificationCompat.BigTextStyle().bigText(detail))
             }
 
             notify(c, ID, b.build())
