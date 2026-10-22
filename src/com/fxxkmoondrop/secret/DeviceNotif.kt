@@ -181,6 +181,11 @@ object DeviceNotif {
         if (!showHeader) {
             rv.setViewVisibility(R.id.notif_title, android.view.View.GONE)
             rv.setViewVisibility(R.id.notif_text, android.view.View.GONE)
+            // 折叠视图高度只有 ~64dp：标签也收起来 + 压掉按钮行上下留白，
+            // 否则 40dp 圆钮 + 标签 + 14dp 底边距会超出，图标下半截被裁掉（实测 2026-10-22）。
+            for (tid in SLOT_TEXT) rv.setViewVisibility(tid, android.view.View.GONE)
+            val p4 = (4 * c.resources.displayMetrics.density).toInt()
+            rv.setViewPadding(R.id.notif_btns, 0, p4, 0, p4)
         } else {
             rv.setViewVisibility(R.id.notif_title, android.view.View.VISIBLE)
             rv.setTextViewText(R.id.notif_title, title)
@@ -255,7 +260,7 @@ object DeviceNotif {
     }
 
     /** RemoteViews 布局版本：改布局时 +1，强制重发一次通知 */
-    private const val NOTIF_LAYOUT_V = 2
+    private const val NOTIF_LAYOUT_V = 3
 
     private fun isReady(): Boolean {
         val g = GaiaBleClient.getInstance()
