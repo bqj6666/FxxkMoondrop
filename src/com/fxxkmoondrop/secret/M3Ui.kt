@@ -877,20 +877,23 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /** 官方分组卡片：GradientDrawable 圆角 LinearLayout（与外观卡同款已验证方案），行间淡分隔线 */
         @JvmStatic
-        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): LinearLayout {
-            // 对齐 Android 16 Settings：**每一行是独立的一张卡**，行与行之间留 8dp。
-            // 「整组一张卡 + 组内分隔线」是旧做法，参考图不是这样。
-            val col = LinearLayout(act)
-            col.orientation = LinearLayout.VERTICAL
+        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): MaterialCardView {
+            // 对齐 Android 16 Settings：**整组一张卡**，行与行之间只留 ~1dp 的**页面底色细缝**，
+            // 既不是可见灰线，也不是 8dp 间距 —— 视觉上「挨得很紧」。
+            val card = MaterialCardView(act)
+            applyCardLook(card, act, pal, RADIUS_CARD)
+            val box = LinearLayout(act)
+            box.orientation = LinearLayout.VERTICAL
             rows.forEachIndexed { idx, r ->
-                val card = MaterialCardView(act)
-                applyCardLook(card, act, pal, RADIUS_CARD)
-                card.addView(r, android.view.ViewGroup.LayoutParams(-1, -2))
-                val lp = LinearLayout.LayoutParams(-1, -2)
-                if (idx > 0) lp.topMargin = dp(act, 8)
-                col.addView(card, lp)
+                if (idx > 0) {
+                    val gap = View(act)
+                    gap.setBackgroundColor(pal.surface)
+                    box.addView(gap, LinearLayout.LayoutParams(-1, dp(act, 1)))
+                }
+                box.addView(r, LinearLayout.LayoutParams(-1, -2))
             }
-            return col
+            card.addView(box, android.view.ViewGroup.LayoutParams(-1, -2))
+            return card
         }
 
         /** 官方列表行：图标 + 标题/副标题 + 尾随控件（switchRow 同款已验证结构） */
