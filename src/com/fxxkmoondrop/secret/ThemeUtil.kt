@@ -168,9 +168,13 @@ class ThemeUtil {
                 // ⚠️ 两个 key 必须按 dark 分支 —— system_neutral1_900 **恒为深色**，
                 //    浅色模式下也用它，整页会变黑而文字仍是深色，糊成一团。
                 //    （3.3.1 引入过这个回归，别再把 if (dark) 去掉。）
-                surf = if (on) android.graphics.Color.BLACK
-                else dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_10",
-                        themedColor(c, dark, R.color.m3_surface))
+                surf = if (on) android.graphics.Color.BLACK else {
+                    val base = dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_10",
+                            themedColor(c, dark, R.color.m3_surface))
+                    // 浅色下再向黑混 7%：系统设置的页面底色明显比卡片灰一档，
+                    // 直接用 neutral1_10（近白）会让「行间 1dp 缝隙」在屏幕上不可见。
+                    if (dark) base else mix(base, 0.07f, false)
+                }
                 // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相。
                 // 同上：neutral1_800 恒为深色，浅色分支必须单独走。
                 cardC = if (on) c.getColor(R.color.m3_amoled_card)
