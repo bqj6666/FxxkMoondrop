@@ -1016,7 +1016,7 @@ class SettingsFragment : Fragment() {
     /** 3.3.1: 统一委托 groupCard —— 单行也走同一套卡片样式与内边距。
      *  原来这里自己 padding(16,12,16,12)，与 groupCard 的行内 16dp 不一致，
      *  会让"种子颜色"那张卡的文字比相邻卡片偏左/偏上。 */
-    private fun wrapCard(v: View): LinearLayout =
+    private fun wrapCard(v: View): View =
             M3Ui.groupCard(requireActivity(), pal, v)
 
     /** 官方主题设置开关（MaterialSwitch），改动即存 SP + 重建 */

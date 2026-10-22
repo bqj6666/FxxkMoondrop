@@ -300,7 +300,8 @@ class M3Ui {
             card.setCardBackgroundColor(pal.card)
             card.cardElevation = 0f
             if (pal.cardStroke != 0) {
-                card.strokeWidth = hairline(c)
+                // M3 Outlined Card 的描边为 1dp（原为 0.75dp 发丝线）
+                card.strokeWidth = dp(c, 1)
                 card.strokeColor = pal.cardStroke
             } else {
                 card.strokeWidth = 0
@@ -831,7 +832,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /** 官方分组卡片：GradientDrawable 圆角 LinearLayout（与外观卡同款已验证方案），行间淡分隔线 */
         @JvmStatic
-        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): LinearLayout {
+        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): MaterialCardView {
             // 3.3.1: 改回「每组一整张卡片 + 组内行间细分隔线」。
             //
             // 上一版（alpha2.52）注释写「对齐 org.lsposed.manager：每行独立卡片 +
@@ -844,9 +845,12 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //
             // 组内是连续一张卡（行间只有细线），组与组之间才留白。
             // 每行独立卡片会让整页碎成十几块、边距参差，正是「看着很奇怪」的根因。
-            val card = LinearLayout(act)
-            card.orientation = LinearLayout.VERTICAL
-            card.background = cardBg(act, pal, RADIUS_CARD)
+            // M3 Card 必须由 MaterialCardView 承载：形状、状态层、内容裁剪都由它提供，
+            // 不再用 GradientDrawable 手绘背景（原实现的 cardBg()）。
+            val card = MaterialCardView(act)
+            applyCardLook(card, act, pal, RADIUS_CARD)
+            val box = LinearLayout(act)
+            box.orientation = LinearLayout.VERTICAL
             for (i in rows.indices) {
                 if (i > 0) {
                     // M3 Divider 规范：1dp 厚 + 低对比 outlineVariant 系颜色。
@@ -854,10 +858,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     val line = com.google.android.material.divider.MaterialDivider(act)
                     line.dividerThickness = dp(act, 1)
                     line.setDividerColor(pal.divider)
-                    card.addView(line, LinearLayout.LayoutParams(-1, -2))
+                    box.addView(line, LinearLayout.LayoutParams(-1, -2))
                 }
-                card.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
+                box.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
             }
+            card.addView(box, android.view.ViewGroup.LayoutParams(-1, -2))
             return card
         }
 
