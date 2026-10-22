@@ -10,7 +10,7 @@
     <!-- 页面底色。M3 官方 neutral94（3.3.1 从 neutral98 调整）：
          原值 #FBF8FF 与卡片 #FFFFFF 亮度仅差 2%，卡片边界消失。
          neutral94 带紫调，与纯白卡片形成清晰层级。 -->
-    <color name="m3_surface">#FFF7F7F8</color>
+    <color name="m3_surface">#FFECECF0</color>
     <color name="m3_surface_container">#FFFFFFFF</color>
     <color name="m3_surface_container_high">#FFF7F2FA</color>
     <color name="m3_surface_container_highest">#FFE6E0E9</color>
