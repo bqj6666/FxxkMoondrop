@@ -297,7 +297,7 @@ class M3Ui {
          * 3.3.1 之前各处散落 20 / 24 / 28 三种值（属 largeIncreased 等非 Card 档），
          * 同一屏里圆角不一致正是「看着很奇怪」的来源。现统一到规范档。
          */
-        const val RADIUS_CARD = 12
+        const val RADIUS_CARD = 28
 
         /**
          * 对话框圆角 —— Material3 官方规范值。
@@ -311,14 +311,12 @@ class M3Ui {
         /** 统一的卡片外观（MaterialCardView 版）：AMOLED 下同样带描边，避免卡片"消失" */
         @JvmStatic
         fun applyCardLook(card: MaterialCardView, c: Context, pal: ThemeUtil.Palette, radiusDp: Int) {
-            // M3 **Outlined Card** 规范：容器色 = surface（与页面同色），描边 1dp + outlineVariant，
-            // 无高度（elevation 0），分层完全由描边承担。
-            // 原实现是「填充 + 描边」的混合体（容器取 surfaceContainer），既不是 Filled 也不是 Outlined。
+            // 对齐 Android 16 Settings（M3 Expressive）的 Filled Card：
+            // 白底（card 容器色）+ **无描边** + 无高度，圆角 28dp，分层靠底色差而非描边。
             card.radius = dp(c, radiusDp).toFloat()
-            card.setCardBackgroundColor(pal.surface)
+            card.setCardBackgroundColor(pal.card)
             card.cardElevation = 0f
-            card.strokeWidth = dp(c, 1)
-            card.strokeColor = pal.cardStroke
+            card.strokeWidth = 0
         }
 
         /**
@@ -394,12 +392,20 @@ class M3Ui {
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             if (iconRes != 0) {
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里
+                val chip = android.widget.FrameLayout(act)
+                chip.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(pal.container)
+                }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
-                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 8)
-                row.addView(ic, ilp)
+                ic.imageTintList = ColorStateList.valueOf(pal.onContainer)
+                chip.addView(ic, android.widget.FrameLayout.LayoutParams(
+                        dp(act, 24), dp(act, 24), Gravity.CENTER))
+                val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(chip, ilp)
             }
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
@@ -881,14 +887,6 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val box = LinearLayout(act)
             box.orientation = LinearLayout.VERTICAL
             for (i in rows.indices) {
-                if (i > 0) {
-                    // M3 Divider 规范：1dp 厚 + 低对比 outlineVariant 系颜色。
-                    // 用官方 MaterialDivider，不再手绘 View（原实现为 0.75dp 发丝线，不合 1dp 规范）。
-                    val line = com.google.android.material.divider.MaterialDivider(act)
-                    line.dividerThickness = dp(act, 1)
-                    line.setDividerColor(pal.divider)
-                    box.addView(line, LinearLayout.LayoutParams(-1, -2))
-                }
                 box.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
             }
             card.addView(box, android.view.ViewGroup.LayoutParams(-1, -2))
@@ -907,12 +905,20 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             if (iconRes != 0) {
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里
+                val chip = android.widget.FrameLayout(act)
+                chip.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(pal.container)
+                }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
-                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 8)
-                row.addView(ic, ilp)
+                ic.imageTintList = ColorStateList.valueOf(pal.onContainer)
+                chip.addView(ic, android.widget.FrameLayout.LayoutParams(
+                        dp(act, 24), dp(act, 24), Gravity.CENTER))
+                val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(chip, ilp)
             }
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
