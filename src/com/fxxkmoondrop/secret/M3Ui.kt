@@ -755,25 +755,16 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val mw = Math.max(menu.measuredWidth, dp(c, 112))
                     .coerceAtMost(dm.widthPixels - dp(c, 32))
             val mh = menu.measuredHeight
-            val gap = dp(c, 4)
-            val margin = dp(c, 8)
-            // 官方 DropdownMenu 行为：贴住**锚点行**展开，而不是从手指位置弹出 ——
-            // 跟手指走的菜单会盖住刚按下的那一行，用户看不到自己点了什么。
-            // 下方放不下就翻到锚点上方（官方翻转逻辑）。
-            val loc = IntArray(2)
-            anchor.getLocationOnScreen(loc)
-            val below = loc[1] + anchor.height + gap
-            val above = loc[1] - mh - gap
-            val flipUp = below + mh + margin > dm.heightPixels && above >= margin
-            val py = (if (flipUp) above else below)
-                    .coerceIn(margin, (dm.heightPixels - mh - margin).coerceAtLeast(margin))
-            val px = loc[0].coerceIn(margin, (dm.widthPixels - mw - margin).coerceAtLeast(margin))
+            val m = dp(c, 8)
+            // 弹出方式保持原样：**从触摸点弹出**，只夹到屏幕内（贴边不裁切）。
+            val px = x.coerceIn(m, (dm.widthPixels - mw - m).coerceAtLeast(m))
+            val py = y.coerceIn(m, (dm.heightPixels - mh - m).coerceAtLeast(m))
             pop.width = mw
             pop.height = mh
 
-            // M3 入场：从贴近锚点的那个角长出来（fadeIn + scaleIn 0.8，emphasized decelerate）
-            menu.pivotX = 0f
-            menu.pivotY = if (flipUp) mh.toFloat() else 0f
+            // M3 入场：从触摸点所在的那个角长出来（fadeIn + scaleIn 0.8，emphasized decelerate）
+            menu.pivotX = (x - px).coerceIn(0, mw).toFloat()
+            menu.pivotY = (y - py).coerceIn(0, mh).toFloat()
             menu.alpha = 0f
             menu.scaleX = 0.8f
             menu.scaleY = 0.8f
