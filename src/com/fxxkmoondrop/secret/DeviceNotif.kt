@@ -131,7 +131,10 @@ object DeviceNotif {
             val line = batt ?: ""
 
             // 内容没变就不重发：重发会让系统重建视图，把用户展开的通知打回折叠态。
-            val sig = title + "|" + line + "|" + mode + "|" + actions.joinToString(",")
+            // 布局版本必须进签名：改了 RemoteViews 布局后，只要状态没变就不会重发，
+            // 系统会一直用旧的视图 —— 之前「改了布局但通知毫无变化」就是踩了这个坑。
+            val sig = "v" + NOTIF_LAYOUT_V + "|" + title + "|" + line + "|" + mode + "|" +
+                    actions.joinToString(",")
             if (sig == lastSig) return
             lastSig = sig
 
@@ -250,6 +253,9 @@ object DeviceNotif {
         cancel(c, ID)
         cancel(c, ID_OLD_ANC)
     }
+
+    /** RemoteViews 布局版本：改布局时 +1，强制重发一次通知 */
+    private const val NOTIF_LAYOUT_V = 2
 
     private fun isReady(): Boolean {
         val g = GaiaBleClient.getInstance()
