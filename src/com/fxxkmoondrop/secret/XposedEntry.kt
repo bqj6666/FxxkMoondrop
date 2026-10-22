@@ -920,6 +920,19 @@ class XposedEntry : XposedModule() {
                 }
                 HookHelper.callMethod(pref, "setVisible", visible)
             }
+            // 实验：官方「耳机控制」行挂在 bt_device_slice_category 里，UWU 上该分类默认
+            // visible=false，官方重排还会把我们的行塞回去 -> 直接让分类按 hasSlice 显形，
+            // 让官方按自己的位置渲染。内容是否为空由 GMS 决定。
+            try {
+                val sliceCat = HookHelper.callMethod(screen, "findPreference", "bt_device_slice_category")
+                if (sliceCat != null) {
+                    HookHelper.callMethod(sliceCat, "setVisible", hasSlice)
+                    Log.i(TAG, "sliceCategory: hasSlice=" + hasSlice +
+                            " visible=" + HookHelper.callMethod(sliceCat, "isVisible"))
+                } else {
+                    Log.i(TAG, "sliceCategory: not found")
+                }
+            } catch (t: Throwable) { Log.e(TAG, "sliceCategory fail", t) }
             placeOurRows(screen)
             // 诊断用（Log.i，避免被日志级别过滤掉）：切片行到底存不存在、挂在哪、是否可见
             try {
