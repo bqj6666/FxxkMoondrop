@@ -46,37 +46,6 @@ object DeviceDetailsPanel {
             override fun setGain(level: Int) = safeCommand(Command.SetGain(level))
             override fun setLed(state: Int) = safeCommand(Command.SetLed(state))
         }
-        // ── 降噪档位行（自己画）────────────────────────────────────────────
-        // 3.0.6 曾把这四个按钮删掉、交给官方切片行；但 UWU AOSP 16 上 GMS 的
-        // hearable_control 切片对第三方耳机返回 null（实测 bindSlice=null），
-        // 官方那行永远空白，所以这里把降噪切换加回来，用官方 Icon Button 样式。
-        val ancRow = LinearLayout(ctx)
-        ancRow.orientation = LinearLayout.HORIZONTAL
-        ancRow.gravity = android.view.Gravity.CENTER
-        ancRow.tag = "fxxk_anc_row"
-        val names = AncProfileLib.modeNamesFull(ctx)
-        for (m in intArrayOf(1, 0, 2, 3)) {   // 降噪 / 关闭 / 透传 / 抗风
-            val col = LinearLayout(ctx)
-            col.orientation = LinearLayout.VERTICAL
-            col.gravity = android.view.Gravity.CENTER
-            val holder = M3Ui.iconToggle(ctx, pal,
-                    DcIcons.build(ctx, 0, 0, dpRoot(24), pal.onContainer), 56, 24)
-            holder.tag = "fxxk_anc_" + m
-            holder.findViewWithTag<View>("it_btn")?.setOnClickListener { safeCommand(Command.SetAncMode(m)) }
-            col.addView(holder, LinearLayout.LayoutParams(dpRoot(56), dpRoot(56)))
-            val lbl = android.widget.TextView(ctx)
-            lbl.text = names.getOrNull(m) ?: ""
-            lbl.textSize = 12f
-            lbl.gravity = android.view.Gravity.CENTER
-            lbl.isSingleLine = true
-            lbl.setTextColor(pal.onContainer)
-            lbl.tag = "fxxk_anc_label_" + m
-            col.addView(lbl, LinearLayout.LayoutParams(-2, -2))
-            ancRow.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-        root.addView(ancRow, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
         val dcCard = ControlPanel.buildDcCard(ctx, pal, callbacks, cardBg = bg, windRow = windRow)
         root.addView(dcCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
@@ -119,16 +88,6 @@ object DeviceDetailsPanel {
         val windRow = root.findViewWithTag<LinearLayout>(ControlPanel.ROW_WIND)
         if (windRow != null) {
             ControlPanel.refreshWindRow(windRow, state, ThemeUtil.Palette(root.context))
-        }
-        // 我们的降噪行：按当前档位高亮（isChecked 驱动官方容器色）
-        for (m in intArrayOf(0, 1, 2, 3)) {
-            val h = root.findViewWithTag<View>("fxxk_anc_" + m) ?: continue
-            val btn = h.findViewWithTag<View>("it_btn")
-                    as? com.google.android.material.button.MaterialButton
-            val on = state.ancMode == m
-            btn?.isChecked = on
-            btn?.isEnabled = state.gaiaReady
-            h.findViewWithTag<View>("fxxk_anc_label_" + m)?.alpha = if (state.gaiaReady) 1f else 0.38f
         }
         val dcCard = root.findViewWithTag<LinearLayout>("fxxk_dc_card")
         if (dcCard != null) {
