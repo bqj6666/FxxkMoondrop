@@ -296,7 +296,7 @@ class OverviewFragment : Fragment() {
         // alpha2.26.2: Material Experience —— M3 圆角卡片容器（card 色 + 28dp 圆角）
         ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
         // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
-        ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         // 出场顺序与通知栏按钮同源（[AncProfileLib.ANC_UI_ORDER]）：降噪 / 关闭 / 通透 打头，
         // 自适应、抗风随后。数组仍按档位 id 索引，这里只改列的先后。
         // 直播(5) 在主界面没有槽位，仍只在通知里出现。
@@ -380,7 +380,7 @@ class OverviewFragment : Fragment() {
         val dcCard = LinearLayout(requireContext())
         dcCard.orientation = LinearLayout.VERTICAL
         dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
-        dcCard.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
 
         // 空间音频行（总开关）
         val dcSpatialRow = LinearLayout(requireContext())
@@ -562,7 +562,7 @@ class OverviewFragment : Fragment() {
         }
         dcCard.addView(dcLedRow, LinearLayout.LayoutParams(-1, -2))
 
-        root.addView(dcCard, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), dcCard), lp(false))
         dcControlCard = dcCard
         root.addView(spacer(dp(8)))
 
@@ -813,7 +813,7 @@ class OverviewFragment : Fragment() {
         val box = LinearLayout(ctx)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), dp(14), dp(16), dp(14))
-        box.background = M3Ui.cardBg(ctx, scheme, M3Ui.RADIUS_CARD)
+
 
         // 标题行：标题（占满剩余宽度）+ 关闭按钮
         val header = LinearLayout(ctx)
@@ -849,7 +849,7 @@ class OverviewFragment : Fragment() {
         desc.setTextColor(onVariantColor)
         desc.setPadding(0, dp(4), 0, 0)
         box.addView(desc)
-        return box
+        return M3Ui.wrapInCard(ctx, scheme, box)
     }
 
     /** 记下用户已确认过的被跳过设备名，之后同一设备不再重复提示。 */
@@ -1743,7 +1743,7 @@ class OverviewFragment : Fragment() {
     private fun buildStatusPanel(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         card.addView(makeStatusRow(R.drawable.ic_bluetooth, Lang.t("GAIA 状态", "GAIA Status"), 0),
                 LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
@@ -1755,7 +1755,7 @@ class OverviewFragment : Fragment() {
         battRowShown = false
         battRow?.visibility = View.GONE
         card.addView(battRow, LinearLayout.LayoutParams(-1, -2))
-        root.addView(card, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), card), lp(false))
     }
 
     private fun makeStatusRow(iconRes: Int, title: String, which: Int): LinearLayout {
@@ -1802,7 +1802,7 @@ class OverviewFragment : Fragment() {
     private fun buildDeviceInfoCard(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         card.addView(makeStatusRow(R.drawable.ic_devices,
                 Lang.t("设备名称", "Device name"), 3), LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_settings_ethernet,
@@ -1812,7 +1812,7 @@ class OverviewFragment : Fragment() {
         // alpha2.52: 未连接 GAIA 时整卡隐藏（名称/地址/档案均无意义）
         card.visibility = View.GONE
         devInfoCard = card
-        root.addView(card, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), card), lp(false))
     }
 
     private val DASH = "—"

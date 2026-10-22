@@ -741,7 +741,6 @@ class SettingsFragment : Fragment() {
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))
-        simBox.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
         simConnBtn = makeM3Button(Lang.t("模拟连接耳机", "Simulate connecting the earbuds"), R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟连接：GAIA 模拟态 + 左右耳模拟电量 + 默认降噪模式 + 弹窗（可重复点击）
             GaiaBleClient.setSimConnected(true)
@@ -772,7 +771,7 @@ class SettingsFragment : Fragment() {
         }
         simBox.addView(spacer(dp(10)))
         // alpha2.38: 模拟断开按钮已移除（不再有断开弹窗，30s 自动恢复即可）
-        box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
+        box.addView(M3Ui.wrapInCard(requireContext(), pal, simBox), LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
         // ── 更新：联网检查更新（3.2.11）──
