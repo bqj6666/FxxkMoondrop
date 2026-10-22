@@ -602,8 +602,10 @@ class OverviewFragment : Fragment() {
         // 3.3.x: 加载反馈改为**按钮内部**替换成官方 LoadingIndicator（M3 Expressive 加载组件），
         // 不再在页面顶部单独挂一条 linear 进度条 —— 进度就该长在触发它的那个控件上。
         val refreshBox = android.widget.FrameLayout(requireContext())
+        // 禁用/启用完全由加载态驱动（见 showRefreshBar / stopRefreshSpinner）：
+        // 之前用 1500ms 防连点，时间一到按钮就自己解禁，而刷新还在跑 —— 加载中看着像可点。
         val refreshBtn = makeButton(Lang.t("刷新状态", "Refresh"),
-                R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() }
+                R.drawable.ic_refresh, container, onContainer, 0L) { showRefreshBar(); refreshAnc() }
         refreshBox.addView(refreshBtn, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -1463,6 +1465,7 @@ class OverviewFragment : Fragment() {
         val spin = refreshSpin ?: return
         b.text = ""
         b.icon = null
+        b.isEnabled = false          // 加载期间保持禁用：整块按钮不可点，也不会被误判为「可再点一次」
         spin.visibility = View.VISIBLE
         b.removeCallbacks(hideRefreshBar)
         b.postDelayed(hideRefreshBar, 6000L)
@@ -1475,6 +1478,7 @@ class OverviewFragment : Fragment() {
         if (b.icon == null) b.icon = androidx.core.content.ContextCompat.getDrawable(
                 requireContext(), R.drawable.ic_refresh)
         refreshSpin?.visibility = View.GONE
+        b.isEnabled = true
     }
 
     /**
