@@ -921,8 +921,18 @@ class XposedEntry : XposedModule() {
                 HookHelper.callMethod(pref, "setVisible", visible)
             }
             placeOurRows(screen)
-            Log.d(TAG, "detail rows: hasSlice=$hasSlice connected=$connected ready=$ready" +
-                    " slice=${vis.slice} loading=${vis.loading} panel=${vis.panel}")
+            // 诊断用（Log.i，避免被日志级别过滤掉）：切片行到底存不存在、挂在哪、是否可见
+            try {
+                val sp = slicePref
+                val parentIsScreen = sp != null &&
+                        (HookHelper.callMethod(sp, "getParent") === screen)
+                val spVisible = sp?.let { HookHelper.callMethod(it, "isVisible") as? Boolean }
+                val cnt = HookHelper.callMethod(screen, "getPreferenceCount") as? Int
+                android.util.Log.i("FxxkMoondrop", "detailRows: hasSlice=$hasSlice conn=$connected" +
+                        " ready=$ready -> sliceVis=${vis.slice} loadingVis=${vis.loading}" +
+                        " panelVis=${vis.panel} slicePref=${sp != null}" +
+                        " parentIsScreen=$parentIsScreen sliceVisible=$spVisible count=$cnt")
+            } catch (t: Throwable) { android.util.Log.e("FxxkMoondrop", "detailRows log fail", t) }
         } catch (th: Throwable) { Log.e(TAG, "applyControlSliceState failed", th) }
     }
 
