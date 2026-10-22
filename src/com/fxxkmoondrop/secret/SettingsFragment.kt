@@ -187,16 +187,16 @@ class SettingsFragment : Fragment() {
                 makeThemeSwitch("amoled", false, "AMOLED"))
         // 3.3.1: 主题 / 动态取色 / AMOLED 归入**同一张卡片**。
         // 对齐 LSPosed 实测结构：一组一张卡 + 组内行间细分隔线。
-        appear.addView(spacer(dp(12)))
-        appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled),
-            LinearLayout.LayoutParams(-1, -2),
-        )
 
         // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
         seedRow = LinearLayout(requireContext())
         seedRow!!.orientation = LinearLayout.HORIZONTAL
         seedRow!!.gravity = Gravity.CENTER_VERTICAL
+        // 与其它行一致的度量：水平 16dp 内边距 + 56dp 最小高度。
+        // 原实现没有任何内边距，标签顶到卡片左边缘、5 个色点溢出卡片右边缘，
+        // 表现为「卡片与内容错位」。
+        seedRow!!.setPadding(dp(16), dp(12), dp(16), dp(12))
+        seedRow!!.minimumHeight = dp(56)
         val seedLabel = TextView(requireContext())
         seedLabel.text = Lang.t("种子颜色", "Seed color")
         seedLabel.textSize = 14f
@@ -224,14 +224,17 @@ class SettingsFragment : Fragment() {
         }
         if (!ThemeUtil.dynColor(requireContext())) {
             appear.addView(spacer(dp(12)))
-            appear.addView(wrapCard(seedRow!!), LinearLayout.LayoutParams(-1, -2))
+            // 动画必须作用在**卡片容器**上：MaterialCardView 按形状裁剪子视图，
+            // 对卡片内部的行走 translationY 会被裁掉，表现为卡片与内容错位。
+            val seedCard = wrapCard(seedRow!!)
+            appear.addView(seedCard, LinearLayout.LayoutParams(-1, -2))
             // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
-            seedRow!!.alpha = 0f
-            seedRow!!.translationY = dp(8).toFloat()
+            seedCard.alpha = 0f
+            seedCard.translationY = dp(8).toFloat()
             // alpha2.54: 必须捕获局部引用 —— onDestroyView 会把 seedRow 置空，
             // 延迟回调里再解引用（seedRow!!）会抛 KotlinNullPointerException。
             // 视图已分离时跳过动画即可，不影响正确性。
-            val seedAnim = seedRow
+            val seedAnim = seedCard
             if (seedAnim != null) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (seedAnim.parent != null) {
@@ -243,17 +246,19 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        box.addView(appear, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
-
-        // 语言：归入外观（区域设置与主题同类），不再单列一个「通用」段
-        // alpha2.53: 对齐 org.lsposed.manager —— 语言改为「行 + 当前值 + 下拉菜单」（0=跟随系统 1=中文 2=English）
-        val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language", null,
+        // 语言：区域设置与主题同类 → 与 主题 / 动态取色 / AMOLED 放进**同一张卡**（同一分组）。
+        val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
+                Lang.t("应用界面语言", "App interface language"),
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
             getSP().edit().putInt("lang", mi).commit()
             scheduleRebuild(0L)
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, langRow), LinearLayout.LayoutParams(-1, -2))
+        appear.addView(spacer(dp(12)))
+        appear.addView(
+            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled, langRow),
+            LinearLayout.LayoutParams(-1, -2),
+        )
+        box.addView(appear, LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
@@ -274,12 +279,27 @@ class SettingsFragment : Fragment() {
         val iconSlot = FrameLayout(requireContext())
         val iconSpin = M3Ui.circularLoader(requireContext(), 18, pal.primary)
         iconState.visibility = View.GONE
-        iconSlot.addView(iconState, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        // 「恢复默认」直接放在这一行右侧（有自定义图标时才出现），不再藏进二级弹窗。
+        // 官方 M3 Text Button，不再是手绘 TextView + 自贴涟漪
+        val restoreBtn = M3Ui.textActionButton(requireContext(), pal,
+                Lang.t("恢复默认", "Restore")) {
+            resetCustomIcon()
+            it.visibility = View.GONE
+            iconState.text = Lang.t("默认", "Default")
+        }
+        restoreBtn.visibility = View.GONE
+        val iconTrail = LinearLayout(requireContext())
+        iconTrail.orientation = LinearLayout.HORIZONTAL
+        iconTrail.gravity = Gravity.CENTER_VERTICAL
+        iconTrail.addView(iconState, LinearLayout.LayoutParams(-2, -2))
+        iconTrail.addView(restoreBtn, LinearLayout.LayoutParams(-2, -2))
+        iconSlot.addView(iconTrail, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         iconSlot.addView(iconSpin, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         val showIconState: (Boolean) -> Unit = { exists ->
             iconSpin.visibility = View.GONE
             iconState.text = if (exists) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")
             iconState.visibility = View.VISIBLE
+            restoreBtn.visibility = if (exists) View.VISIBLE else View.GONE
         }
         iconCustomExistsAsync(showIconState)
         // 自定义图标由 GMS 进程内的 Hook 读取（readIconBytes，经 PrefsProvider）：
@@ -292,10 +312,7 @@ class SettingsFragment : Fragment() {
                     Lang.t("Google 弹窗显示的耳机图标",
                             "Earbud icon shown in the Google popup"),
                 iconSlot) {
-            iconCustomExistsAsync { exists ->
-                showIconState(exists)
-                showIconDialog(exists)
-            }
+            pickIcon()
         }
         if (hookOff) {
             iconRow.isEnabled = false
@@ -741,7 +758,6 @@ class SettingsFragment : Fragment() {
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))
-        simBox.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
         simConnBtn = makeM3Button(Lang.t("模拟连接耳机", "Simulate connecting the earbuds"), R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟连接：GAIA 模拟态 + 左右耳模拟电量 + 默认降噪模式 + 弹窗（可重复点击）
             GaiaBleClient.setSimConnected(true)
@@ -772,7 +788,7 @@ class SettingsFragment : Fragment() {
         }
         simBox.addView(spacer(dp(10)))
         // alpha2.38: 模拟断开按钮已移除（不再有断开弹窗，30s 自动恢复即可）
-        box.addView(simBox, LinearLayout.LayoutParams(-1, -2))
+        box.addView(M3Ui.wrapInCard(requireContext(), pal, simBox), LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
         // ── 更新：联网检查更新（3.2.11）──
@@ -785,7 +801,6 @@ class SettingsFragment : Fragment() {
                 Lang.t("查询 GitHub 公开接口以获知新版本",
                         "Query GitHub's public API for new versions"),
                 swNetUpdate, null)
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowNetUpdate))
 
         // 「更新通道」只在联网开启时存在。
         // 不复用 scheduleRebuild：为了显一行而整页重建，页面会闪一下、焦点也丢，
@@ -800,20 +815,21 @@ class SettingsFragment : Fragment() {
             UpdateChecker.setChannel(requireContext(),
                     if (mi == 1) UpdateChecker.Channel.PRERELEASE else UpdateChecker.Channel.STABLE)
         }
-        // 行本体没有背景，卡片一律由 groupCard 提供 —— 与上方开关行同一种视觉。
-        // 裸行直接塞进页面会缺底色与圆角，一眼就不像这个页面的东西。
-        val optsHolder = LinearLayout(requireContext())
-        optsHolder.orientation = LinearLayout.VERTICAL
-        optsHolder.addView(spacer(dp(12)))
-        optsHolder.addView(M3Ui.groupCard(requireActivity(), pal, rowChannel),
-                LinearLayout.LayoutParams(-1, -2))
-        optsHolder.visibility =
-                if (UpdateChecker.isEnabled(requireContext())) View.VISIBLE else View.GONE
-        box.addView(optsHolder, LinearLayout.LayoutParams(-1, -2))
+        // 「联网检查更新」与「更新通道」是同一组（一张卡两行，中间 1dp 细缝），
+        // 之前各建一张卡、中间还垫了 12dp spacer，看着像两个互不相干的设置。
+        val updCard = M3Ui.groupCard(requireActivity(), pal, rowNetUpdate, rowChannel)
+        val updInner = updCard.getChildAt(0) as? LinearLayout
+        // groupCard 内部结构：[行0, 细缝, 行1]；通道行隐藏时那条 1dp 细缝也得一起藏
+        val updGap = updInner?.getChildAt(1)
+        val showChannel = UpdateChecker.isEnabled(requireContext())
+        rowChannel.visibility = if (showChannel) View.VISIBLE else View.GONE
+        updGap?.visibility = rowChannel.visibility
+        box.addView(updCard, LinearLayout.LayoutParams(-1, -2))
 
         swNetUpdate.setOnCheckedChangeListener { _, checked ->
             UpdateChecker.setEnabled(requireContext(), checked)
-            M3Ui.reveal(optsHolder, checked)
+            M3Ui.reveal(rowChannel, checked)
+            updGap?.visibility = if (checked) View.VISIBLE else View.GONE
         }
         box.addView(spacer(dp(14)))
 
@@ -941,29 +957,9 @@ class SettingsFragment : Fragment() {
 
     private fun makeM3Button(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                              l: View.OnClickListener): MaterialButton {
-        val b = MaterialButton(requireContext())
-        b.text = text
-        b.textSize = 14f
-        b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        b.setTextColor(textColor)
-        b.isAllCaps = false
-        b.gravity = Gravity.CENTER
-        b.insetTop = 0
-        b.insetBottom = 0
-        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
-        b.minHeight = dp(40)
-        b.setMinimumHeight(dp(40))
-        b.setCornerRadius(dp(20))
-        b.backgroundTintList = ColorStateList.valueOf(bgColor)
-        if (iconRes != 0) {
-            b.setIconResource(iconRes)
-            b.setIconTint(ColorStateList.valueOf(textColor))
-            b.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START)
-            b.setIconPadding(dp(8))
-            b.setIconSize(dp(18))
-        }
-        b.setOnClickListener(l)
-        return b
+        // 与概览页「刷新状态」同一尺寸档（Medium：视觉 56dp / 图标 24dp / 16sp），
+        // 页面上同等重要的主操作按钮尺寸必须一致，Small 40dp 在这页会显得又扁又小。
+        return M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l, medium = true)
     }
 
     private fun makeTintedSwitch(): MaterialSwitch {
@@ -1016,7 +1012,7 @@ class SettingsFragment : Fragment() {
     /** 3.3.1: 统一委托 groupCard —— 单行也走同一套卡片样式与内边距。
      *  原来这里自己 padding(16,12,16,12)，与 groupCard 的行内 16dp 不一致，
      *  会让"种子颜色"那张卡的文字比相邻卡片偏左/偏上。 */
-    private fun wrapCard(v: View): LinearLayout =
+    private fun wrapCard(v: View): View =
             M3Ui.groupCard(requireActivity(), pal, v)
 
     /** 官方主题设置开关（MaterialSwitch），改动即存 SP + 重建 */
@@ -1093,54 +1089,17 @@ class SettingsFragment : Fragment() {
     ) { uri -> if (uri != null) saveIconFromUri(uri) }
 
     /**
-     * 3.3.1: 改用 M3 官方 MaterialAlertDialogBuilder + M3Ui.listRow。
+     * 点「弹窗图标」整行 = 直接选图（不再弹二级弹窗）。
      *
-     * 此前是自绘外壳（M3Ui.materialDialog + GradientDrawable 圆角行 + 手搓按钮行），
-     * 与已改官方组件的其它弹窗风格不统一：标题排版、按钮顺序、圆角、无障碍语义都要自己维护。
-     * 现在标题/按钮交给官方 AlertDialog，行内容用 M3 列表项规范（56dp / 16dp 内边距 /
-     * 24dp 图标 / 16sp-14sp 双行文字 / 尾随 chevron）。
+     * 原来的二级弹窗只是为了塞「从相册选择 / 恢复默认图标」两个动作，等于让用户多走一步；
+     * 现在「从相册选择」= 点行本身，「恢复默认」= 行右侧的次要按钮，两者都在一级页面上。
      */
-    private fun showIconDialog(custom: Boolean) {
-        val act = requireActivity()
-        val ctx = requireContext()
-        var dlg: androidx.appcompat.app.AlertDialog? = null
-
-        val box = LinearLayout(ctx)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(0, dp(8), 0, dp(8))
-
-        box.addView(M3Ui.listRow(act, pal, R.drawable.ic_image,
-                Lang.t("从相册选择", "Choose from gallery"),
-                Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon shown in the Google popup"),
-                M3Ui.chevron(ctx, pal.onVariant),
-                Runnable {
-                    dlg?.dismiss()
-                    try {
-                        iconPicker.launch("image/*")
-                    } catch (t: Throwable) {
-                        toast("无法打开选择器：${t.message}")
-                    }
-                }), LinearLayout.LayoutParams(-1, -2))
-
-        if (custom) {
-            box.addView(M3Ui.listRow(act, pal, R.drawable.ic_restart_alt,
-                    Lang.t("恢复默认图标", "Restore default icon"),
-                    Lang.t("删除自定义图标，恢复软件自带默认图", "Remove the custom icon and restore the default"),
-                    M3Ui.chevron(ctx, pal.onVariant),
-                    Runnable {
-                        dlg?.dismiss()
-                        resetCustomIcon()
-                    }), LinearLayout.LayoutParams(-1, -2))
+    private fun pickIcon() {
+        try {
+            iconPicker.launch("image/*")
+        } catch (t: Throwable) {
+            toast("无法打开选择器：${t.message}")
         }
-
-        val title = Lang.t("弹窗图标（当前：", "Popup icon (current: ") +
-                (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + "）"
-
-        dlg = MaterialAlertDialogBuilder(ctx)
-                .setTitle(title)
-                .setView(box)
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
-                .show()
     }
 
     private fun showLogDialog() {
@@ -1211,6 +1170,8 @@ class SettingsFragment : Fragment() {
                 val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
                 requireActivity().runOnUiThread {
                     toast(if (ok) "弹窗图标已更新（下次连接生效）" else "写入图标失败")
+                    // 选完立刻刷新本页：行右侧要从「默认」切到「已自定义 + 恢复默认」
+                    if (ok) scheduleRebuild(250L)
                 }
                 if (scaled !== bmp && !scaled.isRecycled) scaled.recycle()
                 // bmp 已在上方判空（null 时 return@Thread），此处编译器已智能转换为非空，

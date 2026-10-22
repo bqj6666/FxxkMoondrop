@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- M3 语义色 token：与 ThemeUtil.Palette 取值一一对应，供未显式着色的官方组件取用，避免回落 baseline 紫。 -->
+<!-- M3 语义色 token（深色静态兜底）：tone 关系与 values-night-v31 的动态映射保持一致。 -->
 <resources>
     <color name="m3_primary">#FFD0BCFF</color>
     <color name="m3_on_primary">#FF21005D</color>
@@ -13,9 +13,9 @@
     <color name="m3_surface_container_highest">#FF36343B</color>
     <color name="m3_surface_variant">#FF49454F</color>
     <color name="m3_on_surface">#FFE6E0E9</color>
-    <color name="m3_on_surface_variant">#FFCAC4D0</color>
-    <color name="m3_outline">#FF938F99</color>
-    <color name="m3_outline_variant">#FF49454F</color>
+    <color name="m3_on_surface_variant">#FFC7C6CB</color>
+    <color name="m3_outline">#FF909095</color>
+    <color name="m3_outline_variant">#FF46464B</color>
     <color name="m3_green">#FF8FD89B</color>
     <color name="m3_red">#FFF2B8B5</color>
 

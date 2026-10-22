@@ -91,7 +91,16 @@ class ThemeUtil {
                     else android.content.res.Configuration.UI_MODE_NIGHT_NO)
             c.createConfigurationContext(cfg).getColor(resId)
         } catch (_: Throwable) {
-            c.getColor(resId)   // 兜底：宁可串色也不要崩
+            // 兜底必须是**不会抛**的：这层代码也会在别的进程里跑（蓝牙详情页注入，
+            // Context 是 Settings 的 Resources，解析不到本应用的 @color id → 直接抛
+            // Resources$NotFoundException，于是整个注入面板构建失败、只剩一行标题）。
+            // 返回 0 无所谓：调用点都是 `dyn(系统动态色, themedColor(...))`，
+            // dyn 能取到系统色时这个兜底值根本不会被使用。
+            try {
+                c.getColor(resId)
+            } catch (_: Throwable) {
+                0
+            }
         }
 
         /** Android 12+ 系统莫奈动态色（动态色开启时）；关闭或低版本回退 fallback */
@@ -168,16 +177,21 @@ class ThemeUtil {
                 // ⚠️ 两个 key 必须按 dark 分支 —— system_neutral1_900 **恒为深色**，
                 //    浅色模式下也用它，整页会变黑而文字仍是深色，糊成一团。
                 //    （3.3.1 引入过这个回归，别再把 if (dark) 去掉。）
+                // 页面底色 / 卡片 = 一对**官方 M3 角色**，全部取自动态 neutral 调色板：
+                //   页面底 = surfaceContainer（tone 94，框架里最接近的是 neutral1_50）
+                //   卡片   = surface       （tone 98，neutral1_10）
+                // 这样「浅底 + 更亮卡片」的层级完全由 tone 差（4 档）表达，
+                // 不再往底色里手掺黑（那会把壁纸中性色污染成假灰，也不符合规范）。
+                // 深色：页面底 neutral1_900(tone10)、卡片 neutral1_800(tone20)，卡片同样更亮。
+                // ⚠️ neutral1_0 = 白、neutral1_1000 = 黑（框架命名是反的，实测确认）。
                 surf = if (on) android.graphics.Color.BLACK
-                else dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_10",
+                else dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_50",
                         themedColor(c, dark, R.color.m3_surface))
                 // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相。
-                // 同上：neutral1_800 恒为深色，浅色分支必须单独走。
                 cardC = if (on) c.getColor(R.color.m3_amoled_card)
-                else if (dark) dyn(c, "system_neutral1_800",
-                        themedColor(c, true, R.color.m3_surface_container))
-                else themedColor(c, false, R.color.m3_surface_container)
-                onSurface = dyn(c, if (dark) "system_neutral1_0" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
+                else dyn(c, if (dark) "system_neutral1_800" else "system_neutral1_10",
+                        themedColor(c, dark, R.color.m3_surface_container))
+                onSurface = dyn(c, if (dark) "system_neutral1_100" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
             } else {
                 // 种子色生成（官方 LSPosed seed 近似调色）
                 val seed = seedColor(c)
@@ -190,8 +204,13 @@ class ThemeUtil {
                 onSurface = themedColor(c, dark, R.color.m3_on_surface)
             }
 
-            onVariant = themedColor(c, dark, R.color.m3_on_surface_variant)
-            outline = themedColor(c, dark, R.color.m3_outline)
+            // 次级文字 / 描边也全部走动态中性调色板（M3 onSurfaceVariant=tone30、outline=tone50、
+            // outlineVariant=tone80；深色反向取亮几档）。原先这三格是写死的紫调字面量，
+            // 动态取色下整页是壁纸色、只有描边还是基线紫，层级看着发脏。
+            onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
+                    themedColor(c, dark, R.color.m3_on_surface_variant))
+            outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
+                    themedColor(c, dark, R.color.m3_outline))
             green = themedColor(c, dark, R.color.m3_green)
             red = themedColor(c, dark, R.color.m3_red)
 
@@ -214,7 +233,8 @@ class ThemeUtil {
             //
             // AMOLED 纯黑下同样保留：卡片 #101010 与纯黑背景几乎同色，
             // 没有描边就彻底分不出层级。
-            cardStroke = themedColor(c, dark, R.color.m3_outline_variant)
+            cardStroke = dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
+                    themedColor(c, dark, R.color.m3_outline_variant))
             // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
             divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())
             // 注：Android 的 tonal palette 只提供 tone 0/10/50/100/200…/1000，没有 90。

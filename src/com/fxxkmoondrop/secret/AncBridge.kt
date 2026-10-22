@@ -104,9 +104,23 @@ class AncBridge {
         /** 设置 ANC 模式（UI：0=关闭 1=降噪 2=透传 3=抗风 4=自适应 5=直播）
          *  alpha2.14: UI 模式直传 GaiaBleClient，由能力探测结果选择协议路径
          *  （AudioCuration / ANC V2 / ANC V1），设备枚举映射在 GaiaCommands.ancDevFromUi */
+        /** 最近一次下发（仅用于 200ms 重入去重） */
+        private var lastSentMode = -1
+        private var lastSentAt = 0L
+
         @JvmStatic
         fun setAncMode(mode: Int) {
             if (mode < 0 || mode > 5) return
+            // 只挡「同一次事件的重入」：同档位 200ms 内重复调用直接丢弃。
+            // ⚠️ 不要放大这个窗口 —— 连接后同步档位、重连对齐都走这里，
+            // 窗口一大就会吞掉正常命令（上一版 1.2s+限流那次就是这么把耳机搞成「连不上」的）。
+            val nowMs = android.os.SystemClock.elapsedRealtime()
+            if (mode == lastSentMode && nowMs - lastSentAt < 200L) {
+                Log.d(TAG, "setAncMode reentry ignored: " + mode)
+                return
+            }
+            lastSentMode = mode
+            lastSentAt = nowMs
             Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）

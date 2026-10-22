@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- M3 语义色 token：与 ThemeUtil.Palette 取值一一对应，供未显式着色的官方组件取用，避免回落 baseline 紫。 -->
+<!-- M3 语义色 token：与 ThemeUtil.Palette 取值一一对应，供未显式着色的官方组件取用，避免回落 baseline 紫。
+     本文件是 API<31 或「动态取色关闭」时的静态兜底；values-v31 里同样的角色指向系统动态 neutral 调色板，
+     两份必须保持**同一套 tone 关系**（页面底 t94 < 卡片 t98，描边 t80、次级文字 t30），否则开/关动态色会跳变。 -->
 <resources>
     <color name="m3_primary">#FF6750A4</color>
     <color name="m3_on_primary">#FFFFFFFF</color>
@@ -7,18 +9,17 @@
     <color name="m3_on_primary_container">#FF21005D</color>
     <color name="m3_secondary_container">#FFE8DEF8</color>
     <color name="m3_on_secondary_container">#FF1D192B</color>
-    <!-- 页面底色。M3 官方 neutral94（3.3.1 从 neutral98 调整）：
-         原值 #FBF8FF 与卡片 #FFFFFF 亮度仅差 2%，卡片边界消失。
-         neutral94 带紫调，与纯白卡片形成清晰层级。 -->
-    <color name="m3_surface">#FFF3EDF7</color>
-    <color name="m3_surface_container">#FFFFFFFF</color>
-    <color name="m3_surface_container_high">#FFF7F2FA</color>
-    <color name="m3_surface_container_highest">#FFE6E0E9</color>
-    <color name="m3_surface_variant">#FFE7E0EC</color>
+    <!-- 页面底色 = surfaceContainer(tone94)，卡片 = surface(tone98)：层级靠 4 档 tone 差，
+         不需要再往底色掺黑（掺黑会破坏壁纸中性色，也不属于任何 M3 角色）。 -->
+    <color name="m3_surface">#FFECECF0</color>
+    <color name="m3_surface_container">#FFFEFBFF</color>
+    <color name="m3_surface_container_high">#FFF4F2F7</color>
+    <color name="m3_surface_container_highest">#FFE3E2E7</color>
+    <color name="m3_surface_variant">#FFE3E2E7</color>
     <color name="m3_on_surface">#FF1C1B1F</color>
-    <color name="m3_on_surface_variant">#FF49454F</color>
-    <color name="m3_outline">#FF79747E</color>
-    <color name="m3_outline_variant">#FFCAC4D0</color>
+    <color name="m3_on_surface_variant">#FF46464B</color>
+    <color name="m3_outline">#FF76777C</color>
+    <color name="m3_outline_variant">#FFC7C6CB</color>
     <color name="m3_green">#FF2E7D32</color>
     <color name="m3_red">#FFB3261E</color>
 

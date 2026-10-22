@@ -264,7 +264,7 @@ class PermissionActivity : Activity() {
                 ic.alpha = 0.4f
             } else {
                 row.background = RippleDrawable(
-                        ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000),
+                        ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000),
                         GradientDrawable().apply { setColor(android.graphics.Color.TRANSPARENT) }, null)
                 row.setOnClickListener { fixPermission(item) }
             }
@@ -276,7 +276,7 @@ class PermissionActivity : Activity() {
             val bg = GradientDrawable()
             bg.setColor(android.graphics.Color.TRANSPARENT)
             row.background = RippleDrawable(
-                    ColorStateList.valueOf(if (pal.dark) 0x33FFFFFF else 0x22000000), bg, null)
+                    ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000), bg, null)
             row.setOnClickListener { fixPermission(item) }
         }
         return row

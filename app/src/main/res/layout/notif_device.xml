@@ -35,7 +35,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="10dp">
+        android:paddingTop="6dp"
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:id="@+id/notif_btn0"
@@ -47,8 +48,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn0_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -57,8 +58,8 @@
                 android:id="@+id/notif_btn0_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1" />
         </LinearLayout>
 
@@ -72,8 +73,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn1_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -82,8 +83,8 @@
                 android:id="@+id/notif_btn1_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1" />
         </LinearLayout>
 
@@ -97,8 +98,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn2_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -107,8 +108,8 @@
                 android:id="@+id/notif_btn2_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1" />
         </LinearLayout>
 
@@ -122,8 +123,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn3_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -132,8 +133,8 @@
                 android:id="@+id/notif_btn3_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1" />
         </LinearLayout>
 
@@ -149,8 +150,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn4_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -159,8 +160,8 @@
                 android:id="@+id/notif_btn4_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1" />
         </LinearLayout>
     </LinearLayout>

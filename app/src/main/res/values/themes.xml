@@ -25,6 +25,27 @@
         <item name="android:colorBackgroundFloating">@color/m3_surface_container_high</item>
     </style>
 
+    <!-- M3 Expressive 按钮尺寸档：Medium（视觉 56dp / 左右 24dp / 图标 24dp / 16sp）。
+         官方按钮的 padding、inset、图标尺寸、字级都由 SizeOverlay 决定，
+         这里只换档位，不改任何手写值。 -->
+    <!-- materialSizeOverlay 是**控件样式项**，不是主题属性：直接写在 ThemeOverlay 里 MaterialButton
+         读不到（默认构造走 materialButtonStyle）。所以这里把档位挂进一个 widget style，
+         再用主题里的 materialButtonStyle 指过去。 -->
+    <style name="Widget.FxxkMoondrop.Button.Medium" parent="Widget.Material3Expressive.Button">
+        <item name="materialSizeOverlay">@style/SizeOverlay.Material3Expressive.Button.Medium</item>
+    </style>
+
+    <!-- 官方 Text Button（M3 Expressive）：用于行尾的次要动作，如「恢复默认」 -->
+    <style name="Widget.FxxkMoondrop.Button.Text" parent="Widget.Material3Expressive.Button.TextButton" />
+
+    <style name="ThemeOverlay.FxxkMoondrop.ButtonText" parent="">
+        <item name="materialButtonStyle">@style/Widget.FxxkMoondrop.Button.Text</item>
+    </style>
+
+    <style name="ThemeOverlay.FxxkMoondrop.ButtonMedium" parent="">
+        <item name="materialButtonStyle">@style/Widget.FxxkMoondrop.Button.Medium</item>
+    </style>
+
     <!-- 3.2.10: 统一弹窗动效（M3Ui.materialDialog 通过 window.setWindowAnimations 引用）。
          进场 fade+scale 300ms 走 emphasized decelerate，退场 200ms 走 emphasized accelerate ——
          进出场必须成对，只有进场会让关闭时硬切、显得比系统弹窗廉价。 -->

@@ -896,6 +896,10 @@ class XposedEntry : XposedModule() {
             val st = fetchDcState(ctx, detailDeviceName(thisObj))
             val connected = st?.connected == true
             val ready = st?.gaiaReady == true
+            // 3.3.x 诊断日志：官方面板/音量面板消失时，先看这三行到底哪一环是 false
+            android.util.Log.i("FxxkMoondrop", "sliceState: hasSlice=" + hasSlice +
+                    " connected=" + connected + " ready=" + ready +
+                    " state=" + (st != null) + " name=" + detailDeviceName(thisObj))
             val cat = HookHelper.callMethod(thisObj, "getInvisiblePrefCategory")
             val slicePref = HookHelper.callMethod(screen, "findPreference", KEY_SLICE_CONTROL)
             val loading = HookHelper.callMethod(screen, "findPreference", KEY_LOADING)
@@ -916,9 +920,45 @@ class XposedEntry : XposedModule() {
                 }
                 HookHelper.callMethod(pref, "setVisible", visible)
             }
+            // 实验：官方「耳机控制」行挂在 bt_device_slice_category 里，UWU 上该分类默认
+            // visible=false，官方重排还会把我们的行塞回去 -> 直接让分类按 hasSlice 显形，
+            // 让官方按自己的位置渲染。内容是否为空由 GMS 决定。
+            try {
+                val sliceCat = HookHelper.callMethod(screen, "findPreference", "bt_device_slice_category")
+                if (sliceCat != null) {
+                    HookHelper.callMethod(sliceCat, "setVisible", hasSlice)
+                    Log.i(TAG, "sliceCategory: hasSlice=" + hasSlice +
+                            " visible=" + HookHelper.callMethod(sliceCat, "isVisible"))
+                } else {
+                    Log.i(TAG, "sliceCategory: not found")
+                }
+            } catch (t: Throwable) { Log.e(TAG, "sliceCategory fail", t) }
             placeOurRows(screen)
-            Log.d(TAG, "detail rows: hasSlice=$hasSlice connected=$connected ready=$ready" +
-                    " slice=${vis.slice} loading=${vis.loading} panel=${vis.panel}")
+            // 诊断用（Log.i，避免被日志级别过滤掉）：切片行到底存不存在、挂在哪、是否可见
+            try {
+                val sp = slicePref
+                val parentIsScreen = sp != null &&
+                        (HookHelper.callMethod(sp, "getParent") === screen)
+                val spVisible = sp?.let { HookHelper.callMethod(it, "isVisible") as? Boolean }
+                val cnt = HookHelper.callMethod(screen, "getPreferenceCount") as? Int
+                android.util.Log.i("FxxkMoondrop", "detailRows: hasSlice=$hasSlice conn=$connected" +
+                        " ready=$ready -> sliceVis=${vis.slice} loadingVis=${vis.loading}" +
+                        " panelVis=${vis.panel} slicePref=${sp != null}" +
+                        " parentIsScreen=$parentIsScreen sliceVisible=$spVisible count=$cnt")
+                // 把页面上所有 preference 的 key 全打出来：看官方到底用哪个 key 承载
+                // 「耳机控制」（不同 ROM 可能换成别的 key，我们的 KEY_SLICE_CONTROL 就落空了）
+                val sb = StringBuilder()
+                try {
+                    val n = (HookHelper.callMethod(screen, "getPreferenceCount") as? Int) ?: 0
+                    for (pi in 0 until Math.min(n, 40)) {
+                        val pf = HookHelper.callMethod(screen, "getPreference", pi)
+                        val k = HookHelper.callMethod(pf, "getKey") as? String
+                        val v = HookHelper.callMethod(pf, "isVisible") as? Boolean
+                        sb.append(pi).append(':').append(k).append('(').append(v).append(") ")
+                    }
+                } catch (_: Throwable) { }
+                android.util.Log.i("FxxkMoondrop", "prefKeys: " + sb)
+            } catch (t: Throwable) { android.util.Log.e("FxxkMoondrop", "detailRows log fail", t) }
         } catch (th: Throwable) { Log.e(TAG, "applyControlSliceState failed", th) }
     }
 
@@ -1134,7 +1174,37 @@ class XposedEntry : XposedModule() {
             HookHelper.callMethod(ctrl, "setSliceUri", uri)
             HookHelper.callMethod(ctrl, "displayPreference", screen)
             HookHelper.callMethod(ctrl, "onStart")
-            Log.d(TAG, "control slice attached: $uri")
+            Log.i(TAG, "control slice attached: $uri")
+            // 诊断：1.5s 后直接问一次这个 slice，看 GMS 到底有没有返回内容。
+            // 「行 visible=true 但界面上是空的」= 切片本身没内容，不是我们藏掉的。
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    // Slice URI 不支持普通 content query（必然返回 null），要按官方方式 bindSlice。
+                    // 编译期 stub 里没有 SliceManager.getInstance，走反射。
+                    val smCls = Class.forName("android.app.slice.SliceManager")
+                    // 隐藏 API 会伪装成 NoSuchMethod：getDeclaredMethod + setAccessible 再试一次
+                    fun declared(name: String, vararg types: Class<*>): java.lang.reflect.Method? =
+                        try { smCls.getDeclaredMethod(name, *types).apply { isAccessible = true } }
+                        catch (_: Throwable) { null }
+                    val getInstance = declared("getInstance", Context::class.java)
+                    // getInstance 在 UWU 上不存在 -> 试 getSystemService("slice") 拿实例
+                    val sm = if (getInstance != null) getInstance.invoke(null, ctx)
+                             else runCatching { ctx.getSystemService("slice") }.getOrNull()
+                    val bind = declared("bindSlice", android.net.Uri::class.java, java.util.Set::class.java)
+                    var items = -3
+                    if (sm != null && bind != null) {
+                        val slice = bind.invoke(sm, uri, java.util.Collections.emptySet<Any>())
+                        if (slice != null) {
+                            val gi = slice.javaClass.getMethod("getItems")
+                            items = (gi.invoke(slice) as? List<*>)?.size ?: -2
+                        } else items = -4
+                    }
+                    Log.i(TAG, "sliceProbe: items=" + items + " getInstance=" + (getInstance != null) +
+                            " bindSlice=" + (bind != null) + " uri=" + uri)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "sliceProbe failed", t)
+                }
+            }, 1500L)
         } catch (th: Throwable) { Log.e(TAG, "attachControlSlice failed", th) }
     }
 

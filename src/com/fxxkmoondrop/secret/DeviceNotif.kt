@@ -131,7 +131,10 @@ object DeviceNotif {
             val line = batt ?: ""
 
             // 内容没变就不重发：重发会让系统重建视图，把用户展开的通知打回折叠态。
-            val sig = title + "|" + line + "|" + mode + "|" + actions.joinToString(",")
+            // 布局版本必须进签名：改了 RemoteViews 布局后，只要状态没变就不会重发，
+            // 系统会一直用旧的视图 —— 之前「改了布局但通知毫无变化」就是踩了这个坑。
+            val sig = "v" + NOTIF_LAYOUT_V + "|" + title + "|" + line + "|" + mode + "|" +
+                    actions.joinToString(",")
             if (sig == lastSig) return
             lastSig = sig
 
@@ -178,6 +181,11 @@ object DeviceNotif {
         if (!showHeader) {
             rv.setViewVisibility(R.id.notif_title, android.view.View.GONE)
             rv.setViewVisibility(R.id.notif_text, android.view.View.GONE)
+            // 折叠视图高度只有 ~64dp：标签也收起来 + 压掉按钮行上下留白，
+            // 否则 40dp 圆钮 + 标签 + 14dp 底边距会超出，图标下半截被裁掉（实测 2026-10-22）。
+            for (tid in SLOT_TEXT) rv.setViewVisibility(tid, android.view.View.GONE)
+            val p4 = (4 * c.resources.displayMetrics.density).toInt()
+            rv.setViewPadding(R.id.notif_btns, 0, p4, 0, p4)
         } else {
             rv.setViewVisibility(R.id.notif_title, android.view.View.VISIBLE)
             rv.setTextViewText(R.id.notif_title, title)
@@ -226,13 +234,17 @@ object DeviceNotif {
             rv.setImageViewResource(SLOT_ICON[i], modeIcon(m))
             // 图标本身是纯黑矢量，必须染色才在通知上可见
             rv.setInt(SLOT_ICON[i], "setColorFilter", fgc)
-            // 圆底按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
+            // 形状先定：未选中 = 正圆，选中 = 圆角方形（与概览页 expressive 按钮的选中形态一致）
+            rv.setInt(SLOT_ICON[i], "setBackgroundResource",
+                    if (selected) R.drawable.notif_btn_square else R.drawable.notif_btn_circle)
+            // 再按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
             if (Build.VERSION.SDK_INT >= 31) {
                 rv.setColorStateList(SLOT_ICON[i], "setBackgroundTintList",
                     ColorStateList.valueOf(if (selected) primary else container))
             } else {
+                // API 30 及以下没有 ColorStateList 通道：退回旧的预着色圆底（形状无 morph）
                 rv.setInt(SLOT_ICON[i], "setBackgroundResource",
-                    if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
+                        if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
             }
             rv.setOnClickPendingIntent(SLOT[i], actionPi(c, m))
         }
@@ -246,6 +258,9 @@ object DeviceNotif {
         cancel(c, ID)
         cancel(c, ID_OLD_ANC)
     }
+
+    /** RemoteViews 布局版本：改布局时 +1，强制重发一次通知 */
+    private const val NOTIF_LAYOUT_V = 3
 
     private fun isReady(): Boolean {
         val g = GaiaBleClient.getInstance()

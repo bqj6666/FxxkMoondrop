@@ -165,6 +165,31 @@ class M3Ui {
         @JvmStatic
         fun dp(c: Context, v: Int): Int = Math.round(v * c.resources.displayMetrics.density)
 
+        /**
+         * 官方可点击背景：直接取主题的 `?attr/selectableItemBackground`，
+         * 水波纹颜色由 Material 主题（M3 状态层）决定，无需自绘。
+         * 返回 null 表示主题未提供（调用方保持无背景）。
+         */
+        @JvmStatic
+        fun selectableBackground(c: Context): android.graphics.drawable.Drawable? {
+            val tv = android.util.TypedValue()
+            if (!c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) return null
+            return try { androidx.core.content.ContextCompat.getDrawable(c, tv.resourceId) } catch (_: Throwable) { null }
+        }
+
+        /**
+         * M3 状态层水波纹：按下色取**内容色（onSurface）12%** —— 这是 M3 对 surface 容器的规范；
+         * 用主色会因浅色主题下主色本身很亮而几乎看不见（实测反馈：没有按下反馈）。
+         * @param content 形状（圆角矩形/圆形），为 null 时只提供光晕
+         */
+        @JvmStatic
+        fun pressRipple(c: Context, content: android.graphics.drawable.Drawable?): android.graphics.drawable.RippleDrawable {
+            val pal = ThemeUtil.Palette(c)
+            return android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000),
+                    content, null)
+        }
+
         /** 发丝线宽（AMOLED 纯黑下卡片描边用，任意 dpi 下都保持 1px 级别，不显得笨重） */
         @JvmStatic
         fun hairline(c: Context): Int =
@@ -272,7 +297,7 @@ class M3Ui {
          * 3.3.1 之前各处散落 20 / 24 / 28 三种值（属 largeIncreased 等非 Card 档），
          * 同一屏里圆角不一致正是「看着很奇怪」的来源。现统一到规范档。
          */
-        const val RADIUS_CARD = 12
+        const val RADIUS_CARD = 28
 
         /**
          * 对话框圆角 —— Material3 官方规范值。
@@ -282,29 +307,29 @@ class M3Ui {
          */
         const val RADIUS_DIALOG = 28
 
-        /** 圆角卡片背景（M3 surfaceContainer 色） */
-        @JvmStatic
-        fun cardBg(c: Context, pal: ThemeUtil.Palette, radiusDp: Int): GradientDrawable {
-            val g = GradientDrawable()
-            g.setColor(pal.card)
-            g.setCornerRadius(dp(c, radiusDp).toFloat())
-            // alpha2.52: AMOLED 下 card 与 surface 同为纯黑，靠发丝描边区分层级
-            if (pal.cardStroke != 0) g.setStroke(hairline(c), pal.cardStroke)
-            return g
-        }
 
         /** 统一的卡片外观（MaterialCardView 版）：AMOLED 下同样带描边，避免卡片"消失" */
         @JvmStatic
         fun applyCardLook(card: MaterialCardView, c: Context, pal: ThemeUtil.Palette, radiusDp: Int) {
+            // 对齐 Android 16 Settings（M3 Expressive）的 Filled Card：
+            // 白底（card 容器色）+ **无描边** + 无高度，圆角 28dp，分层靠底色差而非描边。
             card.radius = dp(c, radiusDp).toFloat()
             card.setCardBackgroundColor(pal.card)
             card.cardElevation = 0f
-            if (pal.cardStroke != 0) {
-                card.strokeWidth = hairline(c)
-                card.strokeColor = pal.cardStroke
-            } else {
-                card.strokeWidth = 0
-            }
+            card.strokeWidth = 0
+        }
+
+        /**
+         * 把已有内容包进 M3 卡片容器：内容自带的 padding 原样保留，
+         * 卡片提供 shapeAppearance / 描边 / 状态层，替代手绘 GradientDrawable 背景。
+         */
+        @JvmStatic
+        fun wrapInCard(c: Context, pal: ThemeUtil.Palette, content: View,
+                       radiusDp: Int = RADIUS_CARD): MaterialCardView {
+            val card = MaterialCardView(c)
+            applyCardLook(card, c, pal, radiusDp)
+            card.addView(content, android.view.ViewGroup.LayoutParams(-1, -2))
+            return card
         }
 
         /** alpha2.28: 统一 MaterialCardView 弹窗构建器（与 Google 弹窗同风格）
@@ -362,16 +387,35 @@ class M3Ui {
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线，
             // 对齐 LSPosed 实测结构（见 groupCard 注释）。
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             if (iconRes != 0) {
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
+                // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
+                // 色相族取自主题的 primary container，保证与动态取色同源。
+                val chip = android.widget.FrameLayout(act)
+                val tintHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.container, tintHsv)
+                tintHsv[0] = (tintHsv[0] + (iconRes % 5) * 52f) % 360f
+                val chipBg = android.graphics.Color.HSVToColor(tintHsv)
+                val glyphHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.onContainer, glyphHsv)
+                glyphHsv[0] = tintHsv[0]
+                val chipFg = android.graphics.Color.HSVToColor(glyphHsv)
+                chip.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(chipBg)
+                }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
-                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 8)
-                row.addView(ic, ilp)
+                ic.imageTintList = ColorStateList.valueOf(chipFg)
+                chip.addView(ic, android.widget.FrameLayout.LayoutParams(
+                        dp(act, 24), dp(act, 24), Gravity.CENTER))
+                val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(chip, ilp)
             }
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
@@ -412,6 +456,7 @@ class M3Ui {
             // 3.3.1: 返回**裸行**（不再自带 MaterialCardView）。
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线。
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
@@ -563,6 +608,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             value.setTextColor(pal.onVariant)
             value.isSingleLine = true
             val row = listRow(act, pal, 0, title, sub, value, null)
+            // 单行下拉行统一按 72dp 节奏排（= 双行行「标题 + 副标题」的高度）。
+            // 只有一行文字时 listRow 只到 56dp 下限，单独成卡会比其他卡片矮一截，
+            // 一行「语言 / Language」夹在 78dp 的卡片中间像被压扁了 —— 同一页的行高必须成体系。
+            if (sub.isNullOrEmpty()) row.minimumHeight = dp(act, 72)
             // alpha2.53: 菜单跟随手指位置（官方行为）。
             // 触摸点用 OnTouchListener 记录但返回 false，保留行自身的点击/涟漪；
             // 无障碍与键盘触发的 click 没有触摸点，退化为锚到行中心。
@@ -599,6 +648,50 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun setDropdownValue(row: View, text: String) {
             row.findViewWithTag<TextView>(TAG_DROPDOWN_VALUE)?.text = text
+        }
+
+        /**
+         * M3 对话框内的动作行（list item）：**前导图标 24dp 单色、无彩色底片、无卡片**。
+         *
+         * 设置页列表用「彩色圆形底片」是对的（那是 Settings 的分组列表语汇），
+         * 但对话框是临时浮层，里面再出现彩色底片会抢掉标题与动作按钮的层级。
+         * 官方 dialog 里的动作列表就是：24dp 图标 + 16sp 标题 + 14sp 说明 + chevron。
+         */
+        @JvmStatic
+        fun dialogRow(act: Activity, pal: ThemeUtil.Palette,
+                      iconRes: Int, title: String, sub: String?,
+                      trailing: View?, onClick: Runnable?): LinearLayout {
+            val row = LinearLayout(act)
+            row.background = selectableBackground(act)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            if (iconRes != 0) {
+                val ic = android.widget.ImageView(act)
+                ic.setImageResource(iconRes)
+                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
+                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(ic, ilp)
+            }
+            val labels = LinearLayout(act)
+            labels.orientation = LinearLayout.VERTICAL
+            val t1 = TextView(act)
+            t1.text = title
+            t1.textSize = 16f
+            t1.setTextColor(pal.onSurface)
+            labels.addView(t1, LinearLayout.LayoutParams(-2, -2))
+            if (!sub.isNullOrEmpty()) {
+                val t2 = TextView(act)
+                t2.text = sub
+                t2.textSize = 14f
+                t2.setTextColor(pal.onVariant)
+                labels.addView(t2, LinearLayout.LayoutParams(-2, -2))
+            }
+            row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+            if (trailing != null) row.addView(trailing)
+            if (onClick != null) row.setOnClickListener { onClick.run() }
+            return row
         }
 
         /**
@@ -643,40 +736,59 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         fun showMenuAt(anchor: View, pal: ThemeUtil.Palette, items: Array<String>,
                        selected: Int, onPick: (Int) -> Unit, x: Int, y: Int) {
             val c = anchor.context
+            // ── M3 Expressive「Vertical menu」规范（m3.material.io/components/menus/specs）──
+            // 与 baseline 菜单的差别（官方原文 + 实测标注图）：
+            //   · 容器是**圆角**的（baseline 是 4dp 方角），标注 16dp
+            //   · 选中态**不再横贯整个容器宽度**：菜单项是内缩的圆角块（12dp），
+            //     容器四周只留 4dp / 2dp —— 这正是「选中不占满宽度」的实现方式
+            //   · 标准配色里选中项是 **tertiaryContainer / onTertiaryContainer**
+            //     （baseline 才是 secondaryContainer）
+            //   · 容器色 = surfaceContainerLow（比页面底亮一档，靠高程+色差区分）
+            // 尺寸：菜单项 48dp、项内左右 12dp、前导图标 20dp、项间距 2dp
+            val dk = ThemeUtil.isDark(c)
+            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_10", pal.card)
+            val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_50", pal.container)
+            val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
             val menu = LinearLayout(c)
             menu.orientation = LinearLayout.VERTICAL
-            menu.setPadding(dp(c, 8), dp(c, 8), dp(c, 8), dp(c, 8))
+            menu.setPadding(dp(c, 4), dp(c, 2), dp(c, 4), dp(c, 2))
             val bg = GradientDrawable()
-            bg.cornerRadius = dp(c, 24).toFloat()
-            bg.setColor(pal.surfaceContainerHighest)
-            bg.setStroke(hairline(c), pal.outline)
+            bg.cornerRadius = dp(c, 16).toFloat()
+            bg.setColor(menuColor)
             menu.background = bg
-            menu.elevation = dp(c, 6).toFloat()
+            menu.elevation = dp(c, 3).toFloat()
+            menu.clipToOutline = true
             val pop = android.widget.PopupWindow(menu,
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true)
             pop.isOutsideTouchable = true
-            pop.elevation = dp(c, 6).toFloat()
+            pop.elevation = dp(c, 3).toFloat()
             for (i in items.indices) {
                 val on = i == selected
                 val item = LinearLayout(c)
                 item.orientation = LinearLayout.HORIZONTAL
                 item.gravity = Gravity.CENTER_VERTICAL
-                item.setPadding(dp(c, 16), 0, dp(c, 20), 0)
-                val ib = GradientDrawable()
-                ib.cornerRadius = dp(c, 20).toFloat()
-                ib.setColor(if (on) pal.primary else 0x00000000)
-                item.background = ib
+                item.setPadding(dp(c, 12), 0, dp(c, 12), 0)
+                val fill = GradientDrawable()
+                fill.cornerRadius = dp(c, 12).toFloat()
+                fill.setColor(if (on) selBg else 0x00000000)
+                val mask = GradientDrawable()
+                mask.cornerRadius = dp(c, 12).toFloat()
+                mask.setColor(android.graphics.Color.BLACK)
+                item.background = android.graphics.drawable.RippleDrawable(
+                        ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000), fill, mask)
                 val cb = android.widget.ImageView(c)
                 cb.setImageDrawable(moduleDrawable(c, R.drawable.ic_check))
-                cb.imageTintList = ColorStateList.valueOf(if (on) pal.onPrimary else 0x00000000)
+                cb.imageTintList = ColorStateList.valueOf(if (on) selFg else 0x00000000)
+                // 始终占位（INVISIBLE 而非 GONE）：否则选中项有勾、未选中项没有，
+                // 文字会在两种缩进之间横跳，点一下整个菜单的文字就错位了
                 cb.visibility = if (on) View.VISIBLE else View.INVISIBLE
-                val clp = LinearLayout.LayoutParams(dp(c, 18), dp(c, 18))
-                clp.marginEnd = dp(c, 8)
+                val clp = LinearLayout.LayoutParams(dp(c, 20), dp(c, 20))
+                clp.marginEnd = dp(c, 12)
                 item.addView(cb, clp)
                 val tv = TextView(c)
                 tv.text = items[i]
                 tv.textSize = 14f
-                tv.setTextColor(if (on) pal.onPrimary else pal.onSurface)
+                tv.setTextColor(if (on) selFg else pal.onSurface)
                 item.addView(tv, LinearLayout.LayoutParams(-2, -2))
                 item.setOnClickListener {
                     // M3 退场：缩回 0.9 + 淡出，120ms 后再真正 dismiss
@@ -689,34 +801,31 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                             .start()
                     onPick(i)
                 }
-                menu.addView(item, LinearLayout.LayoutParams(-1, dp(c, 48)))
+                val ilp = LinearLayout.LayoutParams(-1, dp(c, 48))
+                if (i > 0) ilp.topMargin = dp(c, 2)
+                menu.addView(item, ilp)
             }
             // 先量一次拿到菜单实际尺寸，再夹到屏幕内（贴边不裁切）
             menu.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val dm = c.resources.displayMetrics
-            // M3 规范：菜单最小宽度 112dp。选项文字很短时（如「正式版」「预发布」）
-            // wrap_content 会把菜单缩成一条窄缝，既不像菜单也难点；左右各留 24dp 边距封顶。
+            // M3 规范：菜单最小宽度 112dp；两侧各留 16dp 边距封顶
             val mw = Math.max(menu.measuredWidth, dp(c, 112))
-                    .coerceAtMost(dm.widthPixels - dp(c, 48))
+                    .coerceAtMost(dm.widthPixels - dp(c, 32))
             val mh = menu.measuredHeight
             val m = dp(c, 8)
+            // 弹出方式保持原样：**从触摸点弹出**，只夹到屏幕内（贴边不裁切）。
             val px = x.coerceIn(m, (dm.widthPixels - mw - m).coerceAtLeast(m))
             val py = y.coerceIn(m, (dm.heightPixels - mh - m).coerceAtLeast(m))
             pop.width = mw
             pop.height = mh
 
-            // alpha2.53: M3 菜单入场动画 —— 从「离手指最近的那个角」长出来。
-            // 官方 DropdownMenu 就是 fadeIn + scaleIn(0.8)，约 140ms、emphasized decelerate。
-            // 用动画前的状态起手：PopupWindow 已经按内容量好尺寸，缩放只是视觉效果，不影响布局。
+            // M3 入场：从触摸点所在的那个角长出来（fadeIn + scaleIn 0.8，emphasized decelerate）
             menu.pivotX = (x - px).coerceIn(0, mw).toFloat()
             menu.pivotY = (y - py).coerceIn(0, mh).toFloat()
             menu.alpha = 0f
             menu.scaleX = 0.8f
             menu.scaleY = 0.8f
 
-            android.util.Log.d("FxxkMoondrop", "menu place: want=" + x + "," + y +
-                    " got=" + px + "," + py + " size=" + mw + "x" + mh +
-                    " screen=" + dm.widthPixels + "x" + dm.heightPixels)
             pop.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, px, py)
 
             menu.animate()
@@ -734,6 +843,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun loadingRow(c: Context, pal: ThemeUtil.Palette, text: String): LinearLayout {
             val row = LinearLayout(c)
+            row.background = selectableBackground(c)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER
             val ind = com.google.android.material.loadingindicator.LoadingIndicator(c)
@@ -768,6 +878,100 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             b.backgroundTintList = ColorStateList.valueOf(pal.primary)
             b.gravity = Gravity.CENTER
             b.setOnClickListener(l)
+            return b
+        }
+
+        /** 官方 Text Button（M3 Expressive）：行尾次要动作，无容器无描边，primary 文字。 */
+        @JvmStatic
+        fun textActionButton(c: Context, pal: ThemeUtil.Palette, text: String,
+                             onClick: View.OnClickListener): MaterialButton {
+            val b = MaterialButton(android.view.ContextThemeWrapper(
+                    c, R.style.ThemeOverlay_FxxkMoondrop_ButtonText))
+            b.text = text
+            b.setTextColor(pal.primary)
+            b.isAllCaps = false
+            b.gravity = Gravity.CENTER
+            b.setOnClickListener(onClick)
+            return b
+        }
+
+        /**
+         * 官方 M3 Icon Button（toggle 用法）+ 居中自绘图标。
+         *
+         * 结构：FrameLayout 里叠一层 MaterialButton（负责形状 / 状态层 / 按压形变 / disabled）+
+         * 一层居中 ImageView（放我们自绘的图标，位置与 padding 解耦）。
+         * 返回值的子视图 tag：`it_btn` = MaterialButton，`it_img` = ImageView，
+         * 调用方只需 isChecked / isEnabled + 换图，不要再手绘圆底和描边。
+         */
+        @JvmStatic
+        fun iconToggle(c: Context, pal: ThemeUtil.Palette,
+                       icon: android.graphics.drawable.Drawable?,
+                       sizeDp: Int = 56, iconDp: Int = 28): android.widget.FrameLayout {
+            val holder = android.widget.FrameLayout(c)
+            val btn = MaterialButton(c, null, com.google.android.material.R.attr.materialIconButtonStyle)
+            btn.text = ""
+            btn.isCheckable = true
+            btn.insetLeft = 0
+            btn.insetRight = 0
+            btn.insetTop = 0
+            btn.insetBottom = 0
+            btn.setPadding(0, 0, 0, 0)
+            btn.tag = "it_btn"
+            btn.backgroundTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(pal.primary, pal.container))
+            holder.addView(btn, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val iv = android.widget.ImageView(c)
+            iv.tag = "it_img"
+            iv.isClickable = false
+            iv.setImageDrawable(icon)
+            holder.addView(iv, android.widget.FrameLayout.LayoutParams(
+                    dp(c, iconDp), dp(c, iconDp), Gravity.CENTER))
+            holder.minimumWidth = dp(c, sizeDp)
+            holder.minimumHeight = dp(c, sizeDp)
+            return holder
+        }
+
+        /**
+         * M3（expressive）动作按钮：**不手写尺寸与形状**。
+         *
+         * Widget.Material3Expressive.Button 由 materialSizeOverlay 决定尺寸档
+         * （视觉 40dp + 上下 inset 各 4dp = **48dp 触摸区**），形状走
+         * m3expressive_button_shape_state_list（按下有官方形变）。
+         * 旧的 makeButton / makeM3Button 把 insetTop/Bottom 归零、又手写 cornerRadius=20dp
+         * 和 minHeight=40dp，等于把尺寸档和状态形变全盖掉：看着一样高，
+         * **触摸区只剩 40dp**（低于 48dp 无障碍下限），按下去也没有形变。
+         */
+        @JvmStatic
+        fun actionButton(c: Context, text: String, iconRes: Int,
+                         bgColor: Int, fgColor: Int,
+                         onClick: View.OnClickListener,
+                         medium: Boolean = false): MaterialButton {
+            // 尺寸档：Small（默认，视觉 40dp + 4dp inset = 48dp 触摸区）/ Medium（视觉 56dp、字级 16sp、
+            // 图标 24dp、左右 24dp，inset 0）。切档只换 SizeOverlay，不手写任何 padding/inset/字号 ——
+            // 手写就等于把官方尺寸档覆盖掉（以前的 40dp 触摸区就是这么来的）。
+            val ctx: Context = if (medium)
+                android.view.ContextThemeWrapper(c, R.style.ThemeOverlay_FxxkMoondrop_ButtonMedium) else c
+            val b = MaterialButton(ctx)
+            b.text = text
+            if (!medium) b.textSize = 14f
+            b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            b.setTextColor(fgColor)
+            b.isAllCaps = false
+            b.gravity = Gravity.CENTER
+            b.backgroundTintList = ColorStateList.valueOf(bgColor)
+            if (iconRes != 0) {
+                b.setIconResource(iconRes)
+                b.iconTint = ColorStateList.valueOf(fgColor)
+                b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                if (!medium) {
+                    b.iconPadding = dp(c, 8)
+                    b.iconSize = dp(c, 18)
+                }
+            }
+            b.setOnClickListener(onClick)
             return b
         }
 
@@ -831,31 +1035,22 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /** 官方分组卡片：GradientDrawable 圆角 LinearLayout（与外观卡同款已验证方案），行间淡分隔线 */
         @JvmStatic
-        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): LinearLayout {
-            // 3.3.1: 改回「每组一整张卡片 + 组内行间细分隔线」。
-            //
-            // 上一版（alpha2.52）注释写「对齐 org.lsposed.manager：每行独立卡片 +
-            // 12dp 间距」，但**实测 LSPosed 并非如此**。用 uiautomator 量
-            // org.lsposed.manager 2.2.0 设置页真实坐标（屏 1216x2640，480dpi=3x）：
-            //
-            //   卡片 [48,1321][1168,1537]   <- 译者
-            //   卡片 [48,1543][1168,1760]   <- 参与翻译
-            //   间隙 1543-1537 = 6px 约 2dp  <- 不是 12dp，实为行分隔线
-            //
-            // 组内是连续一张卡（行间只有细线），组与组之间才留白。
-            // 每行独立卡片会让整页碎成十几块、边距参差，正是「看着很奇怪」的根因。
-            val card = LinearLayout(act)
-            card.orientation = LinearLayout.VERTICAL
-            card.background = cardBg(act, pal, RADIUS_CARD)
-            for (i in rows.indices) {
-                if (i > 0) {
-                    // 行分隔线：1px 发丝线，色取 pal.divider（低对比）
-                    val line = View(act)
-                    line.setBackgroundColor(pal.divider)
-                    card.addView(line, LinearLayout.LayoutParams(-1, hairline(act)))
+        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): MaterialCardView {
+            // 对齐 Android 16 Settings：**整组一张卡**，行与行之间只留 ~1dp 的**页面底色细缝**，
+            // 既不是可见灰线，也不是 8dp 间距 —— 视觉上「挨得很紧」。
+            val card = MaterialCardView(act)
+            applyCardLook(card, act, pal, RADIUS_CARD)
+            val box = LinearLayout(act)
+            box.orientation = LinearLayout.VERTICAL
+            rows.forEachIndexed { idx, r ->
+                if (idx > 0) {
+                    val gap = View(act)
+                    gap.setBackgroundColor(pal.surface)
+                    box.addView(gap, LinearLayout.LayoutParams(-1, dp(act, 1)))
                 }
-                card.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
+                box.addView(r, LinearLayout.LayoutParams(-1, -2))
             }
+            card.addView(box, android.view.ViewGroup.LayoutParams(-1, -2))
             return card
         }
 
@@ -865,17 +1060,36 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     iconRes: Int, title: String, sub: String?,
                     trailing: View?, onClick: Runnable?): LinearLayout {
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
             row.minimumHeight = dp(act, 56)
             if (iconRes != 0) {
+                // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
+                // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
+                // 色相族取自主题的 primary container，保证与动态取色同源。
+                val chip = android.widget.FrameLayout(act)
+                val tintHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.container, tintHsv)
+                tintHsv[0] = (tintHsv[0] + (iconRes % 5) * 52f) % 360f
+                val chipBg = android.graphics.Color.HSVToColor(tintHsv)
+                val glyphHsv = FloatArray(3)
+                android.graphics.Color.colorToHSV(pal.onContainer, glyphHsv)
+                glyphHsv[0] = tintHsv[0]
+                val chipFg = android.graphics.Color.HSVToColor(glyphHsv)
+                chip.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(chipBg)
+                }
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
-                ic.imageTintList = ColorStateList.valueOf(pal.onVariant)
-                val ilp = LinearLayout.LayoutParams(dp(act, 24), dp(act, 24))
-                ilp.marginEnd = dp(act, 8)
-                row.addView(ic, ilp)
+                ic.imageTintList = ColorStateList.valueOf(chipFg)
+                chip.addView(ic, android.widget.FrameLayout.LayoutParams(
+                        dp(act, 24), dp(act, 24), Gravity.CENTER))
+                val ilp = LinearLayout.LayoutParams(dp(act, 48), dp(act, 48))
+                ilp.marginEnd = dp(act, 16)
+                row.addView(chip, ilp)
             }
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL

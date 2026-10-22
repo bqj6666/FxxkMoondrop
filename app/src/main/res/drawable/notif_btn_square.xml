@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知档位按钮「选中态」形状：圆角方形（M3 Expressive 选中会从圆变圆角方）。
+     与未选中的 notif_btn_circle（正圆）成对使用，运行时按动态取色 tint。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="#FFFFFFFF" />
+</shape>

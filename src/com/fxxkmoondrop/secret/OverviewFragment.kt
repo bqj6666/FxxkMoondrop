@@ -64,12 +64,14 @@ class OverviewFragment : Fragment() {
     private var heroFg = 0
 
     /** alpha2.53: 手动刷新期间的线性进度条（BLE 重连要数秒，给了真实进度反馈） */
-    private var refreshBar: com.google.android.material.progressindicator.LinearProgressIndicator? = null
+    /** 刷新按钮本体与其内部的官方 LoadingIndicator */
+    private var refreshBtn: com.google.android.material.button.MaterialButton? = null
+    private var refreshSpin: View? = null
 
     /** 用户已确认过的「被跳过设备」名单（3.3.2），关闭提示卡时写入。 */
     private val KEY_SKIPPED_ACK = "skipped_notice_ack"
 
-    private val hideRefreshBar = Runnable { refreshBar?.visibility = View.GONE }
+    private val hideRefreshBar = Runnable { stopRefreshSpinner() }
     private var surfaceColor = 0
     private var onVariantColor = 0
     private var cardSurfaceColor = 0
@@ -296,7 +298,7 @@ class OverviewFragment : Fragment() {
         // alpha2.26.2: Material Experience —— M3 圆角卡片容器（card 色 + 28dp 圆角）
         ancRow.setPadding(dp(16), dp(16), dp(16), dp(16))
         // alpha2.52: 走统一卡片外观（AMOLED 纯黑下带发丝描边，避免卡片与背景同色"消失"）
-        ancRow.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         // 出场顺序与通知栏按钮同源（[AncProfileLib.ANC_UI_ORDER]）：降噪 / 关闭 / 通透 打头，
         // 自适应、抗风随后。数组仍按档位 id 索引，这里只改列的先后。
         // 直播(5) 在主界面没有槽位，仍只在通知里出现。
@@ -306,33 +308,46 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
+            // 官方 MaterialButton 只负责**形状 / 状态层 / 按压形变**，图标用一张居中的 ImageView 叠上去。
+            // 之前把自绘 drawable 塞进 MaterialButton.icon，走的是「文字前图标」布局：
+            // 没有文字时图标会被 paddingStart 顶到左边（也就是这次看到的“偏左、不在正中”）。
+            // 叠一层 ImageView + Gravity.CENTER，位置就是几何中心，与图标尺寸、padding 全部解耦。
             val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "fxxk_main_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "fxxk_main_icon"
-            icon.setImageDrawable(buildMainModeIcon(fm, dp(32), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(32), dp(32))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
-            holder.setOnClickListener {
+            val btn = com.google.android.material.button.MaterialButton(requireContext(), null,
+                    com.google.android.material.R.attr.materialIconButtonStyle)
+            btn.text = ""
+            btn.isCheckable = true
+            btn.isChecked = false
+            btn.insetLeft = 0
+            btn.insetRight = 0
+            btn.insetTop = 0
+            btn.insetBottom = 0
+            btn.setPadding(0, 0, 0, 0)
+            btn.tag = "anc_btn"
+            // 未选中 = surfaceContainer 圆底 / 选中 = primary 底（M3 filled icon button toggle 的配色）
+            btn.backgroundTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(primaryColor, containerColor))
+            btn.setOnClickListener {
                 AncBridge.setAncMode(fm)
                 ancMode = fm
                 updateAncStatus()
             }
+            holder.addView(btn, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val icon = ImageView(requireContext())
+            icon.tag = "fxxk_main_icon"
+            icon.isClickable = false          // 触摸交给底下的按钮，图标只负责画
+            icon.setImageDrawable(buildMainModeIcon(fm, dp(28), onContainerColor))
+            holder.addView(icon, android.widget.FrameLayout.LayoutParams(
+                    dp(28), dp(28), Gravity.CENTER))
             ancBtns!![fm] = holder
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
             ancCols!![fm] = col         // 3.2.20: 统一显隐用
-            // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
-            val sz = dp(72)
+            // 官方 Icon Button M 档：容器 56dp（图标 28dp + 四周 14dp），触摸区天然 56dp ≥ 48dp
+            val sz = dp(56)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(dp(2)))
             val lbl = TextView(requireContext())
@@ -379,8 +394,8 @@ class OverviewFragment : Fragment() {
         // alpha2.32: 扩展设备控制（空间音频/增益/LED）—— 圆形图标按钮 + 型号档案
         val dcCard = LinearLayout(requireContext())
         dcCard.orientation = LinearLayout.VERTICAL
-        dcCard.setPadding(dp(10), dp(12), dp(10), dp(12))
-        dcCard.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+        dcCard.setPadding(dp(16), dp(16), dp(16), dp(16))   // M3：卡片内容内边距 16dp（原 10/12 是散值）
+
 
         // 空间音频行（总开关）
         val dcSpatialRow = LinearLayout(requireContext())
@@ -421,24 +436,14 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 0, tm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 0, tm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_spatial_" + tm
-            holder.setOnClickListener {
+            // 必须挂在 MaterialButton 上：按钮本身可点会吃掉事件，挂在 FrameLayout 上的
+            // listener 永远不触发 —— 之前就是这个错，表现是「点了没反应、但按钮自己来回亮」。
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setTrackingModeByUser(tm)
                 refreshDcHighlight()
             }
@@ -473,24 +478,12 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 1, gm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 1, gm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_gain_" + gm
-            holder.setOnClickListener {
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setGain(gm)
                 refreshDcHighlight()
             }
@@ -526,24 +519,12 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 2, lm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 2, lm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_led_" + lm
-            holder.setOnClickListener {
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setLed(lm)
                 refreshDcHighlight()
             }
@@ -562,7 +543,7 @@ class OverviewFragment : Fragment() {
         }
         dcCard.addView(dcLedRow, LinearLayout.LayoutParams(-1, -2))
 
-        root.addView(dcCard, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), dcCard), lp(false))
         dcControlCard = dcCard
         root.addView(spacer(dp(8)))
 
@@ -584,8 +565,26 @@ class OverviewFragment : Fragment() {
         }
 
         // alpha2.52: 点击后短暂禁用，防止连点重复触发刷新
-        root.addView(makeButton(Lang.t("刷新状态 / 检查 Moondrop", "Refresh / Check Moondrop"),
-                R.drawable.ic_refresh, container, onContainer, 1500L) { showRefreshBar(); refreshAnc() })
+        // 3.3.x: 加载反馈改为**按钮内部**替换成官方 LoadingIndicator（M3 Expressive 加载组件），
+        // 不再在页面顶部单独挂一条 linear 进度条 —— 进度就该长在触发它的那个控件上。
+        val refreshBox = android.widget.FrameLayout(requireContext())
+        // 禁用/启用完全由加载态驱动（见 showRefreshBar / stopRefreshSpinner）：
+        // 之前用 1500ms 防连点，时间一到按钮就自己解禁，而刷新还在跑 —— 加载中看着像可点。
+        val refreshBtn = makeButton(Lang.t("刷新状态", "Refresh"),
+                R.drawable.ic_refresh, container, onContainer, 0L) { showRefreshBar(); refreshAnc() }
+        refreshBox.addView(refreshBtn, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+        val refreshSpin = com.google.android.material.loadingindicator.LoadingIndicator(requireContext())
+        refreshSpin.indicatorSize = dp(22)
+        refreshSpin.setIndicatorColor(onContainerColor)
+        refreshSpin.visibility = View.GONE
+        refreshBox.addView(refreshSpin, android.widget.FrameLayout.LayoutParams(
+                dp(22), dp(22), Gravity.CENTER))
+        refreshBox.addView(View(requireContext()), android.widget.FrameLayout.LayoutParams(-1, dp(2)))
+        this.refreshBtn = refreshBtn
+        this.refreshSpin = refreshSpin
+        root.addView(refreshBox, LinearLayout.LayoutParams(-1, -2))
 
         root.addView(spacer(dp(12)))
 
@@ -599,10 +598,6 @@ class OverviewFragment : Fragment() {
         outer.orientation = LinearLayout.VERTICAL
         outer.setBackgroundColor(surface)
         outer.setPadding(0, statusBarH, 0, 0)
-
-        refreshBar = M3Ui.linearLoader(requireContext(), container)
-        refreshBar!!.visibility = View.GONE
-        outer.addView(refreshBar, LinearLayout.LayoutParams(-1, -2))
 
         outer.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -731,8 +726,9 @@ class OverviewFragment : Fragment() {
                     val holder = col.getChildAt(k) as? android.widget.FrameLayout ?: continue
                     val tag = holder.tag as? String ?: continue
                     if (!tag.startsWith("dc_btn_")) continue
-                    val bgV = holder.findViewWithTag<View>("dc_bg")
-                    val iv = holder.findViewWithTag<View>("dc_icon") as? ImageView
+                    val btn = holder.findViewWithTag<View>("it_btn")
+                            as? com.google.android.material.button.MaterialButton
+                    val iv = holder.findViewWithTag<View>("it_img") as? ImageView
                     val parts = tag.substring(7).split("_")
                     if (parts.size != 2) continue
                     val feature = parts[0]
@@ -743,33 +739,16 @@ class OverviewFragment : Fragment() {
                         "led" -> idx == if (ledOn) 0 else 1
                         else -> false
                     }
-                    // 选中态底色是 primary；深色主题下 primary 本身是浅色，硬编码白前景对比度不足。
-                    // M3 规定 primary 上的内容用 onPrimary（深色主题 = 深色）。
-                    val iconColor = if (active) onPrimaryColor else onContainerColor
                     val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
-                    val spatialDisabled = feature == "spatial" && !spatialOn
-                    if (!connected || spatialDisabled) {
-                        holder.isEnabled = false
-                        holder.alpha = 0.4f
-                        if (bgV != null) {
-                            val g = GradientDrawable()
-                            g.shape = GradientDrawable.OVAL
-                            g.setColor(greyColor)
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
-                        }
-                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), onVariantColor))
-                    } else {
-                        holder.isEnabled = true
-                        holder.alpha = 1f
-                        if (bgV != null) {
-                            val g = GradientDrawable()
-                            g.shape = GradientDrawable.OVAL
-                            g.setColor(if (active) primaryColor else containerColor)
-                            if (active) g.setStroke(dp(2), onPrimaryColor)
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
-                        }
-                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), iconColor))
-                    }
+                    // 空间音频总开关关着时，追踪档位整组不可选
+                    val enabled = connected && !(feature == "spatial" && !spatialOn)
+                    // 状态全部交给官方控件：isChecked 驱动容器色，isEnabled 走官方 disabled 视觉。
+                    // 不再手绘 OVAL 圆底/描边，也不再自己压 alpha。
+                    btn?.isChecked = active
+                    btn?.isEnabled = enabled
+                    iv?.alpha = if (enabled) 1f else 0.38f
+                    iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(24),
+                            if (active) onPrimaryColor else if (enabled) onContainerColor else onVariantColor))
                 }
             }
         }
@@ -813,7 +792,7 @@ class OverviewFragment : Fragment() {
         val box = LinearLayout(ctx)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), dp(14), dp(16), dp(14))
-        box.background = M3Ui.cardBg(ctx, scheme, M3Ui.RADIUS_CARD)
+
 
         // 标题行：标题（占满剩余宽度）+ 关闭按钮
         val header = LinearLayout(ctx)
@@ -849,7 +828,7 @@ class OverviewFragment : Fragment() {
         desc.setTextColor(onVariantColor)
         desc.setPadding(0, dp(4), 0, 0)
         box.addView(desc)
-        return box
+        return M3Ui.wrapInCard(ctx, scheme, box)
     }
 
     /** 记下用户已确认过的被跳过设备名，之后同一设备不再重复提示。 */
@@ -875,29 +854,12 @@ class OverviewFragment : Fragment() {
     private fun makeButton(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                            debounceMs: Long = 0L, l: View.OnClickListener): MaterialButton {
         // alpha2.0: 官方 MaterialButton（Material3 按钮）+ 官方 Material Icons 图标
-        val b = MaterialButton(requireContext())
-        b.text = text
-        b.textSize = 14f
-        b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        b.setTextColor(textColor)
-        b.isAllCaps = false
-        b.gravity = Gravity.CENTER
-        b.insetTop = 0
-        b.insetBottom = 0
-        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
-        b.minHeight = dp(40)
-        b.minimumHeight = dp(40)
-        b.cornerRadius = dp(20)
-        b.backgroundTintList = ColorStateList.valueOf(bgColor)
+        // 交给官方 expressive 按钮：尺寸档（视觉 40dp + 4dp inset = 48dp 触摸区）、
+        // 圆角、按压缩放形变全由 materialSizeOverlay / shape state list 决定。
+        // 旧实现把 insetTop/Bottom 归零又手写 cornerRadius，触摸区只剩 40dp，还盖掉了形变。
+        val b = M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l, medium = true)
         b.elevation = if (bgColor == primaryColor) dp(1).toFloat() else 0f
-        if (iconRes != 0) {
-            b.setIconResource(iconRes)
-            b.iconTint = ColorStateList.valueOf(textColor)
-            b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            b.iconPadding = dp(8)
-            b.iconSize = dp(18)
-        }
-        b.setOnClickListener(if (debounceMs > 0L) guardClicks(b, debounceMs) { l.onClick(b) } else l)
+        if (debounceMs > 0L) b.setOnClickListener(guardClicks(b, debounceMs) { l.onClick(b) })
         return b
     }
 
@@ -1039,8 +1001,7 @@ class OverviewFragment : Fragment() {
                 val bg = GradientDrawable()
                 bg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
                 bg.cornerRadius = dp(12).toFloat()
-                val rd = RippleDrawable(
-                        ColorStateList.valueOf(if (isDark()) 0x33FFFFFF else 0x22000000), bg, null)
+                val rd = M3Ui.pressRipple(requireContext(), bg)
                 row.background = rd
                 row.setOnClickListener { fixPermission(per) }
             }
@@ -1282,9 +1243,8 @@ class OverviewFragment : Fragment() {
             row.setPadding(dp(12), dp(12), dp(12), dp(12))
             val rowBg = GradientDrawable()
             rowBg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
-            rowBg.cornerRadius = dp(14).toFloat()
-            val rd = RippleDrawable(
-                    ColorStateList.valueOf(if (isDark()) 0x33FFFFFF else 0x22000000), rowBg, null)
+            rowBg.cornerRadius = dp(12).toFloat()   // M3 形状档 small=8 / medium=12，14 是散值
+            val rd = M3Ui.pressRipple(requireContext(), rowBg)
             row.background = rd
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
@@ -1446,11 +1406,29 @@ class OverviewFragment : Fragment() {
     }
 
     /** alpha2.53: 刷新进度条显隐（超时兜底，避免状态回包丢失时长亮） */
+    /**
+     * 点击刷新的加载反馈：把按钮文字换成官方 LoadingIndicator，刷新结果回来自动复原。
+     * 位置就在按钮里面（替代原先挂在页面顶部、跟触发点分离的 linear 进度条）。
+     */
     private fun showRefreshBar() {
-        val b = refreshBar ?: return
+        val b = refreshBtn ?: return
+        val spin = refreshSpin ?: return
+        b.text = ""
+        b.icon = null
+        b.isEnabled = false          // 加载期间保持禁用：整块按钮不可点，也不会被误判为「可再点一次」
+        spin.visibility = View.VISIBLE
         b.removeCallbacks(hideRefreshBar)
-        b.visibility = View.VISIBLE
         b.postDelayed(hideRefreshBar, 6000L)
+    }
+
+    /** 复原按钮文案与图标（刷新完成/超时都走这里） */
+    private fun stopRefreshSpinner() {
+        val b = refreshBtn ?: return
+        if (b.text.isNullOrEmpty()) b.text = Lang.t("刷新状态", "Refresh")
+        if (b.icon == null) b.icon = androidx.core.content.ContextCompat.getDrawable(
+                requireContext(), R.drawable.ic_refresh)
+        refreshSpin?.visibility = View.GONE
+        b.isEnabled = true
     }
 
     /**
@@ -1644,22 +1622,17 @@ class OverviewFragment : Fragment() {
         ancBtns?.let { btns ->
             for (i in btns.indices) {
                 val hol = btns[i] ?: continue
-                hol.isEnabled = ancEnabled
-                hol.alpha = if (ancEnabled) 1f else 0.4f
+                hol.isEnabled = ancEnabled   // 官方 disabled 态自带 38% 视觉，不额外压 alpha
                 val sel = (i == ancMode)
-                val bgV = hol.findViewWithTag<View>("fxxk_main_bg")
-                if (bgV != null) {
-                    val g = GradientDrawable()
-                    g.shape = GradientDrawable.OVAL
-                    g.setColor(if (sel) primaryColor else containerColor)
-                    if (sel) g.setStroke(dp(2), onPrimaryColor) // M3: primary 底上的描边用 onPrimary
-                    bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
-                }
+                // 选中态交给官方 MaterialButton（isChecked 驱动容器色），图标单独换色
+                val mb = hol.findViewWithTag<View>("anc_btn")
+                        as? com.google.android.material.button.MaterialButton
+                mb?.isChecked = sel
+                mb?.isEnabled = ancEnabled
                 val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
-                if (iv != null) {
-                    iv.setImageDrawable(buildMainModeIcon(i, dp(26),
-                            if (sel) onPrimaryColor else onContainerColor))
-                }
+                iv?.setImageDrawable(buildMainModeIcon(i, dp(28),
+                        if (sel) onPrimaryColor else onContainerColor))
+                iv?.alpha = if (ancEnabled) 1f else 0.38f
                 ancLabels?.get(i)?.let {
                     it.setTextColor(if (sel) primaryColor else onContainerColor)
                     it.alpha = if (ancEnabled) 1f else 0.4f
@@ -1745,7 +1718,7 @@ class OverviewFragment : Fragment() {
     private fun buildStatusPanel(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         card.addView(makeStatusRow(R.drawable.ic_bluetooth, Lang.t("GAIA 状态", "GAIA Status"), 0),
                 LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_headphones, Lang.t("耳机连接", "Earbud Connection"), 1),
@@ -1757,7 +1730,7 @@ class OverviewFragment : Fragment() {
         battRowShown = false
         battRow?.visibility = View.GONE
         card.addView(battRow, LinearLayout.LayoutParams(-1, -2))
-        root.addView(card, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), card), lp(false))
     }
 
     private fun makeStatusRow(iconRes: Int, title: String, which: Int): LinearLayout {
@@ -1804,7 +1777,7 @@ class OverviewFragment : Fragment() {
     private fun buildDeviceInfoCard(root: LinearLayout) {
         val card = LinearLayout(requireContext())
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(requireContext(), ThemeUtil.Palette(requireContext()), M3Ui.RADIUS_CARD)
+
         card.addView(makeStatusRow(R.drawable.ic_devices,
                 Lang.t("设备名称", "Device name"), 3), LinearLayout.LayoutParams(-1, -2))
         card.addView(makeStatusRow(R.drawable.ic_settings_ethernet,
@@ -1814,7 +1787,7 @@ class OverviewFragment : Fragment() {
         // alpha2.52: 未连接 GAIA 时整卡隐藏（名称/地址/档案均无意义）
         card.visibility = View.GONE
         devInfoCard = card
-        root.addView(card, lp(false))
+        root.addView(M3Ui.wrapInCard(requireContext(), ThemeUtil.Palette(requireContext()), card), lp(false))
     }
 
     private val DASH = "—"
@@ -1924,9 +1897,9 @@ class OverviewFragment : Fragment() {
         b.setPadding(dp(24), dp(11), dp(24), dp(11))
         val g = GradientDrawable()
         g.setColor(if (filled) primaryColor else containerColor)
-        g.cornerRadius = dp(24).toFloat()
-        val rd = RippleDrawable(
-                ColorStateList.valueOf(if (filled) 0x33FFFFFF else 0x33000000), g, null)
+        g.cornerRadius = dp(20).toFloat()   // 与弹窗里另一颗按钮统一：40dp 高 -> 全圆 20dp
+        // M3 统一状态层：不再区分「填充/未填充」两套写死的白色/黑色蒙层
+        val rd = M3Ui.pressRipple(requireContext(), g)
         b.background = rd
         b.setTextColor(if (filled) onPrimaryColor else onContainerColor)
         b.setOnClickListener(onClick)
@@ -1941,10 +1914,10 @@ class OverviewFragment : Fragment() {
         b.textSize = 14f
         b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         b.gravity = Gravity.CENTER
-        b.setPadding(dp(22), dp(11), dp(22), dp(11))
+        b.setPadding(dp(24), dp(11), dp(24), dp(11))
         val g = GradientDrawable()
         g.setColor(0x14000000)
-        g.cornerRadius = dp(22).toFloat()
+        g.cornerRadius = dp(20).toFloat()   // 同上，22/24 两种圆角是历史遗留，统一成全圆
         val rd = RippleDrawable(
                 ColorStateList.valueOf(0x1F000000), g, null)
         b.background = rd

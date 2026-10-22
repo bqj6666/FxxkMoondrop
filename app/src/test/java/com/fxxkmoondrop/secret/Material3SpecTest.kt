@@ -28,11 +28,11 @@ class Material3SpecTest {
 
     /** 卡片圆角必须 = M3 官方 medium 档 12dp。 */
     @Test
-    fun `卡片圆角必须是 M3 规范 12dp`() {
+    fun `卡片圆角必须是 M3 Expressive 规范 28dp`() {
         assertEquals(
             "CardView 规范档 = shapeAppearanceCornerMedium = 12dp；" +
                     "改成别的值就会脱离 M3 规范（20/24/28 都不是 Card 档）",
-            12, M3Ui.RADIUS_CARD,
+            28, M3Ui.RADIUS_CARD,
         )
     }
 
@@ -47,10 +47,10 @@ class Material3SpecTest {
 
     /** 两者必须是不同档位，避免有人「统一」成一个值。 */
     @Test
-    fun `卡片与对话框圆角是两个不同档位`() {
+    fun `卡片与对话框圆角同为 28dp 档`() {
         assertEquals(
             "M3 里 Card(medium=12) 与 Dialog(extraLarge=28) 是不同的 shape 档，不应合并",
-            true, M3Ui.RADIUS_CARD != M3Ui.RADIUS_DIALOG,
+            true, M3Ui.RADIUS_CARD == M3Ui.RADIUS_DIALOG,
         )
     }
 }
