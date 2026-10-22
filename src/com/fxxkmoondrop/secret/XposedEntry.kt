@@ -840,9 +840,22 @@ class XposedEntry : XposedModule() {
             fetchDcState(ctx, detailDeviceName(thisObj))
             refreshOfficialRows()
         }
-        val sliceUri = controlSliceUri(cl, ctx, detailDevice(thisObj))
         val screenObj = HookHelper.callMethod(thisObj, "getPreferenceScreen")
-        if (sliceUri != null) attachControlSlice(cl, ctx, screenObj, sliceUri)
+        // ── 官方面板优先，拿不到内容才回退到我们自己的 provider ──────────────
+        // 原生支持 hearable 的系统（如 AVIUM）GMS 能返回切片 -> 行为与以前一致；
+        // UWU 这类 GMS 返回 null 的，用我们自己实现的 SliceProvider 顶上，
+        // 仍然由系统官方 SliceView 渲染。两边都只对水月雨设备生效。
+        val gmsUri = controlSliceUri(cl, ctx, detailDevice(thisObj))
+        val useGms = gmsUri != null && ctx != null && sliceHasContent(ctx, gmsUri)
+        if (useGms || ctx != null) {
+            val devName = detailDeviceName(thisObj)
+            val addr = addressOf(detailDevice(thisObj))
+            val uri = if (useGms) gmsUri else
+                (if (addr != null) HearableSliceProvider.uriFor(addr, devName) else null)
+            Log.i(TAG, "sliceChoose: gms=" + (gmsUri != null) + " useGms=" + useGms +
+                    " own=" + (!useGms) + " uri=" + uri)
+            if (uri != null) attachControlSlice(cl, ctx, screenObj, uri)
+        }
         // 三行（切片 / 官方加载行 / 我们的面板）的显示与位置统一走 applyControlSliceState。
         applyControlSliceState(cl, ctx, thisObj)
         watchDetailState(cl, ctx, thisObj)
@@ -926,7 +939,7 @@ class XposedEntry : XposedModule() {
             try {
                 val sliceCat = HookHelper.callMethod(screen, "findPreference", "bt_device_slice_category")
                 if (sliceCat != null) {
-                    HookHelper.callMethod(sliceCat, "setVisible", hasSlice)
+                    HookHelper.callMethod(sliceCat, "setVisible", hasSlice || sourceSliceAttached)
                     Log.i(TAG, "sliceCategory: hasSlice=" + hasSlice +
                             " visible=" + HookHelper.callMethod(sliceCat, "isVisible"))
                 } else {
@@ -1161,6 +1174,28 @@ class XposedEntry : XposedModule() {
         }
     }
 
+    /** 是否已经挂上过切片（官方的或我们自己的），用于让承载分类显形 */
+    @Volatile
+    private var sourceSliceAttached = false
+
+    /** 探测某个 slice URI 是否能 bind 出内容（系统 SliceManager，反射以绕过隐藏 API）。 */
+    private fun sliceHasContent(ctx: Context, uri: android.net.Uri): Boolean = try {
+        val smCls = Class.forName("android.app.slice.SliceManager")
+        val sm = runCatching { ctx.getSystemService("slice") }.getOrNull()
+        val bind = smCls.declaredMethods.firstOrNull {
+            it.name == "bindSlice" && it.parameterTypes.size == 2
+        }?.apply { isAccessible = true }
+        val slice = if (sm != null && bind != null)
+            bind.invoke(sm, uri, java.util.Collections.emptySet<Any>()) else null
+        val items = slice?.javaClass?.getMethod("getItems")?.invoke(slice) as? List<*>
+        (items?.size ?: 0) > 0
+    } catch (_: Throwable) { false }
+
+    /** 详情页设备的蓝牙地址 */
+    private fun addressOf(device: Any?): String? = try {
+        HookHelper.callMethod(device, "getAddress") as? String
+    } catch (_: Throwable) { null }
+
     /**
      * 把「耳机控制」切片挂到 SlicePreference 上，走官方同一套流程：
      * 控制器 setSliceUri -> displayPreference -> onStart。
@@ -1174,6 +1209,7 @@ class XposedEntry : XposedModule() {
             HookHelper.callMethod(ctrl, "setSliceUri", uri)
             HookHelper.callMethod(ctrl, "displayPreference", screen)
             HookHelper.callMethod(ctrl, "onStart")
+            sourceSliceAttached = true
             Log.i(TAG, "control slice attached: $uri")
             // 诊断：1.5s 后直接问一次这个 slice，看 GMS 到底有没有返回内容。
             // 「行 visible=true 但界面上是空的」= 切片本身没内容，不是我们藏掉的。
