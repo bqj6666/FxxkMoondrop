@@ -466,7 +466,7 @@ class OnboardingActivity : Activity() {
 
         // 后台监听总开关：开启即开始监听，启动 / 开机自动恢复；连上耳机直连 GAIA。
         val swAuto = m3Switch()
-        swAuto.isChecked = sp().getBoolean("enable", true) && sp().getBoolean("auto_service", true)
+        swAuto.isChecked = KeepAlive.enabled(this)
         rows.add(M3Ui.listRow(this, pal, R.drawable.ic_sensors,
                 Lang.t(this, "后台监听（总开关）", "Background monitor (master)"),
                 Lang.t(this,
@@ -475,15 +475,7 @@ class OnboardingActivity : Activity() {
                 swAuto, null))
         swAuto.setOnCheckedChangeListener { _, checked ->
             // 两个偏好键始终同步写入（与设置页一致）；关闭时真正停止服务并取消看门狗。
-            sp().edit().putBoolean("auto_service", checked).putBoolean("enable", checked).apply()
-            if (checked) {
-                HeadsetDetectService.RUNNING = true
-                try { startService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
-            } else {
-                AliveReceiver.cancel(this)
-                HeadsetDetectService.RUNNING = false
-                try { stopService(Intent(this, HeadsetDetectService::class.java)) } catch (_: Exception) { }
-            }
+            KeepAlive.setEnabled(this, checked)
         }
 
         val swBatt = m3Switch()

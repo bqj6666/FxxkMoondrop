@@ -93,12 +93,14 @@ class EqActivity : Activity() {
         root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
 
         setContentView(root)
+        GaiaBleClient.getInstance().retainConnection(this)
         load()
     }
 
     override fun onDestroy() {
         alive = false
         ui.removeCallbacksAndMessages(null)
+        GaiaBleClient.instance?.releaseConnection(this)
         super.onDestroy()
     }
 

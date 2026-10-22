@@ -164,7 +164,7 @@ com.android.settings          # 设置页耳机入口 + 蓝牙设备详情页控
 
 | 类 | 说明 |
 |---|---|
-| `HeadsetDetectService` | 常驻后台服务（普通 Service，**非前台服务**，全仓无 `startForeground` 调用）；蓝牙连接监听 + GAIA 直连 + ANC 轮询。**manifest 中未声明 `foregroundServiceType`**，也未申请任何 `FOREGROUND_SERVICE*` 权限 |
+| `HeadsetDetectService` | 连接期间运行的普通后台 Service，**非前台服务**；无耳机时停止，系统蓝牙广播恢复监听，非唤醒看门狗兜底。蓝牙连接监听 + GAIA 直连 + ANC 轮询。**manifest 中未声明 `foregroundServiceType`**，也未申请任何 `FOREGROUND_SERVICE*` 权限 |
 
 ### ContentProvider
 

@@ -9,17 +9,8 @@ import android.provider.Settings
 import android.util.Log
 
 /**
- * 保活（3.0.5 起默认常开，不再需要 Root，也不再保留开关）。
- *
- * 组成：
- * 1. 开机自启 —— `BootReceiver`（BOOT_COMPLETED）+ 服务拉起，无需 Root；
- * 2. 看门狗 —— `AliveReceiver` 30 秒 AlarmManager + `START_STICKY` 兜底，无需 Root；
- * 3. 电池优化白名单 —— 防 Doze 冻结，改用系统弹窗
- *    `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`，同样**无需 Root**
- *    （旧实现只能用 `dumpsys deviceidle whitelist +pkg` 走 Root，才需要授权）。
- *
- * 有 Root 时仍额外做两件纯增强（静默，失败不影响）：进白名单 + appops 放开后台运行。
- * 也就是说：**Root 从此只是可选增强，不再是保活的前提**。
+ * Background monitoring starts on boot/connection events; its fallback alarm never wakes the CPU.
+ * Battery exemptions remain a user choice, including on rooted devices.
  */
 object KeepAlive {
 
@@ -28,15 +19,53 @@ object KeepAlive {
     /** 「是否已经问过白名单」的标记：只主动弹一次系统窗，不骚扰用户。 */
     private const val SP_ASKED = "whitelist_asked"
 
-    /** 是否有 root 时做过静默增强（每进程一次）。 */
-    @Volatile private var rootEnhanceDone = false
-
     /** 保活总开关：沿用「后台监听」总开关（enable && auto_service）。 */
     @JvmStatic
     fun enabled(ctx: Context?): Boolean {
         val c = ctx ?: return false
         val sp = c.getSharedPreferences("cfg", Context.MODE_PRIVATE)
         return sp.getBoolean("enable", true) && sp.getBoolean("auto_service", true)
+    }
+
+    // Persist intentional idle so an already-queued alarm cannot mistake it for process death.
+    private const val SP_IDLE = "monitor_idle"
+
+    @JvmStatic
+    fun shouldRecover(ctx: Context): Boolean = enabled(ctx) &&
+            !ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean(SP_IDLE, false)
+
+    @JvmStatic
+    fun markIdle(ctx: Context) {
+        ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean(SP_IDLE, true).apply()
+        AliveReceiver.cancel(ctx)
+    }
+
+    @JvmStatic
+    fun wake(ctx: Context) {
+        ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean(SP_IDLE, false).apply()
+    }
+
+    /** Keep all settings screens and onboarding on the same start/stop path. */
+    @JvmStatic
+    fun setEnabled(c: Context, enabled: Boolean) {
+        c.getSharedPreferences("cfg", Context.MODE_PRIVATE).edit()
+            .putBoolean("enable", enabled).putBoolean("auto_service", enabled)
+            .putBoolean(SP_IDLE, !enabled).apply()
+        if (enabled) {
+            try {
+                c.startService(Intent(c, HeadsetDetectService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "start monitor failed", e)
+            }
+        } else {
+            AliveReceiver.cancel(c)
+            try {
+                c.stopService(Intent(c, HeadsetDetectService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "stop monitor failed", e)
+            }
+            GaiaBleClient.instance?.shutdown()
+        }
     }
 
     /** 是否已在电池优化白名单里。 */
@@ -52,19 +81,21 @@ object KeepAlive {
     }
 
     /**
-     * 幂等入口：排下一次看门狗 + （有 root 时）静默做系统级增强。
+     * 幂等入口：排下一次非唤醒看门狗，不修改用户的电池优化设置。
      * App 启动、服务创建、开机自启都会调它。
      */
     @JvmStatic
     fun ensure(ctx: Context?) {
         val c = ctx ?: return
-        if (!enabled(c)) return
+        if (!shouldRecover(c)) {
+            AliveReceiver.cancel(c)
+            return
+        }
         try {
             AliveReceiver.scheduleNext(c)
         } catch (t: Throwable) {
             Log.w(TAG, "schedule keepalive failed: $t")
         }
-        enhanceWithRootIfPossible(c)
     }
 
     /**
@@ -100,24 +131,4 @@ object KeepAlive {
         }
     }
 
-    /** 有 root 时的纯增强：deviceidle 白名单 + appops 后台运行（静默，每进程一次）。 */
-    private fun enhanceWithRootIfPossible(ctx: Context) {
-        if (rootEnhanceDone) return
-        if (!enabled(ctx)) return
-        rootEnhanceDone = true
-        Thread {
-            try {
-                if (!RootShell.isAvailable()) return@Thread
-                val pkg = ctx.packageName
-                val cmd = "dumpsys deviceidle whitelist +" + pkg + "; " +
-                        "appops set " + pkg + " RUN_IN_BACKGROUND allow; " +
-                        "appops set " + pkg + " RUN_ANY_IN_BACKGROUND allow; " +
-                        "appops set " + pkg + " START_FOREGROUND allow; echo DONE"
-                val out = RootShell.exec(cmd)
-                Log.i(TAG, "root 保活增强: " + (if (out != null && out.contains("DONE")) "ok" else "fail"))
-            } catch (t: Throwable) {
-                Log.w(TAG, "root enhance failed: $t")
-            }
-        }.start()
-    }
 }
