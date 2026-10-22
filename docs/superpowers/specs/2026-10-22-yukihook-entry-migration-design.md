@@ -150,3 +150,29 @@ B′ 之后 **4711 行 hook 代码不依赖任何 YukiHook API**（只依赖 `Xp
 | 构建链多一环 KSP | 新增失败方式（已踩 4 坑） | 坑已记录进记忆；`ksp(platform())` 已明确 |
 | 热重载语义不完全等价 | receiver 残留 / 重复注册 | 第六节判据 4 专项验证 |
 | 生成 `module.prop` 字段变少 | 旧 LSPosed 版本可能依赖 id/name | 已实测当前 LSPosed 不受影响；回滚点可用 |
+
+## 十、后续变更：minSdk 提升到 Android 12（API 31）
+
+已由主人拍板，**之后**执行；不属于 B′，独立提交。
+
+**牵动面（实测）**
+
+| 位置 | 内容 |
+|---|---|
+| `app/build.gradle.kts:19` | `minSdk = 26` |
+| `DEVELOPMENT.md:14` | 文档表格 `minSdk / targetSdk | 26 / 36` |
+| 约 20 处版本分支 | `DeviceNotif`(5) / `GaiaBleClient`(5) / `XposedEntry`(2) / `HeadsetDetectService`(2) / `AncTileService`(2) / `OnboardingActivity` / `EnvProbe` / `LogCollector` / `M3Ui` / `MiuixComponents` 里的 `SDK_INT` 与 `VERSION_CODES` 判断 |
+| `AndroidManifest.xml` | `BLUETOOTH` 与 `BLUETOOTH_SCAN(maxSdkVersion=…)` 两条旧权限可收（31+ 由 `BLUETOOTH_CONNECT` / `BLUETOOTH_SCAN` 取代） |
+
+**收益**
+
+1. 运行时权限模型简化：`BLUETOOTH_CONNECT` 成为必填，不再有"31 以下没这个权限"的分支
+2. 删掉一批 `if (SDK_INT >= S)`，减少一类"只在老系统上错"的静默失败
+3. 收窄 issue #16 的验证面：作者要求"在 API 26–30 上也要验"的部分不再需要
+
+**代价 / 风险**
+
+1. **Android 8–11 的用户将再也收不到更新**（破坏性变更），必须在 CHANGELOG 与发布页明示
+2. 老 OEM 机型上的蓝牙行为差异不再被覆盖
+
+**顺序**：B′ 验完 → 再单独做 minSdk 31（一次性、可回滚、影响面清晰）
