@@ -299,16 +299,14 @@ class M3Ui {
         /** 统一的卡片外观（MaterialCardView 版）：AMOLED 下同样带描边，避免卡片"消失" */
         @JvmStatic
         fun applyCardLook(card: MaterialCardView, c: Context, pal: ThemeUtil.Palette, radiusDp: Int) {
+            // M3 **Outlined Card** 规范：容器色 = surface（与页面同色），描边 1dp + outlineVariant，
+            // 无高度（elevation 0），分层完全由描边承担。
+            // 原实现是「填充 + 描边」的混合体（容器取 surfaceContainer），既不是 Filled 也不是 Outlined。
             card.radius = dp(c, radiusDp).toFloat()
-            card.setCardBackgroundColor(pal.card)
+            card.setCardBackgroundColor(pal.surface)
             card.cardElevation = 0f
-            if (pal.cardStroke != 0) {
-                // M3 Outlined Card 的描边为 1dp（原为 0.75dp 发丝线）
-                card.strokeWidth = dp(c, 1)
-                card.strokeColor = pal.cardStroke
-            } else {
-                card.strokeWidth = 0
-            }
+            card.strokeWidth = dp(c, 1)
+            card.strokeColor = pal.cardStroke
         }
 
         /**
