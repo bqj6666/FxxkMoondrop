@@ -166,15 +166,15 @@ class M3Ui {
         fun dp(c: Context, v: Int): Int = Math.round(v * c.resources.displayMetrics.density)
 
         /**
-         * M3 状态层水波纹：按下色取主题主色 12% 不透明度，
-         * 取代各页面里写死的 `0x33000000`（20% 黑，深色主题下几乎不可见）。
+         * M3 状态层水波纹：按下色取**内容色（onSurface）12%** —— 这是 M3 对 surface 容器的规范；
+         * 用主色会因浅色主题下主色本身很亮而几乎看不见（实测反馈：没有按下反馈）。
          * @param content 形状（圆角矩形/圆形），为 null 时只提供光晕
          */
         @JvmStatic
         fun pressRipple(c: Context, content: android.graphics.drawable.Drawable?): android.graphics.drawable.RippleDrawable {
             val pal = ThemeUtil.Palette(c)
             return android.graphics.drawable.RippleDrawable(
-                    android.content.res.ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000),
+                    android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000),
                     content, null)
         }
 

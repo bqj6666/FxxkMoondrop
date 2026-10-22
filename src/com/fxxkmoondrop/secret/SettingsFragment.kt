@@ -224,14 +224,17 @@ class SettingsFragment : Fragment() {
         }
         if (!ThemeUtil.dynColor(requireContext())) {
             appear.addView(spacer(dp(12)))
-            appear.addView(wrapCard(seedRow!!), LinearLayout.LayoutParams(-1, -2))
+            // 动画必须作用在**卡片容器**上：MaterialCardView 按形状裁剪子视图，
+            // 对卡片内部的行走 translationY 会被裁掉，表现为卡片与内容错位。
+            val seedCard = wrapCard(seedRow!!)
+            appear.addView(seedCard, LinearLayout.LayoutParams(-1, -2))
             // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
-            seedRow!!.alpha = 0f
-            seedRow!!.translationY = dp(8).toFloat()
+            seedCard.alpha = 0f
+            seedCard.translationY = dp(8).toFloat()
             // alpha2.54: 必须捕获局部引用 —— onDestroyView 会把 seedRow 置空，
             // 延迟回调里再解引用（seedRow!!）会抛 KotlinNullPointerException。
             // 视图已分离时跳过动画即可，不影响正确性。
-            val seedAnim = seedRow
+            val seedAnim = seedCard
             if (seedAnim != null) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (seedAnim.parent != null) {
