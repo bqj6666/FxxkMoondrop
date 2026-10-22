@@ -949,29 +949,9 @@ class SettingsFragment : Fragment() {
 
     private fun makeM3Button(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                              l: View.OnClickListener): MaterialButton {
-        val b = MaterialButton(requireContext())
-        b.text = text
-        b.textSize = 14f
-        b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        b.setTextColor(textColor)
-        b.isAllCaps = false
-        b.gravity = Gravity.CENTER
-        b.insetTop = 0
-        b.insetBottom = 0
-        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
-        b.minHeight = dp(40)
-        b.setMinimumHeight(dp(40))
-        b.setCornerRadius(dp(20))
-        b.backgroundTintList = ColorStateList.valueOf(bgColor)
-        if (iconRes != 0) {
-            b.setIconResource(iconRes)
-            b.setIconTint(ColorStateList.valueOf(textColor))
-            b.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START)
-            b.setIconPadding(dp(8))
-            b.setIconSize(dp(18))
-        }
-        b.setOnClickListener(l)
-        return b
+        // 同 OverviewFragment.makeButton：尺寸档/触摸区/形变交给官方 expressive 按钮，
+        // 不再手写 inset + cornerRadius（那样触摸区只有 40dp）。
+        return M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l)
     }
 
     private fun makeTintedSwitch(): MaterialSwitch {

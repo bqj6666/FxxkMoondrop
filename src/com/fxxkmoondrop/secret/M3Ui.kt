@@ -837,6 +837,39 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             return b
         }
 
+        /**
+         * M3（expressive）动作按钮：**不手写尺寸与形状**。
+         *
+         * Widget.Material3Expressive.Button 由 materialSizeOverlay 决定尺寸档
+         * （视觉 40dp + 上下 inset 各 4dp = **48dp 触摸区**），形状走
+         * m3expressive_button_shape_state_list（按下有官方形变）。
+         * 旧的 makeButton / makeM3Button 把 insetTop/Bottom 归零、又手写 cornerRadius=20dp
+         * 和 minHeight=40dp，等于把尺寸档和状态形变全盖掉：看着一样高，
+         * **触摸区只剩 40dp**（低于 48dp 无障碍下限），按下去也没有形变。
+         */
+        @JvmStatic
+        fun actionButton(c: Context, text: String, iconRes: Int,
+                         bgColor: Int, fgColor: Int,
+                         onClick: View.OnClickListener): MaterialButton {
+            val b = MaterialButton(c)
+            b.text = text
+            b.textSize = 14f
+            b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            b.setTextColor(fgColor)
+            b.isAllCaps = false
+            b.gravity = Gravity.CENTER
+            b.backgroundTintList = ColorStateList.valueOf(bgColor)
+            if (iconRes != 0) {
+                b.setIconResource(iconRes)
+                b.iconTint = ColorStateList.valueOf(fgColor)
+                b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                b.iconPadding = dp(c, 8)
+                b.iconSize = dp(c, 18)
+            }
+            b.setOnClickListener(onClick)
+            return b
+        }
+
         /** 底部导航选中 tab：1=概览 / 2=设置 / 3=关于 */
         fun interface OnNavTab {
             fun onTab(id: Int)

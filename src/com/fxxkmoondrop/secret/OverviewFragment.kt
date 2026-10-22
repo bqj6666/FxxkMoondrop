@@ -875,29 +875,12 @@ class OverviewFragment : Fragment() {
     private fun makeButton(text: String, iconRes: Int, bgColor: Int, textColor: Int,
                            debounceMs: Long = 0L, l: View.OnClickListener): MaterialButton {
         // alpha2.0: 官方 MaterialButton（Material3 按钮）+ 官方 Material Icons 图标
-        val b = MaterialButton(requireContext())
-        b.text = text
-        b.textSize = 14f
-        b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        b.setTextColor(textColor)
-        b.isAllCaps = false
-        b.gravity = Gravity.CENTER
-        b.insetTop = 0
-        b.insetBottom = 0
-        // M3 规范：按钮高 40dp、圆角 20dp（触摸目标由 MaterialButton 自动扩到 48dp）
-        b.minHeight = dp(40)
-        b.minimumHeight = dp(40)
-        b.cornerRadius = dp(20)
-        b.backgroundTintList = ColorStateList.valueOf(bgColor)
+        // 交给官方 expressive 按钮：尺寸档（视觉 40dp + 4dp inset = 48dp 触摸区）、
+        // 圆角、按压缩放形变全由 materialSizeOverlay / shape state list 决定。
+        // 旧实现把 insetTop/Bottom 归零又手写 cornerRadius，触摸区只剩 40dp，还盖掉了形变。
+        val b = M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l)
         b.elevation = if (bgColor == primaryColor) dp(1).toFloat() else 0f
-        if (iconRes != 0) {
-            b.setIconResource(iconRes)
-            b.iconTint = ColorStateList.valueOf(textColor)
-            b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            b.iconPadding = dp(8)
-            b.iconSize = dp(18)
-        }
-        b.setOnClickListener(if (debounceMs > 0L) guardClicks(b, debounceMs) { l.onClick(b) } else l)
+        if (debounceMs > 0L) b.setOnClickListener(guardClicks(b, debounceMs) { l.onClick(b) })
         return b
     }
 
