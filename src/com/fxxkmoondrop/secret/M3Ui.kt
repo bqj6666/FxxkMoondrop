@@ -165,6 +165,19 @@ class M3Ui {
         @JvmStatic
         fun dp(c: Context, v: Int): Int = Math.round(v * c.resources.displayMetrics.density)
 
+        /**
+         * M3 状态层水波纹：按下色取主题主色 12% 不透明度，
+         * 取代各页面里写死的 `0x33000000`（20% 黑，深色主题下几乎不可见）。
+         * @param content 形状（圆角矩形/圆形），为 null 时只提供光晕
+         */
+        @JvmStatic
+        fun pressRipple(c: Context, content: android.graphics.drawable.Drawable?): android.graphics.drawable.RippleDrawable {
+            val pal = ThemeUtil.Palette(c)
+            return android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000),
+                    content, null)
+        }
+
         /** 发丝线宽（AMOLED 纯黑下卡片描边用，任意 dpi 下都保持 1px 级别，不显得笨重） */
         @JvmStatic
         fun hairline(c: Context): Int =

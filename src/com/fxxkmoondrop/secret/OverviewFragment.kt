@@ -312,7 +312,7 @@ class OverviewFragment : Fragment() {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            bg.background = M3Ui.pressRipple(requireContext(), g0)
             holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
@@ -427,7 +427,7 @@ class OverviewFragment : Fragment() {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            bg.background = M3Ui.pressRipple(requireContext(), g0)
             holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
@@ -479,7 +479,7 @@ class OverviewFragment : Fragment() {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            bg.background = M3Ui.pressRipple(requireContext(), g0)
             holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
@@ -532,7 +532,7 @@ class OverviewFragment : Fragment() {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerColor)
-            bg.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            bg.background = M3Ui.pressRipple(requireContext(), g0)
             holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
@@ -755,7 +755,7 @@ class OverviewFragment : Fragment() {
                             val g = GradientDrawable()
                             g.shape = GradientDrawable.OVAL
                             g.setColor(greyColor)
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                            bgV.background = M3Ui.pressRipple(requireContext(), g)
                         }
                         iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), onVariantColor))
                     } else {
@@ -766,7 +766,7 @@ class OverviewFragment : Fragment() {
                             g.shape = GradientDrawable.OVAL
                             g.setColor(if (active) primaryColor else containerColor)
                             if (active) g.setStroke(dp(2), onPrimaryColor)
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                            bgV.background = M3Ui.pressRipple(requireContext(), g)
                         }
                         iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), iconColor))
                     }
@@ -1653,7 +1653,7 @@ class OverviewFragment : Fragment() {
                     g.shape = GradientDrawable.OVAL
                     g.setColor(if (sel) primaryColor else containerColor)
                     if (sel) g.setStroke(dp(2), onPrimaryColor) // M3: primary 底上的描边用 onPrimary
-                    bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                    bgV.background = M3Ui.pressRipple(requireContext(), g)
                 }
                 val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
                 if (iv != null) {
@@ -1925,8 +1925,8 @@ class OverviewFragment : Fragment() {
         val g = GradientDrawable()
         g.setColor(if (filled) primaryColor else containerColor)
         g.cornerRadius = dp(24).toFloat()
-        val rd = RippleDrawable(
-                ColorStateList.valueOf(if (filled) 0x33FFFFFF else 0x33000000), g, null)
+        // M3 统一状态层：不再区分「填充/未填充」两套写死的白色/黑色蒙层
+        val rd = M3Ui.pressRipple(requireContext(), g)
         b.background = rd
         b.setTextColor(if (filled) onPrimaryColor else onContainerColor)
         b.setOnClickListener(onClick)

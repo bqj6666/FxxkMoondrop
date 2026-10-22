@@ -223,7 +223,7 @@ object ControlPanel {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerCol)
-            b.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            b.background = M3Ui.pressRipple(ctx, g0)
             holder.addView(b, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(ctx)
@@ -272,7 +272,7 @@ object ControlPanel {
             val g0 = GradientDrawable()
             g0.shape = GradientDrawable.OVAL
             g0.setColor(containerCol)
-            b.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g0, null)
+            b.background = M3Ui.pressRipple(ctx, g0)
             holder.addView(b, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(ctx)
@@ -365,7 +365,7 @@ object ControlPanel {
                             val g = GradientDrawable()
                             g.shape = GradientDrawable.OVAL
                             g.setColor(grey)
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                            bgV.background = M3Ui.pressRipple(ctx, g)
                         }
                         iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), grey))
                     } else {
@@ -376,7 +376,7 @@ object ControlPanel {
                             g.shape = GradientDrawable.OVAL
                             g.setColor(if (active) primary else containerCal)
                             if (active) g.setStroke(dp(2), onPrimaryOf(ctx))
-                            bgV.background = RippleDrawable(ColorStateList.valueOf(0x33000000), g, null)
+                            bgV.background = M3Ui.pressRipple(ctx, g)
                         }
                         iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), iconColor))
                     }
