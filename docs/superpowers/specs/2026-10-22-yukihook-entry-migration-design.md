@@ -176,3 +176,25 @@ B′ 之后 **4711 行 hook 代码不依赖任何 YukiHook API**（只依赖 `Xp
 2. 老 OEM 机型上的蓝牙行为差异不再被覆盖
 
 **顺序**：B′ 验完 → 再单独做 minSdk 31（一次性、可回滚、影响面清晰）
+
+## 十一、实测结论（2026-10-22）：B′ 在 YukiHook 1.5.0 上受阻，决定等待
+
+**结论：B′ 依赖的两条桥在 1.5.0 里都不可用，是实现条件不具备，不是实现错误。**
+
+1. `registerFrameworkEvents`（`com.highcapable.yukihookapi.hook.xposed.bridge.event`）**是公开的**，但它交出的事件对象 `YukiHookLibXposedEvent` 的**属性是 `internal`** —— `javap` 可见 setter 名为 `setModuleLoaded$yukihook_runtime_libxposed`（带模块后缀即 internal），外部模块无法赋值。文档中的 `onModuleLoaded { }` / `onPackageReady { }` 等 DSL 在 1.5.0 的同名文件里**不存在**（master 文档领先于发布版）。
+2. 退路 `encase { }` 也不可用：`PackageParam` 的公开 getter 只有 `hostClassLoader` / `packageName` / `processName` / `module` / `preferences` / `sharedFiles` / `dataChannel` / `remember` 等，**没有 `XposedInterface`**，因此无法从 `encase` 里安装裸 libxposed hook。
+
+**已完成的准备工作**（保留在分支 `exp/yukihook-entry`，提交 `bd61952`，未推送）：
+
+- 构建链：Kotlin 2.4.21 + KSP 2.3.12 + `yukihook-bom/core/runtime-libxposed/compiler`（含必须的 `ksp(platform(bom))`）
+- `YukiEntry` 入口草稿、`XposedEntry` 注入式改造（`hook()` 垫片）、hook 类 `XposedModule → XposedInterface`
+- `proguard` 中生成入口类的 keep、手写 `META-INF/xposed` 的交接
+- 本地 `:app:compileDebugKotlin` 已能编译到 KSP 之后的 Kotlin 阶段
+
+**决定：等待 YukiHook 公开该桥。** master 已在用这套 DSL，方向明确；届时升依赖号并完成本计划 Task 5/6 即可。
+
+**恢复条件**（任一条成立即可继续）：
+- `YukiHookLibXposedEvent` 的 `moduleLoaded` / `packageReady` / `hotReloading` / `hotReloaded` 可由外部赋值；或
+- `PackageParam` 暴露 `XposedInterface`。
+
+**顺带修正一条坑**：仓库中任何含 `AndroidManifest.xml` **且**带 `resources/META-INF/xposed/*` 的**副本目录**，都会被 yukihook-compiler 当成源码目录而拒绝构建（报 "must be generated exclusively by YukiHook"）。本次两个 `.bak_release_328/329` 已移至 `/workspace/archive/bak_release_328-329/`；今后不要再把整份 app 模块备份留在仓库内。
