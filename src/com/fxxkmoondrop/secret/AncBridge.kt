@@ -104,32 +104,9 @@ class AncBridge {
         /** 设置 ANC 模式（UI：0=关闭 1=降噪 2=透传 3=抗风 4=自适应 5=直播）
          *  alpha2.14: UI 模式直传 GaiaBleClient，由能力探测结果选择协议路径
          *  （AudioCuration / ANC V2 / ANC V1），设备枚举映射在 GaiaCommands.ancDevFromUi */
-        /** 最近一次真正下发的档位与时间（防回环用） */
-        private var lastSentMode = -1
-        private var lastSentAt = 0L
-        /** 2 秒滑动窗口内的下发时间戳 */
-        private val sentWindow = ArrayDeque<Long>()
-
         @JvmStatic
         fun setAncMode(mode: Int) {
             if (mode < 0 || mode > 5) return
-            // ── 防回环 / 防抖动 ────────────────────────────────────────────────
-            // 现象（2026-10-22 实测）：GMS 弹窗的回调、通知按钮、UI 刷新三条链路
-            // 互相触发时，会出现「降噪 ↔ 关闭」反复下发，最后把耳机刷成癫痫。
-            // 两道闸：① 同档位 1.2s 内重复直接丢弃；② 2s 内最多下发 3 次。
-            val now = android.os.SystemClock.elapsedRealtime()
-            while (sentWindow.isNotEmpty() && now - sentWindow.first() > 2000L) sentWindow.removeFirst()
-            if (mode == lastSentMode && now - lastSentAt < 1200L) {
-                Log.w(TAG, "setAncMode ignored: dup " + mode + " within " + (now - lastSentAt) + "ms")
-                return
-            }
-            if (sentWindow.size >= 3) {
-                Log.w(TAG, "setAncMode ignored: rate limited (" + sentWindow.size + " calls/2s)")
-                return
-            }
-            sentWindow.addLast(now)
-            lastSentMode = mode
-            lastSentAt = now
             Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
