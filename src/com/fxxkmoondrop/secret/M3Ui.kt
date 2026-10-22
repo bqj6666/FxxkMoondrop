@@ -692,40 +692,48 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         fun showMenuAt(anchor: View, pal: ThemeUtil.Palette, items: Array<String>,
                        selected: Int, onPick: (Int) -> Unit, x: Int, y: Int) {
             val c = anchor.context
+            // ── M3 Dropdown Menu 规范 ─────────────────────────────────────────────
+            // 容器：surfaceContainer / 圆角 4dp（extra-small 形状）/ 高度 3dp（elevation level 2）/ 无描边
+            // 内边距：上下 8dp、左右 0 —— 菜单项必须通栏，容器的圆角才吃得到裁剪
+            // 菜单项：高 48dp、左 12dp / 右 16dp、14sp labelLarge
+            // 选中态：secondaryContainer 底 + onSecondaryContainer 字（不是 primary 药丸）
+            // 旧实现是 24dp 大圆角 + outline 描边 + 6dp 阴影 + primary 药丸选中，
+            // 那套形状属于 snackbar / 浮窗，不是菜单。
             val menu = LinearLayout(c)
             menu.orientation = LinearLayout.VERTICAL
-            menu.setPadding(dp(c, 8), dp(c, 8), dp(c, 8), dp(c, 8))
+            menu.setPadding(0, dp(c, 8), 0, dp(c, 8))
             val bg = GradientDrawable()
-            bg.cornerRadius = dp(c, 24).toFloat()
-            bg.setColor(pal.surfaceContainerHighest)
-            bg.setStroke(dp(c, 1), pal.outline)
+            bg.cornerRadius = dp(c, 4).toFloat()
+            bg.setColor(pal.card)
             menu.background = bg
-            menu.elevation = dp(c, 6).toFloat()
+            menu.elevation = dp(c, 3).toFloat()
+            menu.clipToOutline = true
             val pop = android.widget.PopupWindow(menu,
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true)
             pop.isOutsideTouchable = true
-            pop.elevation = dp(c, 6).toFloat()
+            pop.elevation = dp(c, 3).toFloat()
             for (i in items.indices) {
                 val on = i == selected
                 val item = LinearLayout(c)
                 item.orientation = LinearLayout.HORIZONTAL
                 item.gravity = Gravity.CENTER_VERTICAL
-                item.setPadding(dp(c, 16), 0, dp(c, 20), 0)
-                val ib = GradientDrawable()
-                ib.cornerRadius = dp(c, 20).toFloat()
-                ib.setColor(if (on) pal.primary else 0x00000000)
-                item.background = ib
+                item.setPadding(dp(c, 12), 0, dp(c, 16), 0)
+                val fill = GradientDrawable()
+                fill.setColor(if (on) pal.container else 0x00000000)
+                item.background = android.graphics.drawable.RippleDrawable(
+                        ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000), fill, null)
                 val cb = android.widget.ImageView(c)
                 cb.setImageDrawable(moduleDrawable(c, R.drawable.ic_check))
-                cb.imageTintList = ColorStateList.valueOf(if (on) pal.onPrimary else 0x00000000)
+                cb.imageTintList = ColorStateList.valueOf(
+                        if (on) pal.onContainer else 0x00000000)
                 cb.visibility = if (on) View.VISIBLE else View.INVISIBLE
-                val clp = LinearLayout.LayoutParams(dp(c, 18), dp(c, 18))
-                clp.marginEnd = dp(c, 8)
+                val clp = LinearLayout.LayoutParams(dp(c, 24), dp(c, 24))
+                clp.marginEnd = dp(c, 12)
                 item.addView(cb, clp)
                 val tv = TextView(c)
                 tv.text = items[i]
                 tv.textSize = 14f
-                tv.setTextColor(if (on) pal.onPrimary else pal.onSurface)
+                tv.setTextColor(if (on) pal.onContainer else pal.onSurface)
                 item.addView(tv, LinearLayout.LayoutParams(-2, -2))
                 item.setOnClickListener {
                     // M3 退场：缩回 0.9 + 淡出，120ms 后再真正 dismiss
@@ -743,29 +751,33 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             // 先量一次拿到菜单实际尺寸，再夹到屏幕内（贴边不裁切）
             menu.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val dm = c.resources.displayMetrics
-            // M3 规范：菜单最小宽度 112dp。选项文字很短时（如「正式版」「预发布」）
-            // wrap_content 会把菜单缩成一条窄缝，既不像菜单也难点；左右各留 24dp 边距封顶。
+            // M3 规范：菜单最小宽度 112dp；两侧各留 16dp 边距封顶
             val mw = Math.max(menu.measuredWidth, dp(c, 112))
-                    .coerceAtMost(dm.widthPixels - dp(c, 48))
+                    .coerceAtMost(dm.widthPixels - dp(c, 32))
             val mh = menu.measuredHeight
-            val m = dp(c, 8)
-            val px = x.coerceIn(m, (dm.widthPixels - mw - m).coerceAtLeast(m))
-            val py = y.coerceIn(m, (dm.heightPixels - mh - m).coerceAtLeast(m))
+            val gap = dp(c, 4)
+            val margin = dp(c, 8)
+            // 官方 DropdownMenu 行为：贴住**锚点行**展开，而不是从手指位置弹出 ——
+            // 跟手指走的菜单会盖住刚按下的那一行，用户看不到自己点了什么。
+            // 下方放不下就翻到锚点上方（官方翻转逻辑）。
+            val loc = IntArray(2)
+            anchor.getLocationOnScreen(loc)
+            val below = loc[1] + anchor.height + gap
+            val above = loc[1] - mh - gap
+            val flipUp = below + mh + margin > dm.heightPixels && above >= margin
+            val py = (if (flipUp) above else below)
+                    .coerceIn(margin, (dm.heightPixels - mh - margin).coerceAtLeast(margin))
+            val px = loc[0].coerceIn(margin, (dm.widthPixels - mw - margin).coerceAtLeast(margin))
             pop.width = mw
             pop.height = mh
 
-            // alpha2.53: M3 菜单入场动画 —— 从「离手指最近的那个角」长出来。
-            // 官方 DropdownMenu 就是 fadeIn + scaleIn(0.8)，约 140ms、emphasized decelerate。
-            // 用动画前的状态起手：PopupWindow 已经按内容量好尺寸，缩放只是视觉效果，不影响布局。
-            menu.pivotX = (x - px).coerceIn(0, mw).toFloat()
-            menu.pivotY = (y - py).coerceIn(0, mh).toFloat()
+            // M3 入场：从贴近锚点的那个角长出来（fadeIn + scaleIn 0.8，emphasized decelerate）
+            menu.pivotX = 0f
+            menu.pivotY = if (flipUp) mh.toFloat() else 0f
             menu.alpha = 0f
             menu.scaleX = 0.8f
             menu.scaleY = 0.8f
 
-            android.util.Log.d("FxxkMoondrop", "menu place: want=" + x + "," + y +
-                    " got=" + px + "," + py + " size=" + mw + "x" + mh +
-                    " screen=" + dm.widthPixels + "x" + dm.heightPixels)
             pop.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, px, py)
 
             menu.animate()
