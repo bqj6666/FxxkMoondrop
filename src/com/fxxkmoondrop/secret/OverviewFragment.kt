@@ -436,22 +436,10 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = M3Ui.pressRipple(requireContext(), g0)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 0, tm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 0, tm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_spatial_" + tm
             holder.setOnClickListener {
                 DeviceControlBridge.setTrackingModeByUser(tm)
@@ -488,22 +476,10 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = M3Ui.pressRipple(requireContext(), g0)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 1, gm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 1, gm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_gain_" + gm
             holder.setOnClickListener {
                 DeviceControlBridge.setGain(gm)
@@ -541,22 +517,10 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "dc_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = M3Ui.pressRipple(requireContext(), g0)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "dc_icon"
-            icon.setImageDrawable(DcIcons.build(requireContext(), 2, lm, dp(22), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(22), dp(22))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 Icon Button（toggle）：形状/状态层/形变交给 MaterialButton，
+            // 图标仍是 DcIcons 自绘；不再手绘 OVAL 圆底 + 2dp 描边表示选中。
+            val holder = M3Ui.iconToggle(requireContext(), pal0,
+                    DcIcons.build(requireContext(), 2, lm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_led_" + lm
             holder.setOnClickListener {
                 DeviceControlBridge.setLed(lm)
@@ -760,8 +724,9 @@ class OverviewFragment : Fragment() {
                     val holder = col.getChildAt(k) as? android.widget.FrameLayout ?: continue
                     val tag = holder.tag as? String ?: continue
                     if (!tag.startsWith("dc_btn_")) continue
-                    val bgV = holder.findViewWithTag<View>("dc_bg")
-                    val iv = holder.findViewWithTag<View>("dc_icon") as? ImageView
+                    val btn = holder.findViewWithTag<View>("it_btn")
+                            as? com.google.android.material.button.MaterialButton
+                    val iv = holder.findViewWithTag<View>("it_img") as? ImageView
                     val parts = tag.substring(7).split("_")
                     if (parts.size != 2) continue
                     val feature = parts[0]
@@ -772,33 +737,16 @@ class OverviewFragment : Fragment() {
                         "led" -> idx == if (ledOn) 0 else 1
                         else -> false
                     }
-                    // 选中态底色是 primary；深色主题下 primary 本身是浅色，硬编码白前景对比度不足。
-                    // M3 规定 primary 上的内容用 onPrimary（深色主题 = 深色）。
-                    val iconColor = if (active) onPrimaryColor else onContainerColor
                     val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
-                    val spatialDisabled = feature == "spatial" && !spatialOn
-                    if (!connected || spatialDisabled) {
-                        holder.isEnabled = false
-                        holder.alpha = 0.4f
-                        if (bgV != null) {
-                            val g = GradientDrawable()
-                            g.shape = GradientDrawable.OVAL
-                            g.setColor(greyColor)
-                            bgV.background = M3Ui.pressRipple(requireContext(), g)
-                        }
-                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), onVariantColor))
-                    } else {
-                        holder.isEnabled = true
-                        holder.alpha = 1f
-                        if (bgV != null) {
-                            val g = GradientDrawable()
-                            g.shape = GradientDrawable.OVAL
-                            g.setColor(if (active) primaryColor else containerColor)
-                            if (active) g.setStroke(dp(2), onPrimaryColor)
-                            bgV.background = M3Ui.pressRipple(requireContext(), g)
-                        }
-                        iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(22), iconColor))
-                    }
+                    // 空间音频总开关关着时，追踪档位整组不可选
+                    val enabled = connected && !(feature == "spatial" && !spatialOn)
+                    // 状态全部交给官方控件：isChecked 驱动容器色，isEnabled 走官方 disabled 视觉。
+                    // 不再手绘 OVAL 圆底/描边，也不再自己压 alpha。
+                    btn?.isChecked = active
+                    btn?.isEnabled = enabled
+                    iv?.alpha = if (enabled) 1f else 0.38f
+                    iv?.setImageDrawable(DcIcons.build(requireContext(), featType, idx, dp(24),
+                            if (active) onPrimaryColor else if (enabled) onContainerColor else onVariantColor))
                 }
             }
         }

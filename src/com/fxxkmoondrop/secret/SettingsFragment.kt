@@ -284,20 +284,14 @@ class SettingsFragment : Fragment() {
         val iconSpin = M3Ui.circularLoader(requireContext(), 18, pal.primary)
         iconState.visibility = View.GONE
         // 「恢复默认」直接放在这一行右侧（有自定义图标时才出现），不再藏进二级弹窗。
-        val restoreBtn = TextView(requireContext())
-        restoreBtn.text = Lang.t("恢复默认", "Restore")
-        restoreBtn.textSize = 14f
-        restoreBtn.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        restoreBtn.setTextColor(pal.primary)
-        restoreBtn.gravity = Gravity.CENTER
-        restoreBtn.setPadding(dp(12), dp(8), dp(12), dp(8))
-        restoreBtn.background = M3Ui.pressRipple(requireContext(), null)
-        restoreBtn.visibility = View.GONE
-        restoreBtn.setOnClickListener {
+        // 官方 M3 Text Button，不再是手绘 TextView + 自贴涟漪
+        val restoreBtn = M3Ui.textActionButton(requireContext(), pal,
+                Lang.t("恢复默认", "Restore")) {
             resetCustomIcon()
-            restoreBtn.visibility = View.GONE
+            it.visibility = View.GONE
             iconState.text = Lang.t("默认", "Default")
         }
+        restoreBtn.visibility = View.GONE
         val iconTrail = LinearLayout(requireContext())
         iconTrail.orientation = LinearLayout.HORIZONTAL
         iconTrail.gravity = Gravity.CENTER_VERTICAL

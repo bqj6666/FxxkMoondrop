@@ -35,6 +35,13 @@
         <item name="materialSizeOverlay">@style/SizeOverlay.Material3Expressive.Button.Medium</item>
     </style>
 
+    <!-- 官方 Text Button（M3 Expressive）：用于行尾的次要动作，如「恢复默认」 -->
+    <style name="Widget.FxxkMoondrop.Button.Text" parent="Widget.Material3Expressive.Button.TextButton" />
+
+    <style name="ThemeOverlay.FxxkMoondrop.ButtonText" parent="">
+        <item name="materialButtonStyle">@style/Widget.FxxkMoondrop.Button.Text</item>
+    </style>
+
     <style name="ThemeOverlay.FxxkMoondrop.ButtonMedium" parent="">
         <item name="materialButtonStyle">@style/Widget.FxxkMoondrop.Button.Medium</item>
     </style>

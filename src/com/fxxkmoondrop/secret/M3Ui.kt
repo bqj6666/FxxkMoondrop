@@ -881,6 +881,59 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             return b
         }
 
+        /** 官方 Text Button（M3 Expressive）：行尾次要动作，无容器无描边，primary 文字。 */
+        @JvmStatic
+        fun textActionButton(c: Context, pal: ThemeUtil.Palette, text: String,
+                             onClick: View.OnClickListener): MaterialButton {
+            val b = MaterialButton(android.view.ContextThemeWrapper(
+                    c, R.style.ThemeOverlay_FxxkMoondrop_ButtonText))
+            b.text = text
+            b.setTextColor(pal.primary)
+            b.isAllCaps = false
+            b.gravity = Gravity.CENTER
+            b.setOnClickListener(onClick)
+            return b
+        }
+
+        /**
+         * 官方 M3 Icon Button（toggle 用法）+ 居中自绘图标。
+         *
+         * 结构：FrameLayout 里叠一层 MaterialButton（负责形状 / 状态层 / 按压形变 / disabled）+
+         * 一层居中 ImageView（放我们自绘的图标，位置与 padding 解耦）。
+         * 返回值的子视图 tag：`it_btn` = MaterialButton，`it_img` = ImageView，
+         * 调用方只需 isChecked / isEnabled + 换图，不要再手绘圆底和描边。
+         */
+        @JvmStatic
+        fun iconToggle(c: Context, pal: ThemeUtil.Palette,
+                       icon: android.graphics.drawable.Drawable?,
+                       sizeDp: Int = 56, iconDp: Int = 28): android.widget.FrameLayout {
+            val holder = android.widget.FrameLayout(c)
+            val btn = MaterialButton(c, null, com.google.android.material.R.attr.materialIconButtonStyle)
+            btn.text = ""
+            btn.isCheckable = true
+            btn.insetLeft = 0
+            btn.insetRight = 0
+            btn.insetTop = 0
+            btn.insetBottom = 0
+            btn.setPadding(0, 0, 0, 0)
+            btn.tag = "it_btn"
+            btn.backgroundTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(pal.primary, pal.container))
+            holder.addView(btn, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val iv = android.widget.ImageView(c)
+            iv.tag = "it_img"
+            iv.isClickable = false
+            iv.setImageDrawable(icon)
+            holder.addView(iv, android.widget.FrameLayout.LayoutParams(
+                    dp(c, iconDp), dp(c, iconDp), Gravity.CENTER))
+            holder.minimumWidth = dp(c, sizeDp)
+            holder.minimumHeight = dp(c, sizeDp)
+            return holder
+        }
+
         /**
          * M3（expressive）动作按钮：**不手写尺寸与形状**。
          *
