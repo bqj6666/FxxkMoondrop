@@ -1156,15 +1156,23 @@ class XposedEntry : XposedModule() {
                     // Slice URI 不支持普通 content query（必然返回 null），要按官方方式 bindSlice。
                     // 编译期 stub 里没有 SliceManager.getInstance，走反射。
                     val smCls = Class.forName("android.app.slice.SliceManager")
-                    val sm = smCls.getMethod("getInstance", Context::class.java).invoke(null, ctx)
-                    val slice = smCls.getMethod("bindSlice", android.net.Uri::class.java, java.util.Set::class.java)
-                            .invoke(sm, uri, java.util.Collections.emptySet<Any>())
-                    var items = -1
-                    if (slice != null) {
-                        val m = slice.javaClass.getMethod("getItems")
-                        items = (m.invoke(slice) as? List<*>)?.size ?: -2
+                    // 隐藏 API 会伪装成 NoSuchMethod：getDeclaredMethod + setAccessible 再试一次
+                    fun declared(name: String, vararg types: Class<*>): java.lang.reflect.Method? =
+                        try { smCls.getDeclaredMethod(name, *types).apply { isAccessible = true } }
+                        catch (_: Throwable) { null }
+                    val getInstance = declared("getInstance", Context::class.java)
+                    val sm = if (getInstance != null) getInstance.invoke(null, ctx) else null
+                    val bind = declared("bindSlice", android.net.Uri::class.java, java.util.Set::class.java)
+                    var items = -3
+                    if (sm != null && bind != null) {
+                        val slice = bind.invoke(sm, uri, java.util.Collections.emptySet<Any>())
+                        if (slice != null) {
+                            val gi = slice.javaClass.getMethod("getItems")
+                            items = (gi.invoke(slice) as? List<*>)?.size ?: -2
+                        } else items = -4
                     }
-                    Log.i(TAG, "sliceProbe: items=" + items + " uri=" + uri)
+                    Log.i(TAG, "sliceProbe: items=" + items + " getInstance=" + (getInstance != null) +
+                            " bindSlice=" + (bind != null) + " uri=" + uri)
                 } catch (t: Throwable) {
                     Log.e(TAG, "sliceProbe failed", t)
                 }
