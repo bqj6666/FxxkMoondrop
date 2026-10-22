@@ -850,10 +850,16 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun actionButton(c: Context, text: String, iconRes: Int,
                          bgColor: Int, fgColor: Int,
-                         onClick: View.OnClickListener): MaterialButton {
-            val b = MaterialButton(c)
+                         onClick: View.OnClickListener,
+                         medium: Boolean = false): MaterialButton {
+            // 尺寸档：Small（默认，视觉 40dp + 4dp inset = 48dp 触摸区）/ Medium（视觉 56dp、字级 16sp、
+            // 图标 24dp、左右 24dp，inset 0）。切档只换 SizeOverlay，不手写任何 padding/inset/字号 ——
+            // 手写就等于把官方尺寸档覆盖掉（以前的 40dp 触摸区就是这么来的）。
+            val ctx: Context = if (medium)
+                android.view.ContextThemeWrapper(c, R.style.ThemeOverlay_FxxkMoondrop_ButtonMedium) else c
+            val b = MaterialButton(ctx)
             b.text = text
-            b.textSize = 14f
+            if (!medium) b.textSize = 14f
             b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             b.setTextColor(fgColor)
             b.isAllCaps = false
@@ -863,8 +869,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 b.setIconResource(iconRes)
                 b.iconTint = ColorStateList.valueOf(fgColor)
                 b.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                b.iconPadding = dp(c, 8)
-                b.iconSize = dp(c, 18)
+                if (!medium) {
+                    b.iconPadding = dp(c, 8)
+                    b.iconSize = dp(c, 18)
+                }
             }
             b.setOnClickListener(onClick)
             return b

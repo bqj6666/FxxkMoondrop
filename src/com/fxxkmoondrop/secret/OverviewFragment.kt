@@ -306,22 +306,23 @@ class OverviewFragment : Fragment() {
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER
-            val holder = android.widget.FrameLayout(requireContext())
-            val bg = View(requireContext())
-            bg.tag = "fxxk_main_bg"
-            val g0 = GradientDrawable()
-            g0.shape = GradientDrawable.OVAL
-            g0.setColor(containerColor)
-            bg.background = M3Ui.pressRipple(requireContext(), g0)
-            holder.addView(bg, android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val icon = ImageView(requireContext())
-            icon.tag = "fxxk_main_icon"
-            icon.setImageDrawable(buildMainModeIcon(fm, dp(32), onContainerColor))
-            val il = android.widget.FrameLayout.LayoutParams(dp(32), dp(32))
-            il.gravity = Gravity.CENTER
-            holder.addView(icon, il)
+            // 官方 M3 Expressive Icon Button（toggle 用法，M 档 56dp 容器），图标仍用我们自绘的。
+            // 原先是 FrameLayout + 手绘 GradientDrawable 圆：没有官方状态层、没有按压缩放形变，
+            // 选中态还得自己画描边（M3 里选中靠容器色切换，不描边）。
+            val holder = com.google.android.material.button.MaterialButton(requireContext(), null,
+                    com.google.android.material.R.attr.materialIconButtonStyle)
+            holder.isCheckable = true
+            holder.isChecked = false
+            holder.insetTop = 0
+            holder.insetBottom = 0
+            holder.iconSize = dp(28)
+            holder.iconTint = ColorStateList.valueOf(onContainerColor)
+            holder.setPadding(0, 0, 0, 0)
+            holder.icon = buildMainModeIcon(fm, dp(28), onContainerColor)
+            // 未选中 = surfaceContainer 圆底 / 选中 = primary 底（M3 filled icon button toggle 的配色）
+            holder.backgroundTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(primaryColor, containerColor))
             holder.setOnClickListener {
                 AncBridge.setAncMode(fm)
                 ancMode = fm
@@ -331,8 +332,8 @@ class OverviewFragment : Fragment() {
             if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
             if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
             ancCols!![fm] = col         // 3.2.20: 统一显隐用
-            // M3 触控目标 ≥48dp；核心主操作区放大到 72dp
-            val sz = dp(72)
+            // 官方 Icon Button M 档：容器 56dp（图标 28dp + 四周 14dp），触摸区天然 56dp ≥ 48dp
+            val sz = dp(56)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
             col.addView(spacer(dp(2)))
             val lbl = TextView(requireContext())
@@ -878,7 +879,7 @@ class OverviewFragment : Fragment() {
         // 交给官方 expressive 按钮：尺寸档（视觉 40dp + 4dp inset = 48dp 触摸区）、
         // 圆角、按压缩放形变全由 materialSizeOverlay / shape state list 决定。
         // 旧实现把 insetTop/Bottom 归零又手写 cornerRadius，触摸区只剩 40dp，还盖掉了形变。
-        val b = M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l)
+        val b = M3Ui.actionButton(requireContext(), text, iconRes, bgColor, textColor, l, medium = true)
         b.elevation = if (bgColor == primaryColor) dp(1).toFloat() else 0f
         if (debounceMs > 0L) b.setOnClickListener(guardClicks(b, debounceMs) { l.onClick(b) })
         return b
@@ -1264,7 +1265,7 @@ class OverviewFragment : Fragment() {
             row.setPadding(dp(12), dp(12), dp(12), dp(12))
             val rowBg = GradientDrawable()
             rowBg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
-            rowBg.cornerRadius = dp(14).toFloat()
+            rowBg.cornerRadius = dp(12).toFloat()   // M3 形状档 small=8 / medium=12，14 是散值
             val rd = M3Ui.pressRipple(requireContext(), rowBg)
             row.background = rd
             val col = LinearLayout(requireContext())
@@ -1625,21 +1626,16 @@ class OverviewFragment : Fragment() {
         ancBtns?.let { btns ->
             for (i in btns.indices) {
                 val hol = btns[i] ?: continue
-                hol.isEnabled = ancEnabled
-                hol.alpha = if (ancEnabled) 1f else 0.4f
+                hol.isEnabled = ancEnabled   // 官方 disabled 态自带 38% 视觉，不额外压 alpha
                 val sel = (i == ancMode)
-                val bgV = hol.findViewWithTag<View>("fxxk_main_bg")
-                if (bgV != null) {
-                    val g = GradientDrawable()
-                    g.shape = GradientDrawable.OVAL
-                    g.setColor(if (sel) primaryColor else containerColor)
-                    if (sel) g.setStroke(dp(2), onPrimaryColor) // M3: primary 底上的描边用 onPrimary
-                    bgV.background = M3Ui.pressRipple(requireContext(), g)
-                }
-                val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
-                if (iv != null) {
-                    iv.setImageDrawable(buildMainModeIcon(i, dp(26),
-                            if (sel) onPrimaryColor else onContainerColor))
+                // 选中态交给官方 MaterialButton：isChecked 驱动容器色（state list），
+                // 图标只换一次颜色，不描边、不自己画状态层。
+                val mb = hol as? com.google.android.material.button.MaterialButton
+                if (mb != null) {
+                    mb.isChecked = sel
+                    mb.iconTint = ColorStateList.valueOf(if (sel) onPrimaryColor else onContainerColor)
+                    mb.icon = buildMainModeIcon(i, dp(28),
+                            if (sel) onPrimaryColor else onContainerColor)
                 }
                 ancLabels?.get(i)?.let {
                     it.setTextColor(if (sel) primaryColor else onContainerColor)
@@ -1905,7 +1901,7 @@ class OverviewFragment : Fragment() {
         b.setPadding(dp(24), dp(11), dp(24), dp(11))
         val g = GradientDrawable()
         g.setColor(if (filled) primaryColor else containerColor)
-        g.cornerRadius = dp(24).toFloat()
+        g.cornerRadius = dp(20).toFloat()   // 与弹窗里另一颗按钮统一：40dp 高 -> 全圆 20dp
         // M3 统一状态层：不再区分「填充/未填充」两套写死的白色/黑色蒙层
         val rd = M3Ui.pressRipple(requireContext(), g)
         b.background = rd
@@ -1922,10 +1918,10 @@ class OverviewFragment : Fragment() {
         b.textSize = 14f
         b.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         b.gravity = Gravity.CENTER
-        b.setPadding(dp(22), dp(11), dp(22), dp(11))
+        b.setPadding(dp(24), dp(11), dp(24), dp(11))
         val g = GradientDrawable()
         g.setColor(0x14000000)
-        g.cornerRadius = dp(22).toFloat()
+        g.cornerRadius = dp(20).toFloat()   // 同上，22/24 两种圆角是历史遗留，统一成全圆
         val rd = RippleDrawable(
                 ColorStateList.valueOf(0x1F000000), g, null)
         b.background = rd
