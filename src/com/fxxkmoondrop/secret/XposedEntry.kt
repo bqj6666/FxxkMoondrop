@@ -1153,10 +1153,18 @@ class XposedEntry : XposedModule() {
             // 「行 visible=true 但界面上是空的」= 切片本身没内容，不是我们藏掉的。
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
-                    val cur = ctx.contentResolver.query(uri, null, null, null, null)
-                    var n = -1
-                    if (cur != null) { n = cur.count; cur.close() }
-                    Log.i(TAG, "sliceProbe: rows=" + n + " uri=" + uri)
+                    // Slice URI 不支持普通 content query（必然返回 null），要按官方方式 bindSlice。
+                    // 编译期 stub 里没有 SliceManager.getInstance，走反射。
+                    val smCls = Class.forName("android.app.slice.SliceManager")
+                    val sm = smCls.getMethod("getInstance", Context::class.java).invoke(null, ctx)
+                    val slice = smCls.getMethod("bindSlice", android.net.Uri::class.java, java.util.Set::class.java)
+                            .invoke(sm, uri, java.util.Collections.emptySet<Any>())
+                    var items = -1
+                    if (slice != null) {
+                        val m = slice.javaClass.getMethod("getItems")
+                        items = (m.invoke(slice) as? List<*>)?.size ?: -2
+                    }
+                    Log.i(TAG, "sliceProbe: items=" + items + " uri=" + uri)
                 } catch (t: Throwable) {
                     Log.e(TAG, "sliceProbe failed", t)
                 }
