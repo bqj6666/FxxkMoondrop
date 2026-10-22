@@ -22,6 +22,15 @@ class HeadsetReceiver : BroadcastReceiver() {
         if (ACTION_FP_MODE == action) {
             val mode = i.getIntExtra(EXTRA_FP_MODE, -1)
             if (mode in 0..5) {
+                // 回声守卫：弹窗的高亮是被我们自己的 MODE_STATE 驱动的，
+                // 它回推一个「和当前档位相同」的请求时必须忽略 —— 否则
+                // 我们广播→弹窗高亮→弹窗回调→我们再下发，形成自激回环
+                // （2026-10-22 实测的「降噪↔关闭 反复切换」）。
+                // 注意只挡「与当前档位相同」的回声，正常换档与连接后的状态同步不受影响。
+                if (mode == AncBridge.getCurrentMode()) {
+                    Log.i(TAG, "fastpair mode echo ignored -> $mode")
+                    return
+                }
                 AncBridge.setAncMode(mode)
                 Log.i(TAG, "fastpair mode change -> $mode")
             }
