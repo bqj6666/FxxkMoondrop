@@ -870,37 +870,27 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //
             // top 用 24dp = 16dp(原 marginTop) + 8dp(原 paddingTop)：本标签背景透明，
             // 用 padding 表达 margin 效果一致，且不用改各处 addView 调用。
-            t.setTextColor(pal.onVariant)
+            t.setTextColor(pal.primary)
             t.setPadding(dp(act, 16), dp(act, 24), dp(act, 16), dp(act, 8))
             return t
         }
 
         /** 官方分组卡片：GradientDrawable 圆角 LinearLayout（与外观卡同款已验证方案），行间淡分隔线 */
         @JvmStatic
-        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): MaterialCardView {
-            // 3.3.1: 改回「每组一整张卡片 + 组内行间细分隔线」。
-            //
-            // 上一版（alpha2.52）注释写「对齐 org.lsposed.manager：每行独立卡片 +
-            // 12dp 间距」，但**实测 LSPosed 并非如此**。用 uiautomator 量
-            // org.lsposed.manager 2.2.0 设置页真实坐标（屏 1216x2640，480dpi=3x）：
-            //
-            //   卡片 [48,1321][1168,1537]   <- 译者
-            //   卡片 [48,1543][1168,1760]   <- 参与翻译
-            //   间隙 1543-1537 = 6px 约 2dp  <- 不是 12dp，实为行分隔线
-            //
-            // 组内是连续一张卡（行间只有细线），组与组之间才留白。
-            // 每行独立卡片会让整页碎成十几块、边距参差，正是「看着很奇怪」的根因。
-            // M3 Card 必须由 MaterialCardView 承载：形状、状态层、内容裁剪都由它提供，
-            // 不再用 GradientDrawable 手绘背景（原实现的 cardBg()）。
-            val card = MaterialCardView(act)
-            applyCardLook(card, act, pal, RADIUS_CARD)
-            val box = LinearLayout(act)
-            box.orientation = LinearLayout.VERTICAL
-            for (i in rows.indices) {
-                box.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
+        fun groupCard(act: Activity, pal: ThemeUtil.Palette, vararg rows: View): LinearLayout {
+            // 对齐 Android 16 Settings：**每一行是独立的一张卡**，行与行之间留 8dp。
+            // 「整组一张卡 + 组内分隔线」是旧做法，参考图不是这样。
+            val col = LinearLayout(act)
+            col.orientation = LinearLayout.VERTICAL
+            rows.forEachIndexed { idx, r ->
+                val card = MaterialCardView(act)
+                applyCardLook(card, act, pal, RADIUS_CARD)
+                card.addView(r, android.view.ViewGroup.LayoutParams(-1, -2))
+                val lp = LinearLayout.LayoutParams(-1, -2)
+                if (idx > 0) lp.topMargin = dp(act, 8)
+                col.addView(card, lp)
             }
-            card.addView(box, android.view.ViewGroup.LayoutParams(-1, -2))
-            return card
+            return col
         }
 
         /** 官方列表行：图标 + 标题/副标题 + 尾随控件（switchRow 同款已验证结构） */
