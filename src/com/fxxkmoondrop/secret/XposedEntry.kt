@@ -1148,7 +1148,19 @@ class XposedEntry : XposedModule() {
             HookHelper.callMethod(ctrl, "setSliceUri", uri)
             HookHelper.callMethod(ctrl, "displayPreference", screen)
             HookHelper.callMethod(ctrl, "onStart")
-            Log.d(TAG, "control slice attached: $uri")
+            Log.i(TAG, "control slice attached: $uri")
+            // 诊断：1.5s 后直接问一次这个 slice，看 GMS 到底有没有返回内容。
+            // 「行 visible=true 但界面上是空的」= 切片本身没内容，不是我们藏掉的。
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val cur = ctx.contentResolver.query(uri, null, null, null, null)
+                    var n = -1
+                    if (cur != null) { n = cur.count; cur.close() }
+                    Log.i(TAG, "sliceProbe: rows=" + n + " uri=" + uri)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "sliceProbe failed", t)
+                }
+            }, 1500L)
         } catch (th: Throwable) { Log.e(TAG, "attachControlSlice failed", th) }
     }
 
