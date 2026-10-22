@@ -136,15 +136,16 @@ object DeviceNotif {
             lastSig = sig
 
             ensureChannel(c)
-            // 用 platform Notification.Builder（minSdk 26，够用）：只有它有
-            // setShowActionsInCompactView —— 能把 action 放进**折叠态**，
-            // 相当于「默认就是展开的样子」。compat 版没有这个 API。
-            val b = android.app.Notification.Builder(c, CH)
+            // 回到 NotificationCompat：折叠态不塞按钮，「一键切档」交给 QS 磁贴
+            // （AncTileService）。通知只做状态展示 + 展开后的动作，纯系统模板。
+            val b = NotificationCompat.Builder(c, CH)
                 .setSmallIcon(R.drawable.ic_headphones)
                 .setContentTitle(title)
                 .setContentText(if (line.isEmpty()) null else line)
                 .setContentIntent(openApp(c))
-                .setCategory(android.app.Notification.CATEGORY_STATUS)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true)
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setShowWhen(false)
@@ -157,27 +158,14 @@ object DeviceNotif {
                 // 当前档位写进 subText（只在有档位时才有意义，否则会和正文电量重复两次）
                 val cur = if (mode in names.indices) names[mode] else null
                 if (cur != null) b.setSubText(cur)
-                for (m in actions) {
-                    b.addAction(android.app.Notification.Action.Builder(
-                            android.graphics.drawable.Icon.createWithResource(c, modeIcon(m)),
-                            names[m], actionPi(c, m)).build())
-                }
-                // 折叠态也显示最多 3 个 action：这样不用展开就能切档，
-                // 视觉上等价于「通知默认展开」。系统渲染，样式仍是官方 M3。
-                // 本机 android.jar（compileSdk 37 stub）没暴露这个公开 API，只能用反射调；
-                // 运行时方法存在（API 24+），失败就退回「折叠不显示按钮」，不抛异常。
-                try {
-                    val n3 = Math.min(3, actions.size)
-                    b.javaClass.getMethod("setShowActionsInCompactView", IntArray::class.java)
-                            .invoke(b, IntArray(n3) { it })
-                } catch (_: Throwable) { }
+                for (m in actions) b.addAction(modeIcon(m), names[m], actionPi(c, m))
             }
             if (line.isNotEmpty()) {
                 // 折叠看摘要（电量），展开补细节（当前档位），不再「展开还是同一句话」
                 val detail = if (actions.isNotEmpty() && mode in names.indices)
                     line + "\n" + Lang.t(c, "当前：%s", "Current: %s").format(names[mode])
                 else line
-                b.setStyle(android.app.Notification.BigTextStyle().bigText(detail))
+                b.setStyle(NotificationCompat.BigTextStyle().bigText(detail))
             }
 
             notify(c, ID, b.build())
