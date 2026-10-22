@@ -256,7 +256,8 @@ class SettingsFragment : Fragment() {
 
         // 语言：归入外观（区域设置与主题同类），不再单列一个「通用」段
         // alpha2.53: 对齐 org.lsposed.manager —— 语言改为「行 + 当前值 + 下拉菜单」（0=跟随系统 1=中文 2=English）
-        val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language", null,
+        val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
+                Lang.t("应用界面语言", "App interface language"),
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
             getSP().edit().putInt("lang", mi).commit()
             scheduleRebuild(0L)
