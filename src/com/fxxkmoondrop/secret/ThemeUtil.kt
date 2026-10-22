@@ -91,7 +91,16 @@ class ThemeUtil {
                     else android.content.res.Configuration.UI_MODE_NIGHT_NO)
             c.createConfigurationContext(cfg).getColor(resId)
         } catch (_: Throwable) {
-            c.getColor(resId)   // 兜底：宁可串色也不要崩
+            // 兜底必须是**不会抛**的：这层代码也会在别的进程里跑（蓝牙详情页注入，
+            // Context 是 Settings 的 Resources，解析不到本应用的 @color id → 直接抛
+            // Resources$NotFoundException，于是整个注入面板构建失败、只剩一行标题）。
+            // 返回 0 无所谓：调用点都是 `dyn(系统动态色, themedColor(...))`，
+            // dyn 能取到系统色时这个兜底值根本不会被使用。
+            try {
+                c.getColor(resId)
+            } catch (_: Throwable) {
+                0
+            }
         }
 
         /** Android 12+ 系统莫奈动态色（动态色开启时）；关闭或低版本回退 fallback */
