@@ -35,7 +35,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="10dp">
+        android:paddingTop="6dp"
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:id="@+id/notif_btn0"
@@ -47,8 +48,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn0_icon"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -72,8 +73,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn1_icon"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -97,8 +98,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn2_icon"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -122,8 +123,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn3_icon"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
@@ -149,8 +150,8 @@
 
             <ImageView
                 android:id="@+id/notif_btn4_icon"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:padding="8dp"
                 android:background="@drawable/notif_btn_circle"
                 android:importantForAccessibility="no" />
