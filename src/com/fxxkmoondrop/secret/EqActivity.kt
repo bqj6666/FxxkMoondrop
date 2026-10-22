@@ -274,7 +274,7 @@ class EqActivity : Activity() {
         val bg = android.graphics.drawable.GradientDrawable()
         bg.cornerRadius = dp(24).toFloat()
         bg.setColor(if (selected) pal.primary else pal.surfaceContainerHighest)
-        if (!selected) bg.setStroke(M3Ui.hairline(this), pal.outline)
+        if (!selected) bg.setStroke(dp(1), pal.outline)
         t.background = bg
         t.setOnClickListener {
             if (index == currentPreset) return@setOnClickListener

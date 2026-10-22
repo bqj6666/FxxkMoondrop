@@ -666,7 +666,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val bg = GradientDrawable()
             bg.cornerRadius = dp(c, 24).toFloat()
             bg.setColor(pal.surfaceContainerHighest)
-            bg.setStroke(hairline(c), pal.outline)
+            bg.setStroke(dp(c, 1), pal.outline)
             menu.background = bg
             menu.elevation = dp(c, 6).toFloat()
             val pop = android.widget.PopupWindow(menu,
