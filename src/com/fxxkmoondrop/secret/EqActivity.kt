@@ -503,13 +503,13 @@ class EqActivity : Activity() {
 
         private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 1f
+            strokeWidth = c.resources.displayMetrics.density * 1f
             color = pal.outline
             alpha = 90
         }
         private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 3f
+            strokeWidth = c.resources.displayMetrics.density * 3f
             color = pal.primary
         }
         private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
