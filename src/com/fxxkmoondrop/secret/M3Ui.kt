@@ -692,19 +692,25 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         fun showMenuAt(anchor: View, pal: ThemeUtil.Palette, items: Array<String>,
                        selected: Int, onPick: (Int) -> Unit, x: Int, y: Int) {
             val c = anchor.context
-            // ── M3 Dropdown Menu 规范 ─────────────────────────────────────────────
-            // 容器：surfaceContainer / 圆角 4dp（extra-small 形状）/ 高度 3dp（elevation level 2）/ 无描边
-            // 内边距：上下 8dp、左右 0 —— 菜单项必须通栏，容器的圆角才吃得到裁剪
-            // 菜单项：高 48dp、左 12dp / 右 16dp、14sp labelLarge
-            // 选中态：secondaryContainer 底 + onSecondaryContainer 字（不是 primary 药丸）
-            // 旧实现是 24dp 大圆角 + outline 描边 + 6dp 阴影 + primary 药丸选中，
-            // 那套形状属于 snackbar / 浮窗，不是菜单。
+            // ── M3 Expressive「Vertical menu」规范（m3.material.io/components/menus/specs）──
+            // 与 baseline 菜单的差别（官方原文 + 实测标注图）：
+            //   · 容器是**圆角**的（baseline 是 4dp 方角），标注 16dp
+            //   · 选中态**不再横贯整个容器宽度**：菜单项是内缩的圆角块（12dp），
+            //     容器四周只留 4dp / 2dp —— 这正是「选中不占满宽度」的实现方式
+            //   · 标准配色里选中项是 **tertiaryContainer / onTertiaryContainer**
+            //     （baseline 才是 secondaryContainer）
+            //   · 容器色 = surfaceContainerLow（比页面底亮一档，靠高程+色差区分）
+            // 尺寸：菜单项 48dp、项内左右 12dp、前导图标 20dp、项间距 2dp
+            val dk = ThemeUtil.isDark(c)
+            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_10", pal.card)
+            val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_50", pal.container)
+            val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
             val menu = LinearLayout(c)
             menu.orientation = LinearLayout.VERTICAL
-            menu.setPadding(0, dp(c, 8), 0, dp(c, 8))
+            menu.setPadding(dp(c, 4), dp(c, 2), dp(c, 4), dp(c, 2))
             val bg = GradientDrawable()
-            bg.cornerRadius = dp(c, 4).toFloat()
-            bg.setColor(pal.card)
+            bg.cornerRadius = dp(c, 16).toFloat()
+            bg.setColor(menuColor)
             menu.background = bg
             menu.elevation = dp(c, 3).toFloat()
             menu.clipToOutline = true
@@ -717,23 +723,28 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 val item = LinearLayout(c)
                 item.orientation = LinearLayout.HORIZONTAL
                 item.gravity = Gravity.CENTER_VERTICAL
-                item.setPadding(dp(c, 12), 0, dp(c, 16), 0)
+                item.setPadding(dp(c, 12), 0, dp(c, 12), 0)
                 val fill = GradientDrawable()
-                fill.setColor(if (on) pal.container else 0x00000000)
+                fill.cornerRadius = dp(c, 12).toFloat()
+                fill.setColor(if (on) selBg else 0x00000000)
+                val mask = GradientDrawable()
+                mask.cornerRadius = dp(c, 12).toFloat()
+                mask.setColor(android.graphics.Color.BLACK)
                 item.background = android.graphics.drawable.RippleDrawable(
-                        ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000), fill, null)
+                        ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000), fill, mask)
                 val cb = android.widget.ImageView(c)
                 cb.setImageDrawable(moduleDrawable(c, R.drawable.ic_check))
-                cb.imageTintList = ColorStateList.valueOf(
-                        if (on) pal.onContainer else 0x00000000)
+                cb.imageTintList = ColorStateList.valueOf(if (on) selFg else 0x00000000)
+                // 始终占位（INVISIBLE 而非 GONE）：否则选中项有勾、未选中项没有，
+                // 文字会在两种缩进之间横跳，点一下整个菜单的文字就错位了
                 cb.visibility = if (on) View.VISIBLE else View.INVISIBLE
-                val clp = LinearLayout.LayoutParams(dp(c, 24), dp(c, 24))
+                val clp = LinearLayout.LayoutParams(dp(c, 20), dp(c, 20))
                 clp.marginEnd = dp(c, 12)
                 item.addView(cb, clp)
                 val tv = TextView(c)
                 tv.text = items[i]
                 tv.textSize = 14f
-                tv.setTextColor(if (on) pal.onContainer else pal.onSurface)
+                tv.setTextColor(if (on) selFg else pal.onSurface)
                 item.addView(tv, LinearLayout.LayoutParams(-2, -2))
                 item.setOnClickListener {
                     // M3 退场：缩回 0.9 + 淡出，120ms 后再真正 dismiss
@@ -746,7 +757,9 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                             .start()
                     onPick(i)
                 }
-                menu.addView(item, LinearLayout.LayoutParams(-1, dp(c, 48)))
+                val ilp = LinearLayout.LayoutParams(-1, dp(c, 48))
+                if (i > 0) ilp.topMargin = dp(c, 2)
+                menu.addView(item, ilp)
             }
             // 先量一次拿到菜单实际尺寸，再夹到屏幕内（贴边不裁切）
             menu.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
