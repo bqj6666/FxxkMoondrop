@@ -73,3 +73,27 @@
 5. **P2 自绘视图 token 化**
 
 每一步的验收都应包含：`Material3SpecTest` 通过、真机目视一致、以及 `GradientDrawable` / `RippleDrawable` / 裸 sp / 裸 px 的计数单调下降（可在单测里加断言，防止回潮）。
+
+## 十、整改进度（2026-10-22，分支 `refactor/m3-alignment`）
+
+### 已完成
+
+| 项 | 提交 | 内容 |
+|---|---|---|
+| P0-3 | `468b637` | 行分隔线改官方 `MaterialDivider`，厚度 1dp |
+| P0-1 | `eecb5f7` | 分组卡片改 `MaterialCardView` + `applyCardLook()`，AMOLED 描边 0.75dp→1dp |
+| P0-1b | `f732eac` / `598264a` | 关于页段落卡与头部卡、引导页说明卡、概览页四张卡、设置页 SIM 卡改 `wrapInCard()` |
+| P0-1 收尾 | `ef4faba` | `cardBg()` 零调用后删除，避免再次被用于手绘卡片 |
+| P0-2 | `b76050f` / `6e318f3` | 新增 `pressRipple()`（主题主色 12%），替换 17 处写死的状态层色 |
+| P1-3 | `ef4abf6` / `0aed246` | 均衡器曲线描边改 dp(1)/dp(3)；其余描边统一 1dp |
+
+顺带删除：`OverviewFragment` 中未被任何父容器引用的 `ancRow` 死代码。
+
+### 对审计结论的两处更正
+
+1. **P1-2「硬编码颜色」部分不成立**：`ThemeUtil.dyn(c, "system_accent1_800", 0xFFxxxxxx)` 形态的 `0xFF` 是**动态取色的兜底值**（设备不提供动态色时使用），属正当实现；`Gaia*` 中的 `0xFF` 是协议字节掩码。二者都不应改动。实际仍存在的写死色只剩少量亮/暗背景（如 `0x14FFFFFF` / `0x0A000000`），可按需后续 token 化。
+2. **P1-1「裸 sp 字号」判定为可接受**：28sp 即 `headlineMedium`、22sp 即 `titleLarge`，数值本身符合 M3 typescale；改成 `textAppearance` 需要重构与滚动联动的字号插值，收益低于风险，保留现状并在代码注明对应 token。
+
+### 无需改动
+
+P2 的两个自绘视图颜色已全部取自主题 token（`pal.primary` / `pal.onVariant` / `pal.outline`），尺寸取 M3 carousel 指示器与数据可视化惯例；M3 没有对应组件，保留自绘。
