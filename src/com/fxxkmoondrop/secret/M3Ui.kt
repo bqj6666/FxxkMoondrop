@@ -295,16 +295,6 @@ class M3Ui {
          */
         const val RADIUS_DIALOG = 28
 
-        /** 圆角卡片背景（M3 surfaceContainer 色） */
-        @JvmStatic
-        fun cardBg(c: Context, pal: ThemeUtil.Palette, radiusDp: Int): GradientDrawable {
-            val g = GradientDrawable()
-            g.setColor(pal.card)
-            g.setCornerRadius(dp(c, radiusDp).toFloat())
-            // alpha2.52: AMOLED 下 card 与 surface 同为纯黑，靠发丝描边区分层级
-            if (pal.cardStroke != 0) g.setStroke(hairline(c), pal.cardStroke)
-            return g
-        }
 
         /** 统一的卡片外观（MaterialCardView 版）：AMOLED 下同样带描边，避免卡片"消失" */
         @JvmStatic
