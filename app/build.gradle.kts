@@ -124,8 +124,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.appcompat:appcompat-resources:1.7.0")
     // 蓝牙详情页「耳机控制」：自己当 SliceProvider，交给系统官方 SliceView 渲染
-    implementation("androidx.slice:slice-core:1.1.0")
-    implementation("androidx.slice:slice-builders:1.1.0")
+    implementation("androidx.slice:slice-core:1.0.0")
+    implementation("androidx.slice:slice-builders:1.0.0")
     implementation("androidx.arch.core:core-runtime:2.2.0")
     implementation("androidx.cardview:cardview:1.0.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
