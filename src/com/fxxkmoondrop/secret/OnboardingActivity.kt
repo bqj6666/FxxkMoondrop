@@ -302,7 +302,6 @@ class OnboardingActivity : Activity() {
 
         val card = LinearLayout(this)
         card.orientation = LinearLayout.VERTICAL
-        card.background = M3Ui.cardBg(this, pal, M3Ui.RADIUS_CARD)
         card.setPadding(dp(18), dp(16), dp(18), dp(16))
         card.addView(body(Lang.t(this,
                 "本应用为 Moondrop 系列蓝牙耳机提供系统级控制能力，将耳机状态接入 Android 系统界面。",
@@ -315,7 +314,7 @@ class OnboardingActivity : Activity() {
         card.addView(body(Lang.t(this,
                 "系统集成能力由 LSPosed 模块 FastPairHook 提供，需在 LSPosed 中启用该模块，并勾选「系统界面」与「Google Play 服务」作用域。模块未激活时，应用主体功能不受影响，仅系统集成项不可用。",
                 "System integration is provided by the LSPosed module FastPairHook, which must be enabled with the System UI and Google Play services scopes. While it is inactive the app itself keeps working; only the injected features are unavailable.")))
-        body.addView(card, LinearLayout.LayoutParams(-1, -2))
+        body.addView(M3Ui.wrapInCard(this, pal, card), LinearLayout.LayoutParams(-1, -2))
 
         return buildPage("FxxkMoondrop",
                 Lang.t(this, "Moondrop 蓝牙耳机助手 · 版本 V" + versionName(),

@@ -57,7 +57,6 @@ class AboutFragment : Fragment() {
         val box = LinearLayout(requireContext())
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(18), dp(16), dp(18), dp(16))
-        box.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
         val t1 = TextView(requireContext())
         t1.text = lead
         t1.textSize = 16f
@@ -71,7 +70,7 @@ class AboutFragment : Fragment() {
         t2.setLineSpacing(dp(2).toFloat(), 1.25f)
         t2.setPadding(0, dp(8), 0, 0)
         box.addView(t2, LinearLayout.LayoutParams(-1, -2))
-        return box
+        return M3Ui.wrapInCard(requireContext(), pal, box)
     }
 
     /**
@@ -350,7 +349,6 @@ class AboutFragment : Fragment() {
         header.orientation = LinearLayout.VERTICAL
         header.gravity = Gravity.CENTER_HORIZONTAL
         header.setPadding(dp(24), dp(28), dp(24), dp(26))
-        header.background = M3Ui.cardBg(requireContext(), pal, M3Ui.RADIUS_CARD)
 
         val iconWrap = LinearLayout(requireContext())
         iconWrap.gravity = Gravity.CENTER
@@ -391,7 +389,7 @@ class AboutFragment : Fragment() {
         tagline.alpha = 0.85f
         tagline.gravity = Gravity.CENTER
         header.addView(tagline, LinearLayout.LayoutParams(-2, -2))
-        box.addView(header, LinearLayout.LayoutParams(-1, -2))
+        box.addView(M3Ui.wrapInCard(requireContext(), pal, header), LinearLayout.LayoutParams(-1, -2))
 
         // ── 项目 ──
         box.addView(spacer(dp(24)))

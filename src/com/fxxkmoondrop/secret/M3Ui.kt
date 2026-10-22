@@ -321,6 +321,19 @@ class M3Ui {
             }
         }
 
+        /**
+         * 把已有内容包进 M3 卡片容器：内容自带的 padding 原样保留，
+         * 卡片提供 shapeAppearance / 描边 / 状态层，替代手绘 GradientDrawable 背景。
+         */
+        @JvmStatic
+        fun wrapInCard(c: Context, pal: ThemeUtil.Palette, content: View,
+                       radiusDp: Int = RADIUS_CARD): MaterialCardView {
+            val card = MaterialCardView(c)
+            applyCardLook(card, c, pal, radiusDp)
+            card.addView(content, android.view.ViewGroup.LayoutParams(-1, -2))
+            return card
+        }
+
         /** alpha2.28: 统一 MaterialCardView 弹窗构建器（与 Google 弹窗同风格）
          *  @return Pair<Dialog, LinearLayout(body)> — body 用于添加内容 */
         @JvmStatic
