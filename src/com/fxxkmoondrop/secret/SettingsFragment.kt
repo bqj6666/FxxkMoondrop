@@ -187,11 +187,6 @@ class SettingsFragment : Fragment() {
                 makeThemeSwitch("amoled", false, "AMOLED"))
         // 3.3.1: 主题 / 动态取色 / AMOLED 归入**同一张卡片**。
         // 对齐 LSPosed 实测结构：一组一张卡 + 组内行间细分隔线。
-        appear.addView(spacer(dp(12)))
-        appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled),
-            LinearLayout.LayoutParams(-1, -2),
-        )
 
         // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
         seedRow = LinearLayout(requireContext())
@@ -251,18 +246,19 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        box.addView(appear, LinearLayout.LayoutParams(-1, -2))
-        box.addView(spacer(dp(12)))
-
-        // 语言：归入外观（区域设置与主题同类），不再单列一个「通用」段
-        // alpha2.53: 对齐 org.lsposed.manager —— 语言改为「行 + 当前值 + 下拉菜单」（0=跟随系统 1=中文 2=English）
+        // 语言：区域设置与主题同类 → 与 主题 / 动态取色 / AMOLED 放进**同一张卡**（同一分组）。
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
                 Lang.t("应用界面语言", "App interface language"),
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
             getSP().edit().putInt("lang", mi).commit()
             scheduleRebuild(0L)
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, langRow), LinearLayout.LayoutParams(-1, -2))
+        appear.addView(spacer(dp(12)))
+        appear.addView(
+            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled, langRow),
+            LinearLayout.LayoutParams(-1, -2),
+        )
+        box.addView(appear, LinearLayout.LayoutParams(-1, -2))
         box.addView(spacer(dp(14)))
 
         // ── 检查权限 / 日志抓取 / 弹窗图标：官方分组卡片 ──
@@ -805,7 +801,6 @@ class SettingsFragment : Fragment() {
                 Lang.t("查询 GitHub 公开接口以获知新版本",
                         "Query GitHub's public API for new versions"),
                 swNetUpdate, null)
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowNetUpdate))
 
         // 「更新通道」只在联网开启时存在。
         // 不复用 scheduleRebuild：为了显一行而整页重建，页面会闪一下、焦点也丢，
@@ -820,20 +815,21 @@ class SettingsFragment : Fragment() {
             UpdateChecker.setChannel(requireContext(),
                     if (mi == 1) UpdateChecker.Channel.PRERELEASE else UpdateChecker.Channel.STABLE)
         }
-        // 行本体没有背景，卡片一律由 groupCard 提供 —— 与上方开关行同一种视觉。
-        // 裸行直接塞进页面会缺底色与圆角，一眼就不像这个页面的东西。
-        val optsHolder = LinearLayout(requireContext())
-        optsHolder.orientation = LinearLayout.VERTICAL
-        optsHolder.addView(spacer(dp(12)))
-        optsHolder.addView(M3Ui.groupCard(requireActivity(), pal, rowChannel),
-                LinearLayout.LayoutParams(-1, -2))
-        optsHolder.visibility =
-                if (UpdateChecker.isEnabled(requireContext())) View.VISIBLE else View.GONE
-        box.addView(optsHolder, LinearLayout.LayoutParams(-1, -2))
+        // 「联网检查更新」与「更新通道」是同一组（一张卡两行，中间 1dp 细缝），
+        // 之前各建一张卡、中间还垫了 12dp spacer，看着像两个互不相干的设置。
+        val updCard = M3Ui.groupCard(requireActivity(), pal, rowNetUpdate, rowChannel)
+        val updInner = updCard.getChildAt(0) as? LinearLayout
+        // groupCard 内部结构：[行0, 细缝, 行1]；通道行隐藏时那条 1dp 细缝也得一起藏
+        val updGap = updInner?.getChildAt(1)
+        val showChannel = UpdateChecker.isEnabled(requireContext())
+        rowChannel.visibility = if (showChannel) View.VISIBLE else View.GONE
+        updGap?.visibility = rowChannel.visibility
+        box.addView(updCard, LinearLayout.LayoutParams(-1, -2))
 
         swNetUpdate.setOnCheckedChangeListener { _, checked ->
             UpdateChecker.setEnabled(requireContext(), checked)
-            M3Ui.reveal(optsHolder, checked)
+            M3Ui.reveal(rowChannel, checked)
+            updGap?.visibility = if (checked) View.VISIBLE else View.GONE
         }
         box.addView(spacer(dp(14)))
 

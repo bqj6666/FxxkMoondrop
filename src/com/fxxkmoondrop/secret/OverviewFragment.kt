@@ -441,7 +441,9 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 0, tm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_spatial_" + tm
-            holder.setOnClickListener {
+            // 必须挂在 MaterialButton 上：按钮本身可点会吃掉事件，挂在 FrameLayout 上的
+            // listener 永远不触发 —— 之前就是这个错，表现是「点了没反应、但按钮自己来回亮」。
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setTrackingModeByUser(tm)
                 refreshDcHighlight()
             }
@@ -481,7 +483,7 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 1, gm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_gain_" + gm
-            holder.setOnClickListener {
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setGain(gm)
                 refreshDcHighlight()
             }
@@ -522,7 +524,7 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 2, lm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_led_" + lm
-            holder.setOnClickListener {
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setLed(lm)
                 refreshDcHighlight()
             }
