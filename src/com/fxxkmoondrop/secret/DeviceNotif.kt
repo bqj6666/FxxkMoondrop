@@ -226,13 +226,17 @@ object DeviceNotif {
             rv.setImageViewResource(SLOT_ICON[i], modeIcon(m))
             // 图标本身是纯黑矢量，必须染色才在通知上可见
             rv.setInt(SLOT_ICON[i], "setColorFilter", fgc)
-            // 圆底按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
+            // 形状先定：未选中 = 正圆，选中 = 圆角方形（与概览页 expressive 按钮的选中形态一致）
+            rv.setInt(SLOT_ICON[i], "setBackgroundResource",
+                    if (selected) R.drawable.notif_btn_square else R.drawable.notif_btn_circle)
+            // 再按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
             if (Build.VERSION.SDK_INT >= 31) {
                 rv.setColorStateList(SLOT_ICON[i], "setBackgroundTintList",
                     ColorStateList.valueOf(if (selected) primary else container))
             } else {
+                // API 30 及以下没有 ColorStateList 通道：退回旧的预着色圆底（形状无 morph）
                 rv.setInt(SLOT_ICON[i], "setBackgroundResource",
-                    if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
+                        if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
             }
             rv.setOnClickPendingIntent(SLOT[i], actionPi(c, m))
         }

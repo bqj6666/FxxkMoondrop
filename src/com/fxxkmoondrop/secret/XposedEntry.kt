@@ -896,6 +896,10 @@ class XposedEntry : XposedModule() {
             val st = fetchDcState(ctx, detailDeviceName(thisObj))
             val connected = st?.connected == true
             val ready = st?.gaiaReady == true
+            // 3.3.x 诊断日志：官方面板/音量面板消失时，先看这三行到底哪一环是 false
+            android.util.Log.i("FxxkMoondrop", "sliceState: hasSlice=" + hasSlice +
+                    " connected=" + connected + " ready=" + ready +
+                    " state=" + (st != null) + " name=" + detailDeviceName(thisObj))
             val cat = HookHelper.callMethod(thisObj, "getInvisiblePrefCategory")
             val slicePref = HookHelper.callMethod(screen, "findPreference", KEY_SLICE_CONTROL)
             val loading = HookHelper.callMethod(screen, "findPreference", KEY_LOADING)
