@@ -149,94 +149,24 @@ object DeviceNotif {
                 .setOngoing(true)
                 .setShowWhen(false)
 
+            // 官方通知模板 + 官方 action 按钮（最多 3 个）。
+            // 之前是 DecoratedCustomViewStyle + 自绘 RemoteViews：颜色、圆角、字号全是手写的，
+            // 系统的深色/动态取色/无障碍字号放大一律不生效，展开态的按钮排布也不跟系统走。
+            // 现在交给系统模板：Android 12+ 会把 action 渲染成 M3 按钮，颜色自动跟随主题。
+            if (line.isNotEmpty()) {
+                b.setStyle(NotificationCompat.BigTextStyle().bigText(line))
+            }
             if (actions.isNotEmpty()) {
-                b.setStyle(NotificationCompat.DecoratedCustomViewStyle())
-                    .setCustomContentView(
-                        buildContent(c, title, line, actions, names, mode, showHeader = false))
-                    .setCustomBigContentView(
-                        buildContent(c, title, line, actions, names, mode, showHeader = true))
+                // 当前档位写进 subText，避免再靠自绘高亮表达「现在是哪个」
+                val cur = if (mode in names.indices) names[mode] else null
+                if (cur != null) b.setSubText(cur)
+                for (m in actions) b.addAction(modeIcon(m), names[m], actionPi(c, m))
             }
 
             notify(c, ID, b.build())
         } catch (t: Throwable) {
             Log.w(TAG, "refresh fail", t)
         }
-    }
-
-    private fun buildContent(
-        c: Context,
-        title: String,
-        line: String,
-        actions: List<Int>,
-        names: Array<String>,
-        mode: Int,
-        showHeader: Boolean
-    ): RemoteViews {
-        val rv = RemoteViews(c.packageName, R.layout.notif_device)
-
-        // 折叠版把标题与电量行整体收起，把系统给的高度全让给按钮行
-        if (!showHeader) {
-            rv.setViewVisibility(R.id.notif_title, android.view.View.GONE)
-            rv.setViewVisibility(R.id.notif_text, android.view.View.GONE)
-        } else {
-            rv.setViewVisibility(R.id.notif_title, android.view.View.VISIBLE)
-            rv.setTextViewText(R.id.notif_title, title)
-            if (line.isEmpty()) {
-                rv.setViewVisibility(R.id.notif_text, android.view.View.GONE)
-            } else {
-                rv.setViewVisibility(R.id.notif_text, android.view.View.VISIBLE)
-                rv.setTextViewText(R.id.notif_text, line)
-            }
-        }
-
-        // 颜色统一走 M3 动态取色（与 App 内面板同一套 token，见 ControlPanel.refreshDcCard）
-        val dark = ThemeUtil.isDark(c)
-        // 与 ThemeUtil.Palette 的 M3 角色取值保持一致：
-        //  - onContainer 此前 fallback 误写成 container 的值（深色下 onContainer==container，
-        //    按钮文字与底色同色，实为不可读）；onPrimary 也没按主题分支。
-        val primary = ThemeUtil.dyn(c, "system_accent1_400",
-            if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
-        val container = if (dark) ThemeUtil.dyn(c, "system_accent1_800", 0xFF4F378B.toInt())
-        else ThemeUtil.dyn(c, "system_accent1_50", 0xFFE8DEF8.toInt())
-        val onContainer = if (dark) ThemeUtil.dyn(c, "system_accent1_50", 0xFFEADDFF.toInt())
-        else ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-        val onPrimary = if (dark) ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-        else 0xFFFFFFFF.toInt()
-        val fg = if (dark) ThemeUtil.dyn(c, "system_neutral1_0", 0xFFE6E0E9.toInt())
-        else ThemeUtil.dyn(c, "system_neutral1_900", 0xFF1C1B1F.toInt())
-
-        rv.setTextColor(R.id.notif_title, fg)
-        rv.setTextColor(R.id.notif_text, fg)
-
-        // 没有按钮时整行收起，否则只留 padding 白占折叠视图的宝贵高度
-        rv.setViewVisibility(R.id.notif_btns,
-            if (actions.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
-
-        for (i in SLOT.indices) {
-            val m = actions.getOrNull(i)
-            if (m == null) {
-                rv.setViewVisibility(SLOT[i], android.view.View.GONE)
-                continue
-            }
-            rv.setViewVisibility(SLOT[i], android.view.View.VISIBLE)
-            val selected = m == mode
-            val fgc = if (selected) onPrimary else onContainer
-            rv.setTextViewText(SLOT_TEXT[i], names[m])
-            rv.setTextColor(SLOT_TEXT[i], fgc)
-            rv.setImageViewResource(SLOT_ICON[i], modeIcon(m))
-            // 图标本身是纯黑矢量，必须染色才在通知上可见
-            rv.setInt(SLOT_ICON[i], "setColorFilter", fgc)
-            // 圆底按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
-            if (Build.VERSION.SDK_INT >= 31) {
-                rv.setColorStateList(SLOT_ICON[i], "setBackgroundTintList",
-                    ColorStateList.valueOf(if (selected) primary else container))
-            } else {
-                rv.setInt(SLOT_ICON[i], "setBackgroundResource",
-                    if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
-            }
-            rv.setOnClickPendingIntent(SLOT[i], actionPi(c, m))
-        }
-        return rv
     }
 
     /** GAIA 掉线 / 断开：通知撤下（没有数据就不该留残影）。 */
