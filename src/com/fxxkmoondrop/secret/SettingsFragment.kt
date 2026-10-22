@@ -197,6 +197,11 @@ class SettingsFragment : Fragment() {
         seedRow = LinearLayout(requireContext())
         seedRow!!.orientation = LinearLayout.HORIZONTAL
         seedRow!!.gravity = Gravity.CENTER_VERTICAL
+        // 与其它行一致的度量：水平 16dp 内边距 + 56dp 最小高度。
+        // 原实现没有任何内边距，标签顶到卡片左边缘、5 个色点溢出卡片右边缘，
+        // 表现为「卡片与内容错位」。
+        seedRow!!.setPadding(dp(16), dp(12), dp(16), dp(12))
+        seedRow!!.minimumHeight = dp(56)
         val seedLabel = TextView(requireContext())
         seedLabel.text = Lang.t("种子颜色", "Seed color")
         seedLabel.textSize = 14f

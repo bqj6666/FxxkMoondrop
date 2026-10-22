@@ -166,6 +166,18 @@ class M3Ui {
         fun dp(c: Context, v: Int): Int = Math.round(v * c.resources.displayMetrics.density)
 
         /**
+         * 官方可点击背景：直接取主题的 `?attr/selectableItemBackground`，
+         * 水波纹颜色由 Material 主题（M3 状态层）决定，无需自绘。
+         * 返回 null 表示主题未提供（调用方保持无背景）。
+         */
+        @JvmStatic
+        fun selectableBackground(c: Context): android.graphics.drawable.Drawable? {
+            val tv = android.util.TypedValue()
+            if (!c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) return null
+            return try { androidx.core.content.ContextCompat.getDrawable(c, tv.resourceId) } catch (_: Throwable) { null }
+        }
+
+        /**
          * M3 状态层水波纹：按下色取**内容色（onSurface）12%** —— 这是 M3 对 surface 容器的规范；
          * 用主色会因浅色主题下主色本身很亮而几乎看不见（实测反馈：没有按下反馈）。
          * @param content 形状（圆角矩形/圆形），为 null 时只提供光晕
@@ -377,6 +389,7 @@ class M3Ui {
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线，
             // 对齐 LSPosed 实测结构（见 groupCard 注释）。
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
@@ -427,6 +440,7 @@ class M3Ui {
             // 3.3.1: 返回**裸行**（不再自带 MaterialCardView）。
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线。
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
@@ -749,6 +763,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun loadingRow(c: Context, pal: ThemeUtil.Palette, text: String): LinearLayout {
             val row = LinearLayout(c)
+            row.background = selectableBackground(c)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER
             val ind = com.google.android.material.loadingindicator.LoadingIndicator(c)
@@ -886,6 +901,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     iconRes: Int, title: String, sub: String?,
                     trailing: View?, onClick: Runnable?): LinearLayout {
             val row = LinearLayout(act)
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
