@@ -1039,8 +1039,7 @@ class OverviewFragment : Fragment() {
                 val bg = GradientDrawable()
                 bg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
                 bg.cornerRadius = dp(12).toFloat()
-                val rd = RippleDrawable(
-                        ColorStateList.valueOf(if (isDark()) 0x33FFFFFF else 0x22000000), bg, null)
+                val rd = M3Ui.pressRipple(requireContext(), bg)
                 row.background = rd
                 row.setOnClickListener { fixPermission(per) }
             }
@@ -1283,8 +1282,7 @@ class OverviewFragment : Fragment() {
             val rowBg = GradientDrawable()
             rowBg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
             rowBg.cornerRadius = dp(14).toFloat()
-            val rd = RippleDrawable(
-                    ColorStateList.valueOf(if (isDark()) 0x33FFFFFF else 0x22000000), rowBg, null)
+            val rd = M3Ui.pressRipple(requireContext(), rowBg)
             row.background = rd
             val col = LinearLayout(requireContext())
             col.orientation = LinearLayout.VERTICAL
