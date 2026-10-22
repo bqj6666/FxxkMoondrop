@@ -849,10 +849,12 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             card.background = cardBg(act, pal, RADIUS_CARD)
             for (i in rows.indices) {
                 if (i > 0) {
-                    // 行分隔线：1px 发丝线，色取 pal.divider（低对比）
-                    val line = View(act)
-                    line.setBackgroundColor(pal.divider)
-                    card.addView(line, LinearLayout.LayoutParams(-1, hairline(act)))
+                    // M3 Divider 规范：1dp 厚 + 低对比 outlineVariant 系颜色。
+                    // 用官方 MaterialDivider，不再手绘 View（原实现为 0.75dp 发丝线，不合 1dp 规范）。
+                    val line = com.google.android.material.divider.MaterialDivider(act)
+                    line.dividerThickness = dp(act, 1)
+                    line.setDividerColor(pal.divider)
+                    card.addView(line, LinearLayout.LayoutParams(-1, -2))
                 }
                 card.addView(rows[i], LinearLayout.LayoutParams(-1, -2))
             }
