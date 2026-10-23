@@ -37,6 +37,7 @@ class GaiaPacketHandler(
     /** 解析 GAIA V3 数据包（由 onCharacteristicChanged / onCharacteristicRead 调用） */
     fun handlePacket(value: ByteArray) {
         try {
+            if (value.size < 4) return
             Log.d(TAG, "RX raw " + AppLog.hex(value))
             AppLog.d(TAG, "GAIA RX " + AppLog.hex(value))
             val vendor = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
@@ -54,15 +55,21 @@ class GaiaPacketHandler(
                     " type=" + type + " cmd=0x" + Integer.toHexString(command) +
                     " " + payload.contentToString())
 
+            val modeNotification = type == GaiaConstants.TYPE_NOTIFICATION && command == 0x01 &&
+                    (feature == GaiaConstants.FEATURE_ANC_V2 || feature == GaiaConstants.F_AUDIO_CURATION)
+            if (type != GaiaConstants.TYPE_RESPONSE && !modeNotification) return
+
             if (feature == GaiaConstants.FEATURE_BATTERY && command == GaiaConstants.CMD_GET_BATTERY_LEVELS) {
                 parseBatteryLevels(payload)
-            } else if (feature == GaiaConstants.FEATURE_BASIC && command == GaiaConstants.CMD_GET_SUPPORTED_FEATURES) {
-                probe.onBasicAlive()  // alpha2.41.4: 位图响应同样证明链路活着
-                probe.handleFeatureResponse(payload)
+            } else if (feature == GaiaConstants.FEATURE_BASIC &&
+                    (command == GaiaConstants.CMD_GET_SUPPORTED_FEATURES ||
+                            command == GaiaCommands.C_BASIC_GET_SUPPORTED_FEATURES_NEXT)) {
+                probe.handleFeatureResponse(payload, command)
             } else if (feature == GaiaConstants.FEATURE_BASIC &&
                     (command == GaiaConstants.CMD_GET_VARIANT || command == GaiaConstants.CMD_GET_APP_VERSION ||
                             command == GaiaConstants.CMD_GET_GAIA_VERSION)) {
                 // alpha2.41.4: BASIC 版本/型号响应证明 GAIA 链路活着（Space Travel 2 只回 cmd0/cmd4）
+                if (payload.isEmpty()) return
                 probe.onBasicAlive()
                 // 设备型号/版本（仅记录日志，不驱动状态）
                 try {
@@ -72,13 +79,17 @@ class GaiaPacketHandler(
             } else if ((feature == GaiaConstants.FEATURE_ANC_V2 || feature == GaiaConstants.F_AUDIO_CURATION) &&
                     (command == GaiaConstants.CMD_GET_CURRENT_MODE || command == GaiaConstants.CMD_SET_CURRENT_MODE ||
                             command == GaiaConstants.CMD_AC_GET_SWITCH_CONF || command == GaiaConstants.CMD_AC_SET_SWITCH_CONF ||
-                            command == 0x01)) {
-                // 0x01 = notification MODE_CHANGE
+                            modeNotification)) {
+                val switchConfig = command == GaiaConstants.CMD_AC_GET_SWITCH_CONF ||
+                        command == GaiaConstants.CMD_AC_SET_SWITCH_CONF
+                if (payload.isEmpty() || (!switchConfig &&
+                            (payload.size != 1 || (payload[0].toInt() and 0xFF) !in 0..5))) return
+                // A response to command 1 is not a MODE_CHANGE notification.
                 probe.handleAncProbeResponse(feature, command)
 
                 // cmd=41/42 返回的是 settledActions 字节流，与 cmd=3 的 Mode 单字节语义不同。
                 // 仅记录原始字节做证据，不调用 parseAncMode（避免用 V1 映射误判降噪状态）。
-                if (command == GaiaConstants.CMD_AC_GET_SWITCH_CONF || command == GaiaConstants.CMD_AC_SET_SWITCH_CONF) {
+                if (switchConfig) {
                     Log.d(TAG, "ANC switch conf RX cmd=0x" + Integer.toHexString(command) +
                             " payload=" + payload.contentToString() + " hex=" + AppLog.hex(payload))
                 } else {
@@ -182,7 +193,7 @@ class GaiaPacketHandler(
     }
 
     private fun parseBatteryLevels(payload: ByteArray) {
-        if (payload.size < 2) return
+        if (payload.size < 2 || payload.size % 2 != 0) return
         var leftLevel = -1
         var rightLevel = -1
         var i = 0

@@ -32,6 +32,17 @@
     <!-- 不再声明 SYSTEM_ALERT_WINDOW：本模块从不创建悬浮窗，
          弹窗走的是 GMS 进程内的既有窗口（受 GMS 自身权限约束），与本应用无关。 -->
 
+    <!-- Only this module's signer may send commands/state to the injected GMS receivers. -->
+    <permission android:name="com.fxxkmoondrop.secret.permission.HOOK_IPC"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.fxxkmoondrop.secret.permission.HOOK_IPC" />
+
+    <!-- Provider authentication must resolve the installed host UIDs on target 30+. -->
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.android.settings" />
+    </queries>
+
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application

@@ -25,7 +25,6 @@ import android.util.Log
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.util.ArrayDeque
 import java.util.HashSet
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -45,7 +44,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  *  - 包解析提取到 GaiaPacketHandler.kt
  *  - 本类保留：连接管理 + GATT 回调 + 公开 API 门面
  */
-class GaiaBleClient private constructor() {
+class GaiaBleClient private constructor(
+    private val elapsedRealtime: () -> Long = android.os.SystemClock::elapsedRealtime
+) {
 
     interface Callback {
         fun onConnected(address: String)
@@ -112,19 +113,22 @@ class GaiaBleClient private constructor() {
     private var ancCallback: AncControlCallback? = null
     private var dcBridge: DeviceControlCallback? = null
 
-    // alpha2.36: BLE write queue - Android only allows one write at a time
-    private val gaiaWriteQueue = ArrayDeque<ByteArray>()
-    @Volatile private var isGaiaWriting = false
-    private val gaiaWriteDelayMs = 120L
-
     fun setDcBridge(cb: DeviceControlCallback?) { this.dcBridge = cb }  // alpha2.31
     private val handler = Handler(Looper.getMainLooper())
+    private val gattOperations = GattOperationQueue(
+        { task, delay -> handler.postAtTime(Runnable { synchronized(this) { task.run() } },
+            task, android.os.SystemClock.uptimeMillis() + delay) },
+        { task -> handler.removeCallbacksAndMessages(task) },
+        { message -> failSession(message) }
+    )
+    private var pendingDeadline: Runnable? = null
 
     // alpha2.27: 能力探测委托给独立状态机
     private val probe = CapabilityProbe(
         handler,
         { connected },
         { gatt != null || useRfcomm },
+        this,
         { f, c, p -> writeCommand(f, c, p) }
     )
 
@@ -144,7 +148,6 @@ class GaiaBleClient private constructor() {
     private var leScanner: BluetoothLeScanner? = null
     private var scanCallback: ScanCallback? = null
     @Volatile private var scanning = false
-    private var gattPendingSince = 0L
     @Volatile private var leAddrVerified = false
 
     /** alpha2.41.9: 本进程内已被证伪（无 GAIA/9ECA 服务）的地址，不再作为缓存首选 */
@@ -183,18 +186,23 @@ class GaiaBleClient private constructor() {
     @Volatile private var transportAutoTried = false
     @Volatile private var rfcommFallbackTried = false
 
-    private val scanTimeout = object : Runnable {
-        override fun run() {
-            stopScan()
-            Log.w(GaiaConstants.TAG, "scan timeout, fallback to original address")
-            retryConnect()
-        }
-    }
+    // Address discovery outlives individual GATT attempts, but not its controller owners.
+    private val scanHandler = Handler(Looper.getMainLooper())
+    private var scanTimeout: Runnable? = null
 
     /** 根因 B 修复用：retryConnect() 的延迟重连任务，单实例、投递前先撤销。 */
     private var retryReconnectRunnable: Runnable? = null
 
     companion object {
+        internal fun submitGattWrite(properties: Int, write: (Int) -> Boolean): Boolean {
+            val noResponse = properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
+            val first = if (properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0 && noResponse)
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            // A false return means nothing is in flight, so the other supported mode is safe to try.
+            return write(first) || (first == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT && noResponse &&
+                write(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE))
+        }
+
         @JvmStatic @Synchronized
         fun getInstance(): GaiaBleClient {
             if (instance == null) instance = GaiaBleClient()
@@ -296,12 +304,7 @@ class GaiaBleClient private constructor() {
                 }
             }
             val f = IntentFilter(GaiaConstants.ACTION_LE_ADDR_FOUND)
-            if (Build.VERSION.SDK_INT >= 33) {
-                ctx.registerReceiver(leAddrReceiver, f, Context.RECEIVER_EXPORTED)
-            } else {
-                @Suppress("DEPRECATION")
-                ctx.registerReceiver(leAddrReceiver, f)
-            }
+            HookIpc.registerInternal(ctx, leAddrReceiver, f)
             Log.d(GaiaConstants.TAG, "le addr receiver registered")
         } catch (t: Throwable) {
             Log.e(GaiaConstants.TAG, "registerLeAddrReceiver failed", t)
@@ -340,7 +343,7 @@ class GaiaBleClient private constructor() {
      * 供轮询侧判断「无需再次发起连接」，避免周期性拆建 BLE 链路（耳机死机根因 C）。
      */
     @Synchronized
-    fun isConnecting(): Boolean = gatt != null && !connected
+    fun isConnecting(): Boolean = !connected && (gatt != null || rfcommTransport != null)
 
     @Synchronized
     fun setCallback(cb: Callback?): Long {
@@ -395,8 +398,6 @@ class GaiaBleClient private constructor() {
         if (address == null) return false
         AppLog.i(GaiaConstants.TAG, "connect() addr=" + address + " cachedLe=" + cachedLeAddress)
         simConnected = false
-        gaiaReady = false   // 新会话：GAIA 需重新完成服务发现才可用
-        protocolRefuted = false   // 新会话：协议指纹待本轮服务发现重新裁定
         if (context == null) context = ctx.applicationContext
         registerLeAddrReceiver()
         if (cachedLeAddress == null && context != null) {
@@ -431,29 +432,11 @@ class GaiaBleClient private constructor() {
         // alpha2.42: RFCOMM/SPP 已连时直接复用，避免 detect 轮询的 connect() 断开 RFCOMM
         if (useRfcomm && connected) return true
         if (connected && address.equals(deviceAddress, ignoreCase = true)) return true
-        if (!connected && gatt != null && address.equals(deviceAddress, ignoreCase = true)) {
-            if (gattPendingSince > 0 && System.currentTimeMillis() - gattPendingSince > GaiaConstants.GATT_PENDING_TIMEOUT_MS) {
-                Log.w(GaiaConstants.TAG, "gatt pending timeout on " + address + ", advance candidate")
-                attemptCount++
-                val candNow = candidates
-                if (candNow == null || candNow.size <= 1 || attemptCount >= candNow.size * 2) {
-                    Log.w(GaiaConstants.TAG, "all candidates failed, start generic moondrop scan")
-                    clearCachedLe()
-                    candidates = null
-                    candidateIdx = 0
-                    attemptCount = 0
-                    handler.removeCallbacks(scanTimeout)
-                    handler.postDelayed({ startGenericScan() }, 1000)
-                } else {
-                    advanceCandidate()
-                }
-            } else {
-                return true
-            }
-        }
+        if (isConnecting() && (rfcommTransport != null || address.equals(deviceAddress, ignoreCase = true))) return true
         // alpha2.42: 每次新连接尝试重置 RFCOMM 标志（默认兜底；detect 每5s触发一次 connect）
         rfcommFallbackTried = false
         disconnectInternal()
+        protocolRefuted = false
         try {
             val adapter = BluetoothAdapter.getDefaultAdapter()
             if (adapter == null) return false
@@ -526,16 +509,15 @@ class GaiaBleClient private constructor() {
             leAddrVerified = false
             if (cachedLeAddress == null && resolved == null && !scanning) {
                 Log.d(GaiaConstants.TAG, "no LE addr known, start name scan for " + (device.name ?: address))
-                handler.removeCallbacks(scanTimeout)
                 startScanForLe(device)
             }
-            gattPendingSince = System.currentTimeMillis()
             if (Build.VERSION.SDK_INT >= 23) {
                 gatt = device.connectGatt(context, false, gattCallback, transportFor(device))
             } else {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
             }
+            beginGattSession()
             val candIdxForLog = candidates?.indexOfFirst { it != null && it.equals(addr, ignoreCase = true) } ?: -1
             Log.d(GaiaConstants.TAG, "connectGatt(auto) " + addr + " (cand " + candIdxForLog + "/" +
                     (candidates?.size ?: 0) + ")")
@@ -651,11 +633,7 @@ class GaiaBleClient private constructor() {
             }
             scanning = true
             leScanner!!.startScan(null, settings, scanCallback)
-            handler.postDelayed({
-                if (!scanning) return@postDelayed
-                stopScan()
-                onScanDone()
-            }, timeoutMs)
+            scheduleScanTimeout(timeoutMs, onScanDone)
             return true
         } catch (e: SecurityException) {
             Log.e(GaiaConstants.TAG, "scan permission denied", e)
@@ -705,6 +683,7 @@ class GaiaBleClient private constructor() {
     /** Generic Moondrop device scan (collect all hits, pick best on timeout) */
     @Synchronized
     private fun startGenericScan() {
+        if (scanning) return
         scanHits.clear()
         val ok = startLeScan(
                 matcher = { n, addr, result ->
@@ -772,9 +751,23 @@ class GaiaBleClient private constructor() {
         }
     }
 
+    private fun scheduleScanTimeout(timeoutMs: Long, onScanDone: () -> Unit) {
+        val owner = scanCallback
+        val task = Runnable {
+            synchronized(this) {
+                if (!scanning || scanCallback !== owner) return@Runnable
+                stopScan()
+                onScanDone()
+            }
+        }
+        scanTimeout = task
+        scanHandler.postDelayed(task, timeoutMs)
+    }
+
     @Synchronized
     private fun stopScan() {
-        handler.removeCallbacks(scanTimeout)
+        scanTimeout?.let { scanHandler.removeCallbacks(it) }
+        scanTimeout = null
         if (scanning && leScanner != null) {
             try { scanCallback?.let { leScanner!!.stopScan(it) } } catch (_: Exception) { }
         }
@@ -783,6 +776,7 @@ class GaiaBleClient private constructor() {
         leScanner = null
     }
 
+    @Synchronized
     private fun doConnectLe(result: ScanResult) {
         try {
             if (result == null || result.device == null) return
@@ -801,13 +795,14 @@ class GaiaBleClient private constructor() {
             // alpha2.41.9: 未经验证只驻内存，不再写持久缓存
             cachedLeAddress = leAddress
             cachedLeName = device.name
-            gattPendingSince = System.currentTimeMillis()
+            beginGattSession()
             Log.d(GaiaConstants.TAG, "connectGatt(scan-result) " + leAddress)
         } catch (e: Exception) {
             Log.e(GaiaConstants.TAG, "doConnectLe(scan) failed", e)
         }
     }
 
+    @Synchronized
     private fun doConnectLe(leAddress: String) {
         try {
             val adapter = BluetoothAdapter.getDefaultAdapter()
@@ -841,6 +836,7 @@ class GaiaBleClient private constructor() {
             candidates = arrayOf(leAddress.uppercase())
             candidateIdx = 0
             attemptCount = 0
+            beginGattSession()
             Log.d(GaiaConstants.TAG, "connectGatt(LE) " + leAddress)
         } catch (e: Exception) {
             Log.e(GaiaConstants.TAG, "doConnectLe failed", e)
@@ -885,6 +881,7 @@ class GaiaBleClient private constructor() {
         return ProbeBudget.allow(name)
     }
 
+    @Synchronized
     private fun retryConnect() {
         // 3.3.2: 非本模块支持的设备不再无休止重连（见 shouldKeepRetrying 说明）。
         if (!shouldKeepRetrying()) {
@@ -898,8 +895,8 @@ class GaiaBleClient private constructor() {
         // —— 它仍挂在协议栈上继续收耳机通知，且与当前连接共用同一个 gattCallback，
         // 导致每条通知被处理两遍、耳机端维持两条多余的 BLE 链路。
         // 已有活跃 gatt 时直接返回：正在连接就等它、已连上就无需重连，都不该打断。
-        if (gatt != null) {
-            Log.d(GaiaConstants.TAG, "retryConnect skipped: gatt already active (connected=" + connected + ")")
+        if (gatt != null || rfcommTransport != null) {
+            Log.d(GaiaConstants.TAG, "retryConnect skipped: transport already active (connected=" + connected + ")")
             return
         }
         var addr: String? = null
@@ -922,6 +919,7 @@ class GaiaBleClient private constructor() {
                 @Suppress("DEPRECATION")
                 gatt = device.connectGatt(context, true, gattCallback)
             }
+            beginGattSession()
             Log.d(GaiaConstants.TAG, "connectGatt(fallback-auto) " + addr)
         } catch (e: Exception) {
             Log.e(GaiaConstants.TAG, "retryConnect failed", e)
@@ -931,19 +929,17 @@ class GaiaBleClient private constructor() {
         // GATT client 注册即注销），耳机端 BLE 链路剧烈抖动 → 触发固件崩溃关机。
         // 改为单实例 Runnable，投递前先撤销上一次，保证同时只有一个待执行重连。
         retryReconnectRunnable?.let { handler.removeCallbacks(it) }
+        val generation = connectionGeneration
         val task = Runnable {
-            val a = deviceAddress
-            if (a == null || connected) return@Runnable
-            // 3.3.2: 延迟任务直接调 connect()，不经过 retryConnect 的守卫，
-            // 所以这里必须再判一次 —— 否则入口挡住的设备仍会被这一次补掉。
-            if (!shouldKeepRetrying()) {
-                AppLog.i(GaiaConstants.TAG,
-                        "delayed reconnect skipped: 设备非本模块支持 = "
-                                + (connectedDeviceName ?: cachedLeName ?: "?"))
-                return@Runnable
+            synchronized(this) {
+                if (generation != connectionGeneration) return@Runnable
+                val a = deviceAddress
+                if (a == null || connected) return@Runnable
+                // Delayed reconnect must honor the same device/probe gate as the immediate path.
+                if (!shouldKeepRetrying()) return@Runnable
+                disconnectInternal()
+                connect(context!!, a)
             }
-            synchronized(this@GaiaBleClient) { disconnectInternal() }
-            connect(context!!, a)
         }
         retryReconnectRunnable = task
         handler.postDelayed(task, 15000)
@@ -1042,6 +1038,7 @@ class GaiaBleClient private constructor() {
     @Synchronized
     fun forceReconnect(ctx: Context, address: String?, owner: Callback, generation: Long) {
         if (callback !== owner || callbackGeneration != generation) return
+        stopScan()
         disconnectInternal()
         deviceAddress = null
         connected = false
@@ -1052,29 +1049,32 @@ class GaiaBleClient private constructor() {
     fun disconnect() {
         val addr = deviceAddress
         stopScan()
-        handler.removeCallbacksAndMessages(null)
         leAddrReceiver?.let { receiver ->
             try { context?.unregisterReceiver(receiver) } catch (_: Exception) { }
         }
         leAddrReceiver = null
         disconnectInternal()
-        gaiaWriteQueue.clear()
-        isGaiaWriting = false
         deviceAddress = null
-        connected = false
-        gaiaReady = false
-        try { DeviceControlBridge.reset() } catch (_: Exception) { }
         callback?.onDisconnected(addr ?: "")
     }
 
+    @Synchronized
     private fun disconnectInternal() {
         connectionGeneration++
-        // 根因 B 配套：主动断开时撤销待执行的重连任务，避免它稍后又把连接拉起来。
-        retryReconnectRunnable?.let { handler.removeCallbacks(it) }
+        connected = false
+        gaiaReady = false
+        pendingDeadline = null
+        handler.removeCallbacksAndMessages(null)
+        gattOperations.close()
+        try { DeviceControlBridge.reset() } catch (_: Exception) { }
+        dcBridge = null
+        ancCallback = null
+        retryReconnectRunnable = null
         val oldGatt = gatt
         gatt = null
         oldGatt?.let {
-            try { it.disconnect(); it.close() } catch (_: Exception) { }
+            try { it.disconnect() } catch (_: Exception) { }
+            try { it.close() } catch (_: Exception) { }
         }
         rfcommTransport?.disconnect()
         rfcommTransport = null
@@ -1087,88 +1087,154 @@ class GaiaBleClient private constructor() {
         srcNotifyChar = null
         srcCapChar = null
         srcInfoChar = null
-        srcClient?.clear()
+        val oldSrc = srcClient
         srcClient = null
+        oldSrc?.clear()
         probe.reset()
     }
 
-    // alpha2.38.9: RFCOMM/SPP fallback for Classic BT devices (e.g. Pudding MD-TWS-056)
-    private fun tryRfcommFallback(device: BluetoothDevice) {
+    private fun beginGattSession() {
+        val session = gatt ?: return
+        protocolRefuted = false
+        gattOperations.open(session)
+        armPendingDeadline()
+    }
+
+    private fun armPendingDeadline() {
+        pendingDeadline?.let { handler.removeCallbacks(it) }
         val generation = connectionGeneration
-        val oldGatt = gatt
-        gatt = null
-        oldGatt?.let { try { it.disconnect(); it.close() } catch (_: Exception) {} }
-        Thread {
-            val transport = GaiaRfcommTransport(
-                handler,
-                { packet -> if (generation == connectionGeneration) packetHandler.handlePacket(packet) },
-                {
-                    if (generation == connectionGeneration) {
-                        connected = false
-                        useRfcomm = false
-                        rfcommTransport = null
-                        try { DeviceControlBridge.reset() } catch (_: Exception) {}
-                        callback?.onDisconnected(deviceAddress ?: "")
-                    }
-                },
-                { msg -> handler.post { if (generation == connectionGeneration) callback?.onError(msg) } }
-            )
-            if (generation != connectionGeneration) return@Thread
-            if (transport.connect(device)) {
-                synchronized(this@GaiaBleClient) {
-                    if (generation != connectionGeneration) {
-                        transport.disconnect()
-                        return@Thread
-                    }
-                    // Own the socket before posting: shutdown may remove the queued callback.
-                    rfcommTransport = transport
-                }
-                handler.post {
-                    if (generation != connectionGeneration || rfcommTransport !== transport) return@post
-                    useRfcomm = true
-                    connected = true
-                    connectedDeviceName = device.name ?: connectedDeviceName
-                    Log.i(GaiaConstants.TAG, "RFCOMM connected: " + connectedDeviceName)
-                    // alpha2.52: RFCOMM/SPP 路径同样证明这是目标设备 -> 记住设备名
-                    DeviceMatcher.learn(context, device.name ?: connectedDeviceName)
-                    AppLog.i(GaiaConstants.TAG, "protocol: RFCOMM/SPP connected (" + connectedDeviceName + ")")
-                    probe.reset()
-                    probe.startProbes()
-                    callback?.onConnected(deviceAddress ?: "")
-                    handler.postDelayed({
-                        if (connected) fetchBatteryLevels()
-                        if (connected) {
-                            try { AncBridge.fetchAncMode() } catch (_: Exception) {}
-                            try { AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) {}
-                            try { DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)); DeviceControlBridge.fetchAll() } catch (_: Exception) {}
-                        }
-                    }, 1200)
-                    handler.postDelayed({
-                        if (connected) {
-                            try { DeviceControlBridge.fetchAll() } catch (_: Exception) {}
-                        }
-                    }, 4000)
-                }
-            } else {
-                handler.post {
-                    if (generation != connectionGeneration) return@post
-                    // 3.0.1: 拉黑的唯一依据是「协议指纹被证伪」（服务发现成功但无 GAIA/9ECA）。
-                    // 传输层失败 —— 连接超时、status=147、耳机未就绪、信号差 —— 都不能判断
-                    // 设备是否支持协议，这里只记日志，等下一轮 detect 轮询继续重试。
-                    // 此前无条件 reject 会把一次连不上当成「设备不支持」，未收录型号
-                    // （名字不含关键字，只能靠指纹探测放行）撞上抖动即被永久拉黑。
-                    if (protocolRefuted) {
-                        DeviceMatcher.reject(context, device.name)
-                        AppLog.w(GaiaConstants.TAG,
-                                "no GAIA/9ECA in GATT -> rejected: " + device.name)
+        val deadline = elapsedRealtime() + GaiaConstants.GATT_PENDING_TIMEOUT_MS
+        lateinit var task: Runnable
+        task = Runnable {
+            synchronized(this) {
+                if (pendingDeadline === task && generation == connectionGeneration && !connected &&
+                    elapsedRealtime() >= deadline) {
+                    attemptCount++
+                    val exhausted = rfcommTransport == null &&
+                        (candidates == null || candidates!!.size <= 1 || attemptCount >= candidates!!.size * 2)
+                    if (exhausted) {
+                        clearCachedLe()
+                        candidates = null
+                        candidateIdx = 0
+                        attemptCount = 0
                     } else {
-                        AppLog.i(GaiaConstants.TAG,
-                                "RFCOMM failed without refutation -> keep probing: " + device.name)
+                        advanceCandidate()
                     }
-                    callback?.onError("device unsupported (GAIA/9ECA/RFCOMM)")
+                    failSession("Bluetooth connection/setup timeout")
+                    if (exhausted && connectionGeneration == generation + 1)
+                        postSessionDelayed({ startGenericScan() }, 1000)
                 }
             }
-        }.start()
+        }
+        pendingDeadline = task
+        handler.postDelayed(task, GaiaConstants.GATT_PENDING_TIMEOUT_MS)
+    }
+
+    private fun cancelPendingDeadline() {
+        pendingDeadline?.let { handler.removeCallbacks(it) }
+        pendingDeadline = null
+    }
+
+    private fun markReady() {
+        stopScan()
+        cancelPendingDeadline()
+        connected = true
+        gaiaReady = true
+        setDcBridge(DeviceControlBridge)
+        try { DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)) } catch (_: Exception) { }
+    }
+
+    private fun failSession(message: String) {
+        val address = deviceAddress ?: ""
+        disconnectInternal()
+        callback?.onError(message)
+        callback?.onDisconnected(address)
+    }
+
+    // alpha2.38.9: RFCOMM/SPP fallback for Classic BT devices (e.g. Pudding MD-TWS-056)
+    @Synchronized
+    private fun tryRfcommFallback(device: BluetoothDevice) {
+        disconnectInternal()
+        val generation = connectionGeneration
+        val transport = GaiaRfcommTransport(
+            handler,
+            { packet -> synchronized(this) {
+                if (generation == connectionGeneration && useRfcomm) packetHandler.handlePacket(packet)
+            } },
+            {
+                // Drain callbacks posted by the final packet before clearing session work.
+                handler.post { retireRfcomm(generation) }
+            },
+            { msg -> synchronized(this) {
+                if (generation == connectionGeneration) callback?.onError(msg)
+            } }
+        )
+        // Own even the blocking connect: shutdown/deadline must be able to close its socket.
+        rfcommTransport = transport
+        armPendingDeadline()
+        Thread {
+            val success = transport.connect(device)
+            handler.post {
+                synchronized(this) {
+                    if (generation != connectionGeneration || rfcommTransport !== transport) {
+                        transport.disconnect()
+                    } else if (success) {
+                        adoptRfcomm(transport, generation, runCatching { device.name }.getOrNull())
+                    } else {
+                        // Only a completed GATT fingerprint can refute protocol support.
+                        if (protocolRefuted) DeviceMatcher.reject(context, runCatching { device.name }.getOrNull())
+                        failSession("RFCOMM connection failed")
+                    }
+                }
+            }
+        }.apply { name = "GaiaRfcomm-Connect"; isDaemon = true; start() }
+    }
+
+    @Synchronized
+    private fun retireRfcomm(generation: Long) {
+        if (generation != connectionGeneration) return
+        val address = deviceAddress ?: ""
+        disconnectInternal()
+        callback?.onDisconnected(address)
+    }
+
+    @Synchronized
+    private fun adoptRfcomm(transport: GaiaRfcommTransport, generation: Long, name: String?) {
+        if (generation != connectionGeneration || rfcommTransport !== transport) {
+            transport.disconnect()
+            return
+        }
+        if (!transport.isReady()) {
+            failSession("RFCOMM disconnected during setup")
+            return
+        }
+        useRfcomm = true
+        connectedDeviceName = name ?: connectedDeviceName
+        markReady()
+        DeviceMatcher.learn(context, connectedDeviceName)
+        probe.reset()
+        probe.startProbes()
+        if (generation != connectionGeneration) return
+        callback?.onConnected(deviceAddress ?: "")
+        if (generation == connectionGeneration) scheduleInitialQueries()
+    }
+
+    private fun scheduleInitialQueries() {
+        postSessionDelayed({
+            if (connected) {
+                fetchBatteryLevels()
+                try { AncBridge.fetchAncMode(); AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) { }
+                try { DeviceControlBridge.fetchAll() } catch (_: Exception) { }
+            }
+        }, 1200)
+        postSessionDelayed({ if (connected) DeviceControlBridge.fetchAll() }, 4000)
+    }
+
+    private fun postSessionDelayed(action: () -> Unit, delay: Long) {
+        val generation = connectionGeneration
+        handler.postDelayed({ synchronized(this) {
+            if (generation == connectionGeneration) action()
+        } }, delay)
     }
 
     fun fetchBatteryLevels() {
@@ -1285,7 +1351,7 @@ class GaiaBleClient private constructor() {
             val m = IntArray(4)
             for (i in 0..3) {
                 val v = sp?.getInt("anc_map_" + i, profileMap[i]) ?: profileMap[i]
-                m[i] = if (v in 0..5) v else profileMap[i]
+                m[i] = if (v in -1..5) v else profileMap[i]
             }
             m
         } else null
@@ -1293,7 +1359,7 @@ class GaiaBleClient private constructor() {
         val src = if (custom != null) "custom" else if (AncProfileLib.matchedProfileName(connectedDeviceName) != "默认") "profile" else "default"
         AppLog.d(GaiaConstants.TAG, "ancSetMap src=" + src + " map=" + map.contentToString() +
                 " profile=" + AncProfileLib.matchedProfileName(connectedDeviceName))
-        return if (map.any { it !in 0..5 }) AncProfileLib.DEFAULT_MAP else map
+        return if (map.any { it !in -1..5 }) AncProfileLib.DEFAULT_MAP else map
     }
 
     /**
@@ -1391,32 +1457,19 @@ class GaiaBleClient private constructor() {
         }
         val g = gatt; val ch = cmdChar
         if (g == null || ch == null) { callback?.onError("GAIA 未连接"); return }
-        gaiaWriteQueue.add(packet)
-        if (!isGaiaWriting) {
-            isGaiaWriting = true
-            drainGaiaQueue()
-        }
+        enqueueWrite(g, ch, packet)
     }
 
-    private fun drainGaiaQueue() {
-        val packet = synchronized(this) { gaiaWriteQueue.poll() } ?: run {
-            isGaiaWriting = false
-            return
+    private fun enqueueWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, packet: ByteArray,
+                             start: java.util.function.BooleanSupplier = java.util.function.BooleanSupplier { true }): Boolean {
+        val value = packet.copyOf()
+        return gattOperations.enqueue(g, GattOperationQueue.Kind.WRITE, ch, isCurrent = { start.asBoolean }) {
+            submitGattWrite(ch.properties) { writeType ->
+                ch.value = value
+                ch.writeType = writeType
+                g.writeCharacteristic(ch)
+            }
         }
-        val g = gatt; val ch = cmdChar
-        if (g == null || ch == null) {
-            synchronized(this) { gaiaWriteQueue.clear() }
-            isGaiaWriting = false
-            return
-        }
-        try {
-            ch.value = packet
-            ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            g.writeCharacteristic(ch)
-            Log.d(GaiaConstants.TAG, "TX gaia " + packet.contentToString())
-        } catch (e: SecurityException) { Log.e(GaiaConstants.TAG, "gaia write denied", e)
-        } catch (e: Exception) { Log.e(GaiaConstants.TAG, "gaia write failed", e) }
-        handler.postDelayed({ drainGaiaQueue() }, gaiaWriteDelayMs)
     }
 
     fun getSrcClient(): BleSourceSwitchClient? = srcClient
@@ -1438,14 +1491,7 @@ class GaiaBleClient private constructor() {
     fun sendSrc(frame: ByteArray) {
         val g = gatt; val ch = srcCmdChar
         if (g == null || ch == null) { callback?.onError("设备不支持 BleSourceSwitch 服务"); return }
-        try {
-            ch.value = frame
-            ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            g.writeCharacteristic(ch)
-            Log.d(GaiaConstants.TAG, "TX src " + frame.contentToString())
-            AppLog.d(GaiaConstants.TAG, "SRC TX " + AppLog.hex(frame))
-        } catch (e: SecurityException) { Log.e(GaiaConstants.TAG, "src write denied", e)
-        } catch (e: Exception) { Log.e(GaiaConstants.TAG, "src write failed", e) }
+        enqueueWrite(g, ch, frame)
     }
 
     /** alpha2.27: broadcast battery update to GMS process */
@@ -1471,6 +1517,10 @@ class GaiaBleClient private constructor() {
 
         private fun handleConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (g !== gatt) return
+            if (status != BluetoothGatt.GATT_SUCCESS && newState != BluetoothProfile.STATE_DISCONNECTED) {
+                failSession("GATT connection failed: $status")
+                return
+            }
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d(GaiaConstants.TAG, "gatt connected, discovering services")
                 connectedDeviceName = g.device?.name
@@ -1488,16 +1538,17 @@ class GaiaBleClient private constructor() {
                         " leAddrVerified=" + leAddrVerified)
                 refreshGattCache(g)
                 AppLog.i(GaiaConstants.TAG, "GATT connected " + deviceAddress + " -> discovering services")
-                gattPendingSince = 0
                 emptySvcRetries = 0   // 3.3.2: 新会话重新开始计数
                 if (deviceAddress != null) lastConnectedAddr = deviceAddress
                 // alpha2.41.9: GATT 已连接 != 服务已验证，持久化统一交给 onServicesDiscovered
                 // 确认 GAIA/9ECA 之后再写（此前这里会把"只有 GATT、没有 GAIA"的地址写进缓存）
-                g.discoverServices()
+                armPendingDeadline()
+                val accepted = try { g.discoverServices() } catch (_: Exception) { false }
+                if (!accepted) failSession("GAIA 服务发现失败")
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(GaiaConstants.TAG, "gatt disconnected status=" + status)
                 AppLog.w(GaiaConstants.TAG, "GATT disconnected status=" + status + " addr=" + deviceAddress)
-                connected = false
+                disconnectInternal()
                 // 3.2.6: status=0（对端/本地正常断开）在「本次会话还没连上过」时也要走候选推进。
                 // 原先只有异常断开才处理，于是当首选候选是一个**已失效的 LE 地址**时：
                 // 连不上 -> 断开回调 status=0 -> 原地不处理 -> 下轮轮询又拿同一个地址去连，
@@ -1518,8 +1569,7 @@ class GaiaBleClient private constructor() {
                         candidates = null
                         candidateIdx = 0
                         attemptCount = 0
-                        handler.removeCallbacks(scanTimeout)
-                        handler.postDelayed({ startGenericScan() }, 500)
+                        postSessionDelayed({ startGenericScan() }, 500)
                     } else {
                         // alpha2.40.x: 单候选或无候选时，服务发现阶段断连(如 status=147) 不能静默卡住。
                         // 记录地址并延迟重连同一地址；首次失败后回退 TRANSPORT_AUTO（dual-mode TWS 更稳）。
@@ -1530,8 +1580,7 @@ class GaiaBleClient private constructor() {
                                 Log.w(GaiaConstants.TAG, "solo/single-candidate disconnect(status=" + status +
                                         "), retry same addr=" + retryAddr + " -> TRANSPORT_AUTO")
                                 transportAutoTried = true
-                                handler.removeCallbacks(scanTimeout)
-                                handler.postDelayed({
+                                postSessionDelayed({
                                     if (!connected) connect(context!!, retryAddr)
                                 }, 900)
                             } else if (!rfcommFallbackTried) {
@@ -1545,13 +1594,11 @@ class GaiaBleClient private constructor() {
                                     if (remote != null) {
                                         tryRfcommFallback(remote)
                                     } else {
-                                        handler.removeCallbacks(scanTimeout)
-                                        handler.postDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
+                                        postSessionDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
                                     }
                                 } catch (e: Exception) {
                                     Log.e(GaiaConstants.TAG, "RFCOMM fallback fail: " + e)
-                                    handler.removeCallbacks(scanTimeout)
-                                    handler.postDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
+                                    postSessionDelayed({ if (!connected) connect(context!!, retryAddr) }, 900)
                                 }
                             } else {
                                 // alpha2.42: RFCOMM 已试过仍失败 -> 本连接会话不再重试，等 detect 下轮 re-scan
@@ -1574,7 +1621,7 @@ class GaiaBleClient private constructor() {
             if (g !== gatt) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(GaiaConstants.TAG, "service discovery failed status=" + status)
-                callback?.onError("GAIA 服务发现失败")
+                failSession("GAIA 服务发现失败")
                 return
             }
             try {
@@ -1594,11 +1641,12 @@ class GaiaBleClient private constructor() {
                         Log.w(GaiaConstants.TAG, "GAIA service 存在但缺 command 特征")
                     } else {
                         enableNotification(respChar)
-                        enableNotification(dataChar)
+                        enableNotification(dataChar, required = false)
                     }
                 } else {
                     Log.d(GaiaConstants.TAG, "GAIA service not present（疑为蓝讯 9ECA 设备）")
                 }
+                if (g !== gatt) return
                 var hasSrc9 = false
                 try {
                     val srcSvc = g.getService(UUID.fromString(GaiaCommands.SRC_SERVICE))
@@ -1608,8 +1656,18 @@ class GaiaBleClient private constructor() {
                         srcNotifyChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_NOTIFICATION))
                         srcCapChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_CAPABILITY))
                         srcInfoChar = srcSvc.getCharacteristic(UUID.fromString(GaiaCommands.SRC_FW_INFO))
-                        srcClient = BleSourceSwitchClient(handler, null)
+                        srcClient = BleSourceSwitchClient(handler, null, this@GaiaBleClient)
                         srcClient?.bind(g, srcCmdChar, srcRespChar, srcNotifyChar, srcCapChar, srcInfoChar)
+                        srcClient?.setGattOperations(object : BleSourceSwitchClient.GattOperations {
+                            override fun write(ch: BluetoothGattCharacteristic, value: ByteArray, start: java.util.function.BooleanSupplier): Boolean =
+                                synchronized(this@GaiaBleClient) { enqueueWrite(g, ch, value, start) }
+                            override fun read(ch: BluetoothGattCharacteristic, start: java.util.function.BooleanSupplier): Boolean =
+                                synchronized(this@GaiaBleClient) {
+                                    gattOperations.enqueue(g, GattOperationQueue.Kind.READ, ch, isCurrent = { start.asBoolean }) {
+                                        g.readCharacteristic(ch)
+                                    }
+                                }
+                        })
                         enableNotification(srcRespChar)
                         enableNotification(srcNotifyChar)
                         hasSrc9 = true
@@ -1617,12 +1675,11 @@ class GaiaBleClient private constructor() {
                         if (deviceAddress != null) lastConnectedAddr = deviceAddress
                         Log.d(GaiaConstants.TAG, "BleSourceSwitch(9ECA) service ready, srcClient bound")
                         AppLog.i(GaiaConstants.TAG, "protocol: 9ECA(9ECA0000) service present (蓝讯系) -> srcClient bound")
-                        try { if (srcCapChar != null) g.readCharacteristic(srcCapChar) } catch (_: Exception) { }
-                        try { if (srcInfoChar != null) g.readCharacteristic(srcInfoChar) } catch (_: Exception) { }
                     } else {
                         Log.d(GaiaConstants.TAG, "BleSourceSwitch service not present on this device")
                     }
                 } catch (e: Exception) { Log.e(GaiaConstants.TAG, "src service lookup failed", e) }
+                if (g !== gatt) return
                 if (!hasGaia && !hasSrc9) {
                     // 3.3.2 修 issue #12：**空服务列表不得判为证伪**。
                     //
@@ -1647,16 +1704,16 @@ class GaiaBleClient private constructor() {
                                             + " -> 第 " + emptySvcRetries + " 次延迟重试；设备="
                                             + (g.device?.name ?: "?"))
                             val target = g
-                            handler.postDelayed({
+                            postSessionDelayed({
                                 // ① 这一轮 gatt 已被替换/关闭 -> 重试没有意义。
                                 //    对失效的 BluetoothGatt 调 discoverServices() 不会报错，
                                 //    只会静默返回 false，白等 400ms 还占掉一次额度。
                                 if (gatt !== target) {
                                     AppLog.w(GaiaConstants.TAG,
                                             "retry discoverServices skipped: gatt 已替换")
-                                    return@postDelayed
+                                    return@postSessionDelayed
                                 }
-                                if (connected) return@postDelayed   // 已连上就不打扰
+                                if (connected) return@postSessionDelayed   // 已连上就不打扰
                                 // ② 必须检查返回值：false = 调用未生效。
                                 //    原先忽略返回值，若两次都返回 false，
                                 //    额度耗尽后再无出路 —— 设备会永久卡在「连不上」，
@@ -1707,59 +1764,54 @@ class GaiaBleClient private constructor() {
                     tryRfcommFallback(g.device)
                     return
                 }
-                connected = true
-                probe.reset()
-                // alpha2.52: 服务发现确认 GAIA/9ECA 存在 -> 记住设备名，名字门禁此后直接放行
-                DeviceMatcher.learn(context,
-                        runCatching { g.device?.name }.getOrNull() ?: cachedLeName)
-                val okAddr = deviceAddress
-                if (okAddr != null) {
-                    everConnected = true
-                    cachedLeTries = 0   // 3.2.6: 连上了就说明当前地址有效，重新计数
-                    // alpha2.41.9: 服务已确认（GAIA 或 9ECA）-> 此时才允许写持久缓存
-                    leAddrVerified = true
-                    cacheVerifiedLeAddr(okAddr)
-                    cachedLeName = runCatching { g.getDevice()?.name }.getOrNull()
-                    candidates = arrayOf(okAddr.uppercase())
-                    candidateIdx = 0
-                    attemptCount = 0
-                    Log.d(GaiaConstants.TAG, "GAIA locked to " + okAddr)
+                // Descriptor setup is bounded per operation, independently of discovery time.
+                cancelPendingDeadline()
+                gattOperations.whenIdle(g) {
+                    if (g !== gatt) return@whenIdle
+                    markReady()
+                    probe.reset()
+                    // alpha2.52: 服务发现确认 GAIA/9ECA 存在 -> 记住设备名，名字门禁此后直接放行
+                    DeviceMatcher.learn(context,
+                            runCatching { g.device?.name }.getOrNull() ?: cachedLeName)
+                    val okAddr = deviceAddress
+                    if (okAddr != null) {
+                        everConnected = true
+                        cachedLeTries = 0   // 3.2.6: 连上了就说明当前地址有效，重新计数
+                        // alpha2.41.9: 服务已确认（GAIA 或 9ECA）-> 此时才允许写持久缓存
+                        leAddrVerified = true
+                        cacheVerifiedLeAddr(okAddr)
+                        cachedLeName = runCatching { g.getDevice()?.name }.getOrNull()
+                        candidates = arrayOf(okAddr.uppercase())
+                        candidateIdx = 0
+                        attemptCount = 0
+                        Log.d(GaiaConstants.TAG, "GAIA locked to " + okAddr)
+                    }
+                    Log.d(GaiaConstants.TAG, "GAIA ready")
+                    // alpha2.27: 能力探测委托给 CapabilityProbe
+                    probe.startProbes()
+                    if (g !== gatt) return@whenIdle
+                    callback?.onConnected(okAddr ?: "")
+                    if (g === gatt) scheduleInitialQueries()
                 }
-                gaiaReady = true
-                Log.d(GaiaConstants.TAG, "GAIA ready")
-                // alpha2.27: 能力探测委托给 CapabilityProbe
-                probe.startProbes()
-                callback?.onConnected(okAddr ?: "")
-                // alpha2.26: 延迟发电池查询（等 descriptor 写完成）
-                handler.postDelayed({
-                    if (connected && gatt != null) fetchBatteryLevels()
-                    if (connected && gatt != null) {
-                        try { AncBridge.fetchAncMode() } catch (_: Exception) { }
-                        try { AncBridge.sendAncStatus(probe.status()) } catch (_: Exception) { }
-                        try { setDcBridge(DeviceControlBridge); DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(connectedDeviceName)); DeviceControlBridge.fetchAll() } catch (_: Exception) { }
-                    }
-                }, 1200)
-                // alpha2.36: probe may take up to 3.5s; re-fetch DC state after probe completes
-                handler.postDelayed({
-                    if (connected && gatt != null) {
-                        try { DeviceControlBridge.fetchAll() } catch (_: Exception) { }
-                    }
-                }, 4000)
             } catch (e: Exception) {
                 Log.e(GaiaConstants.TAG, "onServicesDiscovered error", e)
+                if (g === gatt) failSession("GAIA setup failed: ${e.message}")
             }
         }
 
-        private fun enableNotification(ch: BluetoothGattCharacteristic?) {
+        private fun enableNotification(ch: BluetoothGattCharacteristic?, required: Boolean = true) {
             if (ch == null) return
-            try {
-                gatt?.setCharacteristicNotification(ch, true)
-                val d = ch.getDescriptor(GaiaConstants.UUID_CCCD)
-                if (d != null) {
+            val g = gatt ?: return
+            val d = ch.getDescriptor(GaiaConstants.UUID_CCCD) ?: return
+            val onRejected: ((String) -> Unit)? = if (required) null else { message ->
+                Log.w(GaiaConstants.TAG, "optional GAIA data notification unavailable: $message")
+            }
+            gattOperations.enqueue(g, GattOperationQueue.Kind.DESCRIPTOR, d, onRejected) {
+                if (!g.setCharacteristicNotification(ch, true)) false else {
                     d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    gatt?.writeDescriptor(d)
+                    g.writeDescriptor(d)
                 }
-            } catch (e: SecurityException) { Log.e(GaiaConstants.TAG, "notify enable denied", e) }
+            }
         }
 
         override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
@@ -1786,6 +1838,7 @@ class GaiaBleClient private constructor() {
 
         private fun handleCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
             if (g !== gatt) return
+            if (!gattOperations.complete(g, GattOperationQueue.Kind.READ, ch, status) || g !== gatt) return
             if (status != BluetoothGatt.GATT_SUCCESS) return
             val value = ch.value ?: return
             if (srcClient != null && (ch === srcCapChar || ch === srcInfoChar || ch === srcRespChar)) {
@@ -1796,11 +1849,15 @@ class GaiaBleClient private constructor() {
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-            Log.d(GaiaConstants.TAG, "char write status=" + status)
+            synchronized(this@GaiaBleClient) {
+                gattOperations.complete(g, GattOperationQueue.Kind.WRITE, ch, status)
+            }
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            Log.d(GaiaConstants.TAG, "descriptor write status=" + status)
+            synchronized(this@GaiaBleClient) {
+                gattOperations.complete(g, GattOperationQueue.Kind.DESCRIPTOR, descriptor, status)
+            }
         }
     }
 }

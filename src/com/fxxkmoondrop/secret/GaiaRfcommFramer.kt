@@ -95,6 +95,20 @@ class GaiaRfcommFramer {
 
             if (b0 == VENDOR_HI && b1 == VENDOR_LO) {
                 // ---- 裸 PDU：00 1D ... ----
+                if (buf.size < PDU_HEADER_SIZE) break
+                val fixedSize = bareFixedSize()
+                if (fixedSize != null) {
+                    if (buf.size < fixedSize) break
+                    // An empty probe reply must not steal the next frame's first byte.
+                    val next = buf[PDU_HEADER_SIZE].toInt() and 0xFF
+                    // shortcut: an empty reply plus a split 00 header is indistinguishable from state 0; prefer complete replies, use transport framing to disambiguate.
+                    val emptyReply = next == SOF || (next == VENDOR_HI && buf.size > PDU_HEADER_SIZE + 1 &&
+                            (buf[PDU_HEADER_SIZE + 1].toInt() and 0xFF) == VENDOR_LO)
+                    val size = if (emptyReply) PDU_HEADER_SIZE else fixedSize
+                    out.add(ByteArray(size) { buf[it] })
+                    consume(size)
+                    continue
+                }
                 // 从 offset 4 起找下一个帧起始（FF 或 00 1D）
                 var cut = -1
                 var i = 4
@@ -116,7 +130,8 @@ class GaiaRfcommFramer {
                     continue
                 }
                 // 无边界：burst 已结束则整段交付（老设备单帧模式）
-                if (burstEnd) {
+                // shortcut: variable bare replies use burst/delimiter boundaries, require transport framing for split variable replies.
+                if (burstEnd && buf.size >= bareMinimumSize()) {
                     val pdu = ByteArray(buf.size)
                     for (j in pdu.indices) pdu[j] = buf[j]
                     consume(buf.size)
@@ -130,6 +145,36 @@ class GaiaRfcommFramer {
             consume(1)
         }
         return out
+    }
+
+    /** Expected size of known one-byte state replies, excluding empty replies. */
+    private fun bareFixedSize(): Int? {
+        val commandValue = ((buf[2].toInt() and 0xFF) shl 8) or (buf[3].toInt() and 0xFF)
+        val feature = commandValue shr 9
+        val type = (commandValue shr 7) and 3
+        val command = commandValue and 0x7F
+        val anc = feature == GaiaConstants.FEATURE_ANC_V2 || feature == GaiaConstants.F_AUDIO_CURATION
+        if (type == GaiaConstants.TYPE_NOTIFICATION && anc && command == 1) return 5
+        if (type != GaiaConstants.TYPE_RESPONSE) return null
+        return if ((anc && command == GaiaConstants.CMD_GET_CURRENT_MODE) ||
+                (feature == GaiaConstants.FEATURE_ANC_V1 && command == GaiaConstants.CMD_ANC1_GET_ANC_STATE) ||
+                (feature == GaiaConstants.FEATURE_DAC_GAIN && command == GaiaConstants.CMD_DAC_GET_GAIN) ||
+                (feature == GaiaConstants.FEATURE_LED && command == GaiaConstants.CMD_LED_GET_STATE) ||
+                (feature == GaiaConstants.FEATURE_SPATIAL_AUDIO &&
+                        (command == GaiaConstants.CMD_SPATIAL_GET_STATE || command == GaiaConstants.CMD_SPATIAL_GET_HEAD_TRACKING))) 5 else null
+    }
+
+    private fun bareMinimumSize(): Int {
+        val commandValue = ((buf[2].toInt() and 0xFF) shl 8) or (buf[3].toInt() and 0xFF)
+        val feature = commandValue shr 9
+        val command = commandValue and 0x7F
+        return when {
+            feature == GaiaConstants.FEATURE_BATTERY && command == GaiaConstants.CMD_GET_BATTERY_LEVELS ->
+                if ((buf.size - PDU_HEADER_SIZE) % 2 == 0) 6 else buf.size + 1
+            feature == GaiaConstants.FEATURE_BASIC || feature == GaiaConstants.FEATURE_ANC_V2 ||
+                    feature == GaiaConstants.F_AUDIO_CURATION -> 5
+            else -> PDU_HEADER_SIZE
+        }
     }
 
     /** 消费缓冲前 n 个字节 */

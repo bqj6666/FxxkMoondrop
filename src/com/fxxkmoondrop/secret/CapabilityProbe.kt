@@ -24,6 +24,7 @@ class CapabilityProbe(
     private val handler: Handler,
     private val isConnected: () -> Boolean,
     private val isGattReady: () -> Boolean,
+    private val lock: Any = Any(),
     private val writeCommand: (Int, Int, ByteArray) -> Unit
 ) {
     companion object {
@@ -31,6 +32,7 @@ class CapabilityProbe(
         private const val PROBE_DELAY_BASE = 400L
         private const val PROBE_DELAY_STEP = 250L
         private const val PROBE_TIMEOUT_MS = 3500L
+        private const val MAX_FEATURE_PAGES = 128 // GAIA feature IDs are seven bits.
         /** alpha2.41.4: startProbes 节流窗口（防重连风暴叠加探测循环） */
         private const val START_THROTTLE_MS = 8000L
     }
@@ -61,8 +63,14 @@ class CapabilityProbe(
     /** alpha2.41.4: 节流基准（上次全量 startProbes 的墙钟时间） */
     @Volatile private var lastFullStartAt = 0L
 
+    private var featurePages = 0
+    @Volatile private var featurePageTimeout: Runnable? = null
+
     /** 重置全部探测状态（断开/重连/设备切换时调用） */
-    fun reset() {
+    fun reset(): Unit = synchronized(lock) {
+        featurePageTimeout?.let { handler.removeCallbacks(it) }
+        featurePageTimeout = null
+        featurePages = 0
         featureProbeSent = false
         ancPath = GaiaCommands.ANC_PATH_UNKNOWN
         probeDone = false
@@ -87,7 +95,7 @@ class CapabilityProbe(
      * alpha2.41.4: 响应驱动能力标记 —— 设备对某 feature 的任何成功响应
      * 都证明该 feature 受支持（无需能力位图）。由 GaiaPacketHandler 调用。
      */
-    fun onFeatureResponseSeen(feature: Int) {
+    fun onFeatureResponseSeen(feature: Int): Unit = synchronized(lock) {
         if (feature !in features) {
             features = features + feature
             Log.d(TAG, "feature 0x" + Integer.toHexString(feature) + " confirmed by response")
@@ -98,12 +106,13 @@ class CapabilityProbe(
      * alpha2.41.4: BASIC 链路存活信号（版本/型号响应到达）。
      * 证明 GAIA 链路活着 —— 超时后"无ANC"结论可信，不是链路死掉导致的静默。
      */
-    fun onBasicAlive() {
+    fun onBasicAlive(): Unit = synchronized(lock) {
         basicAlive = true
     }
 
     /** 启动能力探测阶梯（在 onServicesDiscovered 成功后调用） */
-    fun startProbes() {
+    fun startProbes(): Unit = synchronized(lock) {
+        if (featurePageTimeout != null) return // Do not restart the device's pagination cursor.
         // alpha2.41.4: 节流 —— 8s 内重复调用（RFCOMM 重连风暴）只轻量补发，
         // 跳过 ANC 阶梯与超时重发链，防止探测循环叠加。
         val now = android.os.SystemClock.elapsedRealtime()
@@ -113,12 +122,12 @@ class CapabilityProbe(
             writeCommand(GaiaConstants.FEATURE_BASIC, GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
             writeCommand(GaiaConstants.FEATURE_BASIC, GaiaConstants.CMD_GET_VARIANT, ByteArray(0))
             // 幂等兜底：确保探测终态（若上一轮还没结束，3.5s 后强制收口）
-            handler.postDelayed({
-                if (!probeDone) {
+            handler.postDelayed({ synchronized(lock) {
+                if (!probeDone && featurePageTimeout == null) {
                     probeDone = true
                     try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
                 }
-            }, PROBE_TIMEOUT_MS)
+            } }, PROBE_TIMEOUT_MS)
             return
         }
         featureProbeSent = true
@@ -138,15 +147,16 @@ class CapabilityProbe(
             for (i in probePairs.indices) {
                 val f = probePairs[i][0]
                 val c = probePairs[i][1]
-                handler.postDelayed({
+                handler.postDelayed({ synchronized(lock) {
                     if (isConnected() && isGattReady()) writeCommand(f, c, ByteArray(0))
-                }, PROBE_DELAY_BASE + i * PROBE_DELAY_STEP)
+                } }, PROBE_DELAY_BASE + i * PROBE_DELAY_STEP)
             }
         }
 
         // 超时自愈：阶梯重发（仅一次），二次超时强制收口
-        handler.postDelayed({
-            if (isConnected() && isGattReady() && ancPath == GaiaCommands.ANC_PATH_UNKNOWN) {
+        handler.postDelayed({ synchronized(lock) {
+            if (isConnected() && isGattReady() && ancPath == GaiaCommands.ANC_PATH_UNKNOWN &&
+                    featurePageTimeout == null) {
                 Log.w(TAG, "capability probe timeout, re-send (basicAlive=" + basicAlive + ")")
                 writeCommand(GaiaConstants.FEATURE_BASIC, GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
                 writeCommand(GaiaConstants.FEATURE_BASIC, GaiaConstants.CMD_GET_VARIANT, ByteArray(0))
@@ -161,13 +171,13 @@ class CapabilityProbe(
                     for (i in pairs.indices) {
                         val f = pairs[i][0]
                         val c = pairs[i][1]
-                        handler.postDelayed({
+                        handler.postDelayed({ synchronized(lock) {
                             if (isConnected() && isGattReady()) writeCommand(f, c, ByteArray(0))
-                        }, PROBE_DELAY_BASE + i * PROBE_DELAY_STEP)
+                        } }, PROBE_DELAY_BASE + i * PROBE_DELAY_STEP)
                     }
                 }
-                handler.postDelayed({
-                    if (!probeDone) {
+                handler.postDelayed({ synchronized(lock) {
+                    if (!probeDone && featurePageTimeout == null) {
                         probeDone = true
                         Log.w(TAG, "probe finalized by timeout, basicAlive=" + basicAlive +
                                 " features=" + features.sorted().joinToString(",") +
@@ -177,40 +187,57 @@ class CapabilityProbe(
                                 " -> ancPath=" + ancPath)
                         try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
                     }
-                }, PROBE_TIMEOUT_MS)
+                } }, PROBE_TIMEOUT_MS)
             }
-        }, PROBE_TIMEOUT_MS)
+        } }, PROBE_TIMEOUT_MS)
     }
 
-    /** 处理 GET_SUPPORTED_FEATURES 响应（能力位图） */
-    fun handleFeatureResponse(payload: ByteArray) {
-        // 3.0.3（issue #4）：能力响应不再因「长度不像位图」被整份作废。
-        // 实测布丁（PUDDING / MD-TWS-056）每次连接都回同一帧 23 字节响应
-        //   `00 1D 01 01 | 00 | 00 02 | 01 01 | 05 01 | 0D 01 | 0E 01 | 0F 01 | 10 01 | 13 01 | 14 01 | 16 01 | 20 01`
-        // —— 它是官方 SDK 的**特征对列表**（byte0 = hasMoreData，其后 featureId|version 成对），不是位图。
-        // 旧逻辑只认「长度是 4 的倍数」的位图，见 23 % 4 != 0 即判截断、把 ancPath 钉回 UNKNOWN，
-        // 于是 setAncMode 在发送前就被 `dev < 0` 拦下——现象就是「降噪点了没反应」，
-        // 而能力探测其实每次都收到了完整能力表。现在由 GaiaCommands.parseSupportedFeatures
-        // 分辨两种封装并正确解析（0x20 = ANC_V2 在表内）。
+    /** Accept complete bitmap words or SDK feature/version pages, preserving response evidence. */
+    fun handleFeatureResponse(payload: ByteArray, command: Int = GaiaConstants.CMD_GET_SUPPORTED_FEATURES): Unit = synchronized(lock) {
+        val pairList = GaiaCommands.isFeaturePairList(payload)
+        if (payload.isEmpty() || (!pairList && payload.size < 4)) return
         val truncated = GaiaCommands.isFeaturePayloadTruncated(payload)
-        probeTruncated = truncated
+        val next = command == GaiaCommands.C_BASIC_GET_SUPPORTED_FEATURES_NEXT
+        if (next && (featurePageTimeout == null || !pairList)) return
+        if (!next && featurePageTimeout != null) return // Duplicate first page during pagination.
+        if (!next) featurePages = 0
         val feats = GaiaCommands.parseSupportedFeatures(payload)
-        features = feats  // alpha2.31: 存完整 feature set 供 hasFeature 查询
-        ancPath = GaiaCommands.ancPathFrom(feats)
-        if (truncated) {
-            Log.w(TAG, "capability payload truncated (len=${payload.size}), tail ignored, path kept=$ancPath")
+        if (feats.any { it !in 0..127 }) return
+        onBasicAlive()
+        features = features + feats
+        ancPath = GaiaCommands.ancPathFrom(features)
+        featurePages++
+        val more = pairList && payload[0].toInt() == 1
+        if (more && featurePages < MAX_FEATURE_PAGES) {
+            probeDone = false
+            featurePageTimeout?.let { handler.removeCallbacks(it) }
+            val timeout = object : Runnable {
+                override fun run() {
+                    synchronized(lock) {
+                        if (featurePageTimeout === this) finishFeaturePages(true)
+                    }
+                }
+            }
+            featurePageTimeout = timeout
+            handler.postDelayed(timeout, PROBE_TIMEOUT_MS)
+            writeCommand(GaiaConstants.FEATURE_BASIC, GaiaCommands.C_BASIC_GET_SUPPORTED_FEATURES_NEXT, ByteArray(0))
+        } else {
+            finishFeaturePages(more || truncated)
         }
+    }
+
+    private fun finishFeaturePages(incomplete: Boolean) {
+        featurePageTimeout?.let { handler.removeCallbacks(it) }
+        featurePageTimeout = null
+        probeTruncated = incomplete
         probeDone = true
         try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
-        Log.d(TAG, "capabilities: ${feats.sorted().joinToString(",")} truncated=$truncated -> ancPath=$ancPath")
-        // 3.0.3: 结论文本写进 AppLog —— logcat 抓取窗口太短，用户导出的日志里从来看不到探测结论。
-        AppLog.d(TAG, "probe: len=" + payload.size + " truncated=" + truncated +
-                " ancPath=" + ancPath + " features=" + feats.sorted().joinToString(","))
+        AppLog.d(TAG, "probe: pages=$featurePages truncated=$incomplete ancPath=$ancPath features=${features.sorted()}")
     }
 
     /** 处理 ANC 探测响应（AudioCuration / ANC_V2 回包确认路径）。
      *  返回 true 表示已处理此响应（路径已确定）。 */
-    fun handleAncProbeResponse(feature: Int, command: Int): Boolean {
+    fun handleAncProbeResponse(feature: Int, command: Int): Boolean = synchronized(lock) {
         if (!acProbeActive || ancPath != GaiaCommands.ANC_PATH_UNKNOWN) return false
 
         var probeOk = false
@@ -231,7 +258,7 @@ class CapabilityProbe(
         if (probeOk) {
             onFeatureResponseSeen(feature)  // alpha2.41.4: 响应驱动标记
             acProbeActive = false
-            probeDone = true
+            probeDone = featurePageTimeout == null
             try { AncBridge.sendAncStatus(status()) } catch (_: Exception) { }
         }
         return probeOk

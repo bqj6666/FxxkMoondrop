@@ -133,7 +133,7 @@ class HeadsetGate {
                     if (mac != null) {
                         remember(app, mac)
                         try {
-                            app.sendBroadcast(Intent(ACTION_MAC_UPDATED).putExtra("mac", mac))
+                            app.sendBroadcast(Intent(ACTION_MAC_UPDATED).setPackage(HookIpc.APP).putExtra("mac", mac))
                             Log.d(TAG, "async scan found: $mac")
                         } catch (e: Exception) {
                             Log.w(TAG, "broadcast failed: $e")
@@ -194,38 +194,39 @@ class HeadsetGate {
 
         /** 通过 profile proxy 获取已连接设备（同步等待 proxy 回调，最多 800ms） */
         private fun scanViaProxy(adapter: BluetoothAdapter, ctx: Context, profile: Int): String? {
-            val proxyRef = AtomicReference<BluetoothProfile?>()
             val found = AtomicReference<String?>()
             val latch = CountDownLatch(1)
-            val listener = object : BluetoothProfile.ServiceListener {
-                override fun onServiceConnected(p: Int, proxy: BluetoothProfile) {
-                    try {
-                        proxyRef.set(proxy)
-                        val mac = scan(proxy.connectedDevices)
-                        if (mac != null) found.set(mac)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "proxy($p) getConnectedDevices fail: $e")
-                    } finally {
-                        latch.countDown()
-                    }
-                }
-
-                override fun onServiceDisconnected(p: Int) {
-                    latch.countDown()
-                }
-            }
+            val listener = proxyListener(found, latch) { p, proxy -> adapter.closeProfileProxy(p, proxy) }
             try {
                 if (!adapter.getProfileProxy(ctx, listener, profile)) return null
                 latch.await(800, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
                 Log.w(TAG, "getProfileProxy($profile) fail: $e")
-            } finally {
-                val proxy = proxyRef.get()
-                if (proxy != null) {
-                    try { adapter.closeProfileProxy(profile, proxy) } catch (_: Exception) { }
-                }
             }
             return found.get()
+        }
+
+        internal fun proxyListener(
+            found: AtomicReference<String?>,
+            latch: CountDownLatch,
+            close: (Int, BluetoothProfile) -> Unit,
+        ): BluetoothProfile.ServiceListener = object : BluetoothProfile.ServiceListener {
+            override fun onServiceConnected(p: Int, proxy: BluetoothProfile) {
+                try {
+                    val mac = scan(proxy.connectedDevices)
+                    if (mac != null) found.set(mac)
+                } catch (e: Exception) {
+                    Log.w(TAG, "proxy($p) getConnectedDevices fail: $e")
+                } finally {
+                    // The callback owns the proxy even when it arrives after the bounded wait.
+                    try { close(p, proxy) } catch (_: Exception) { }
+                    latch.countDown()
+                }
+            }
+
+            override fun onServiceDisconnected(p: Int) {
+                latch.countDown()
+            }
         }
 
         private fun scan(devices: List<BluetoothDevice>?): String? {
