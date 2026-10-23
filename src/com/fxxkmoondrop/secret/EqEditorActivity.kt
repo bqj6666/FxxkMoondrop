@@ -70,26 +70,8 @@ class EqEditorActivity : Activity() {
         val sbh = resources.getIdentifier("status_bar_height", "dimen", "android")
                 .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
 
-        // 固定顶栏：返回键与标题同一栏。大标题页骨架在本页需要一个「跟随滚动」的返回键，
-        // 而 M3Ui.largeHeaderPage 的头栏没有这一层，硬塞一个悬浮返回键就会出现
-        // 「不随滚动、压在卡片上」的问题（真机截图确认），因此这里用稳定的顶栏实现。
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(pal.surface)
-        root.setPadding(dp(12), sbh + dp(8), dp(12), dp(16))
-
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-        header.addView(M3Ui.arrowBack(this, pal) { finish() },
-                LinearLayout.LayoutParams(dp(48), dp(48)))
-        val title = TextView(this)
-        title.text = Lang.t("均衡器", "Equalizer")
-        title.textSize = 22f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f).also { it.marginStart = dp(8) })
-        root.addView(header, LinearLayout.LayoutParams(-1, -2))
+        // 官方大标题页（带返回键版本）：返回键属于标题栏、随栏一起收缩
+        val page = M3Ui.largeHeaderPageWithBack(this, pal, Lang.t("均衡器", "Equalizer")) { finish() }
 
         val body = LinearLayout(this)
         body.orientation = LinearLayout.VERTICAL
@@ -147,10 +129,9 @@ class EqEditorActivity : Activity() {
 
         contentOf(content)
 
-        val sv = ScrollView(this)
-        sv.addView(body, LinearLayout.LayoutParams(-1, -2))
-        root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        body.setPadding(dp(12), dp(8), dp(12), dp(16))
+        page.sv.addView(body, LinearLayout.LayoutParams(-1, -2))
+        setContentView(page.container)
         M3Ui.fitSystemBars(this, pal)
 
         alive = true

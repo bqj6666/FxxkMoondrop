@@ -109,6 +109,71 @@ class M3Ui {
             }
         }
 
+        /**
+         * 带返回键的大标题页（独立 Activity 用）。
+         *
+         * 与 [largeHeaderPage] 的区别：标题栏里**内置返回键**，并自己处理状态栏内边距，
+         * 这样返回键属于标题栏、随栏一起收缩，不会再出现「悬浮在页面上不跟滚动、压到卡片」
+         * 的问题（那是把返回键挂到容器上导致的）。标题左移 56dp，收缩后落在返回键右侧。
+         */
+        @JvmStatic
+        fun largeHeaderPageWithBack(act: Activity, pal: ThemeUtil.Palette, title: String,
+                                    onBack: Runnable?): LargeHeaderPage {
+            val sbh = act.resources.getIdentifier("status_bar_height", "dimen", "android")
+                    .let { if (it > 0) act.resources.getDimensionPixelSize(it) else 0 }
+            val expandedPx = dp(act, HEADER_EXPANDED_DP) + sbh
+            val collapsedPx = dp(act, HEADER_COLLAPSED_DP) + sbh
+
+            val bar = android.widget.FrameLayout(act)
+            bar.setBackgroundColor(pal.surface)
+            bar.setPadding(0, sbh, 0, 0)
+
+            val barTitle = TextView(act)
+            barTitle.text = title
+            barTitle.textSize = HEADER_EXPANDED_SP
+            barTitle.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            barTitle.setTextColor(pal.onSurface)
+            bar.addView(barTitle, android.widget.FrameLayout.LayoutParams(-1, -2,
+                    Gravity.BOTTOM or Gravity.START).also {
+                it.leftMargin = dp(act, 68)   // 给返回键留位，收缩后不重叠
+                it.bottomMargin = dp(act, 14)
+                it.rightMargin = dp(act, 16)
+            })
+
+            val back = arrowBack(act, pal, onBack)
+            bar.addView(back, android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
+                    Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 6) })
+
+            val sv = android.widget.ScrollView(act)
+            sv.id = R.id.m3_page_scroll
+            sv.setBackgroundColor(pal.surface)
+            sv.setPadding(0, expandedPx, 0, 0)
+            sv.clipToPadding = false
+
+            val container = android.widget.FrameLayout(act)
+            container.setBackgroundColor(pal.surface)
+            container.addView(sv, android.widget.FrameLayout.LayoutParams(-1, -1))
+            container.addView(bar, android.widget.FrameLayout.LayoutParams(-1, expandedPx).also { it.gravity = Gravity.TOP })
+
+            fun apply(t: Float) {
+                val h = (expandedPx + (collapsedPx - expandedPx) * t).toInt()
+                bar.layoutParams = bar.layoutParams.also { it.height = h }
+                barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,
+                        HEADER_EXPANDED_SP + (HEADER_COLLAPSED_SP - HEADER_EXPANDED_SP) * t)
+                // 收缩后标题与返回键同一行：靠 title 的左 68dp 保证不重叠，返回键相对栏顶固定
+            }
+            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
+                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
+                apply((sy.toFloat() / span).coerceIn(0f, 1f))
+            }
+            apply(0f)
+            sv.post {
+                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
+                apply((sv.scrollY.toFloat() / span).coerceIn(0f, 1f))
+            }
+            return LargeHeaderPage(container, sv, CollapseHeader(android.widget.LinearLayout(act), barTitle, expandedPx, collapsedPx))
+        }
+
         /** alpha2.53: 用大标题页骨架替换普通 ScrollView（三页统一入口）。 */
         @JvmStatic
         fun largeHeaderPage(act: Activity, pal: ThemeUtil.Palette, title: String): LargeHeaderPage {
