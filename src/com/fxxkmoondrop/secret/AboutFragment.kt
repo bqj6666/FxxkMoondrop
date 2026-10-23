@@ -366,7 +366,7 @@ class AboutFragment : Fragment() {
 
         header.addView(spacer(dp(16)))
         val appTitle = TextView(requireContext())
-        appTitle.text = "FxxkMoondrop"
+        appTitle.text = "MoonEar"
         appTitle.textSize = 24f
         appTitle.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
         appTitle.setTextColor(pal.onSurface)

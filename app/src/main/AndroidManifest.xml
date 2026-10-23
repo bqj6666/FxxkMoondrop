@@ -35,7 +35,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
-        android:label="Fxxkmoondrop"
+        android:label="MoonEar"
         android:description="@string/module_description"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.FxxkMoondrop"

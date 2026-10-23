@@ -67,24 +67,18 @@ class EqEditorActivity : Activity() {
         super.onCreate(savedInstanceState)
         pal = ThemeUtil.Palette(this)
 
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(pal.surface)
         val sbh = resources.getIdentifier("status_bar_height", "dimen", "android")
                 .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
-        root.setPadding(dp(12), sbh + dp(8), dp(12), dp(16))
 
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-        header.addView(M3Ui.arrowBack(this, pal) { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        val title = TextView(this)
-        title.text = Lang.t("均衡器", "Equalizer")
-        title.textSize = 20f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f).also { it.marginStart = dp(8) })
-        root.addView(header, LinearLayout.LayoutParams(-1, -2))
+        // 官方大标题页骨架（与概览/设置/关于同款）：上滑时标题从大字号收缩成顶栏
+        val page = M3Ui.largeHeaderPage(this, pal, Lang.t("均衡器", "Equalizer"))
+
+        // 独立 Activity 需要一个返回键：浮在大标题左上角
+        val back = M3Ui.arrowBack(this, pal) { finish() }
+        page.container.addView(back, android.widget.FrameLayout.LayoutParams(
+                dp(48), dp(48), Gravity.TOP or Gravity.START).also {
+            it.topMargin = sbh + dp(4); it.leftMargin = dp(4)
+        })
 
         val body = LinearLayout(this)
         body.orientation = LinearLayout.VERTICAL
@@ -142,10 +136,9 @@ class EqEditorActivity : Activity() {
 
         contentOf(content)
 
-        val sv = ScrollView(this)
-        sv.addView(body, LinearLayout.LayoutParams(-1, -2))
-        root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        body.setPadding(dp(12), dp(8), dp(12), dp(16))
+        page.sv.addView(body, LinearLayout.LayoutParams(-1, -2))
+        setContentView(page.container)
         M3Ui.fitSystemBars(this, pal)
 
         alive = true

@@ -9,7 +9,8 @@
     android:viewportWidth="108" android:viewportHeight="108">
 
     <!-- 头梁：先画一层深色描边增加对比度，再叠白色主线 -->
-    <path
+    <group android:scaleX="1.1" android:scaleY="1.1" android:pivotX="54" android:pivotY="54">
+<path
         android:pathData="M33,52 a21,21 0 0 1 42,0"
         android:strokeColor="#FF3F2F70"
         android:strokeWidth="8"
@@ -30,10 +31,11 @@
         android:strokeColor="#FF3F2F70" android:strokeWidth="1.6" android:pathData="M74,50 H76 A3.5,3.5 0 0 1 79.5,53.5 V59.5 A3.5,3.5 0 0 1 76,63 H74 A3.5,3.5 0 0 1 70.5,59.5 V53.5 A3.5,3.5 0 0 1 74,50 Z" />
 
     <!-- 三段均衡柱：细、彼此留 3dp 间隙 -->
-    <path android:fillColor="#FFFFFFFF"
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
         android:pathData="M46,60 a2.5,2.5 0 0 1 2.5,2.5 v5 a2.5,2.5 0 0 1 -5,0 v-5 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
-    <path android:fillColor="#FFFFFFFF"
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
         android:pathData="M54,54 a2.5,2.5 0 0 1 2.5,2.5 v11 a2.5,2.5 0 0 1 -5,0 v-11 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
-    <path android:fillColor="#FFFFFFFF"
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
         android:pathData="M62,57 a2.5,2.5 0 0 1 2.5,2.5 v8 a2.5,2.5 0 0 1 -5,0 v-8 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
+</group>
 </vector>

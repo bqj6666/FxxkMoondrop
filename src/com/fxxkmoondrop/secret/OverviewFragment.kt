@@ -593,7 +593,7 @@ class OverviewFragment : Fragment() {
         root.addView(spacer(dp(20)))
 
         // alpha2.53: M3 LargeTopAppBar —— 大标题钉在上层，内容从下方穿过并随滚动收缩
-        val page = M3Ui.largeHeaderPage(requireActivity(), pal0, "FxxkMoondrop")
+        val page = M3Ui.largeHeaderPage(requireActivity(), pal0, "MoonEar")
         page.sv.addView(root)
 
         val outer = LinearLayout(requireContext())
