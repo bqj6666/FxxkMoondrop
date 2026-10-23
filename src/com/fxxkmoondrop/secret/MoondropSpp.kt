@@ -30,23 +30,39 @@ object MoondropSpp {
 
     fun isConnected(): Boolean = try { socket?.isConnected == true } catch (_: Throwable) { false }
 
+    /**
+     * 建 SPP 链路。
+     *
+     * 实测个别水月雨设备只接受其中一种建链方式（安全 RFCOMM 会被拒、通道 1 才行），
+     * 所以按「安全 -> 不安全 -> 反射通道 1」依次试，日志里写明哪条成功，别只报一句失败。
+     */
     fun connect(address: String): Boolean {
         disconnect()
-        return try {
-            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
-            val dev = adapter.getRemoteDevice(address)
-            val s = dev.createRfcommSocketToServiceRecord(SPP)
-            s.connect()
-            socket = s
-            ins = s.inputStream
-            outs = s.outputStream
-            Log.i(TAG, "spp connected -> $address")
-            true
-        } catch (t: Throwable) {
-            Log.w(TAG, "spp connect fail: $t")
-            disconnect()
-            false
+        val adapter = try { BluetoothAdapter.getDefaultAdapter() } catch (_: Throwable) { null } ?: return false
+        val dev = try { adapter.getRemoteDevice(address) } catch (_: Throwable) { return false }
+        val attempts = listOf<Pair<String, () -> BluetoothSocket>>(
+                "secure" to { dev.createRfcommSocketToServiceRecord(SPP) },
+                "insecure" to { dev.createInsecureRfcommSocketToServiceRecord(SPP) },
+                "channel1" to {
+                    val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    m.invoke(dev, 1) as BluetoothSocket
+                }
+        )
+        for ((name, make) in attempts) {
+            try {
+                val s = make()
+                s.connect()
+                socket = s
+                ins = s.inputStream
+                outs = s.outputStream
+                Log.i(TAG, "spp connected ($name) -> $address")
+                return true
+            } catch (t: Throwable) {
+                Log.w(TAG, "spp connect fail ($name): $t")
+            }
         }
+        disconnect()
+        return false
     }
 
     fun disconnect() {

@@ -380,10 +380,10 @@ class OverviewFragment : Fragment() {
         eqBox.addView(M3Ui.groupCard(requireActivity(), pal0,
                 M3Ui.listRow(requireActivity(), pal0, R.drawable.ic_anc_on,
                         Lang.t("均衡器", "Equalizer"),
-                        Lang.t("切换耳机内置预设并查看参量均衡曲线",
-                                "Switch the headset's built-in presets and view the parametric EQ curve"),
+                        Lang.t("读写耳机内置的 5 段参数均衡（SPP）",
+                                "Read and write the headset's 5-band parametric EQ"),
                         M3Ui.chevron(requireContext(), pal0.onVariant)) {
-                    startActivity(Intent(requireContext(), EqActivity::class.java))
+                    startActivity(Intent(requireContext(), EqEditorActivity::class.java))
                 }), LinearLayout.LayoutParams(-1, -2))
         eqBox.visibility = View.GONE
         eqRow = eqBox
@@ -1581,12 +1581,14 @@ class OverviewFragment : Fragment() {
         ancBtnRow?.let { it.visibility = if (showAncBlock) View.VISIBLE else View.GONE }
         // 3.2.12: 均衡器入口只在设备确实提供 9ECA 服务时出现
         eqRow?.let {
-            val hasEq = try {
-                GaiaBleClient.getInstance().hasSrcService()
+            // 均衡器现在走经典蓝牙 SPP（0A05 读 / 0A06 写），不再是 9ECA 私有服务：
+            // 只要是水月雨设备就先显示，页面自己读一次曲线来确认这台型号真的支持。
+            val isMd = try {
+                DeviceMatcher.isMoondrop(GaiaBleClient.getInstance().getConnectedDeviceName())
             } catch (_: Throwable) {
                 false
             }
-            it.visibility = if (hasEq) View.VISIBLE else View.GONE
+            it.visibility = if (isMd) View.VISIBLE else View.GONE
         }
         // 3.2.20: 档位可见性统一按「型号档案声明支持」+「用户设置」决定。
         //

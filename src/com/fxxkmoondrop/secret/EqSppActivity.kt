@@ -47,7 +47,7 @@ class EqSppActivity : Activity() {
         row.orientation = LinearLayout.HORIZONTAL
         row.setPadding(0, dp(8), 0, dp(8))
         addBtn(row, Lang.t("连接", "Connect")) { pickDevice() }
-        addBtn(row, Lang.t("读预设", "Read preset")) { act { MoondropSpp.readPreset() } }
+        addBtn(row, Lang.t("读预设", "Read preset"), onLong = { selfTest() }) { act { MoondropSpp.readPreset() } }
         addBtn(row, Lang.t("读曲线", "Read curve")) { act { MoondropSpp.readCurve() } }
         root.addView(row, LinearLayout.LayoutParams(-1, -2))
 
@@ -58,7 +58,7 @@ class EqSppActivity : Activity() {
         addBtn(row2, Lang.t("标准", "Standard")) { act { MoondropSpp.setPreset(1) } }
         addBtn(row2, Lang.t("监听", "Monitor")) { act { MoondropSpp.setPreset(2) } }
         addBtn(row2, Lang.t("预设4", "Preset 4")) { act { MoondropSpp.setPreset(3) } }
-        addBtn(row2, Lang.t("探测", "Probe")) { probe() }
+        addBtn(row2, Lang.t("探测", "Probe"), onLong = { fieldProbe() }) { probe() }
         addBtn(row2, Lang.t("回写曲线", "Write curve"), onLong = { restoreOfficial() }) { writeBack() }
         root.addView(row2, LinearLayout.LayoutParams(-1, -2))
 
@@ -202,6 +202,69 @@ class EqSppActivity : Activity() {
                     line("OK", Lang.t("官方曲线已写回，回读一致", "Official curve restored, read-back identical"))
                 } else line("E", Lang.t("官方曲线写回失败", "Restore failed"))
             }
+        }.start()
+    }
+
+    /**
+     * 编解码自检（长按「读预设」）：拿两条**官方 App 真实下发帧**做 解码 -> 编码 -> 逐字节比对。
+     * 不需要耳机，也不依赖设备，只要这里 PASS，就说明 39 字节布局与单位在实现里是对的。
+     */
+    private fun selfTest() {
+        val frames = listOf(
+                "0004ff46006413330000b401f40ccc00ffa609c4100000003c271014cc0000783a980e6600006c",
+                "0004ff8e0018080000fefe0082899900005a01904000000078145004cc00ff221d4c14cc00ffc4"
+        )
+        var pass = 0
+        for (h in frames) {
+            val raw = ByteArray(h.length / 2) { h.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+            val pr = MoondropEq.decode(raw)
+            if (pr == null) { line("E", Lang.t("自检：解码失败", "self-test: decode failed")); continue }
+            val back = MoondropEq.encode(pr)
+            val ok = back.contentEquals(raw)
+            val desc = pr.bands.joinToString(" ") { String.format("%dHz%+.2f/%.2f", it.freq, it.gainDb, it.q) }
+            line(if (ok) "OK" else "E",
+                    (if (ok) Lang.t("自检通过", "pass") else Lang.t("自检失败", "FAIL")) +
+                            String.format(" pre%+.2f | ", pr.preampDb) + desc)
+            if (ok) pass++
+        }
+        line(if (pass == frames.size) "OK" else "E",
+                Lang.t("编解码自检 ", "codec self-test ") + pass + "/" + frames.size)
+    }
+
+    /**
+     * 字段探针（长按「探测」）：把某个候选字段写成越界值 → 回读 → 看固件有没有钳制/纠正。
+     * 只有固件会纠正时才有信息量；它原样回显就说明该字段无校验（记「原样」）。
+     *
+     * 布局按实测：39 = 4 字节头 + 5 段 × 7 字节，段内偏移 2 字节疑似频点、2 字节疑似 Q、3 字节疑似增益。
+     */
+    private fun fieldProbe() {
+        val base = lastCurve ?: run { line("E", Lang.t("先读一次曲线", "Read a curve first")); return }
+        Thread {
+            ui.post { line("I", Lang.t("字段探针开始，基准 ", "Field probe, base ") + base.size + Lang.t(" 字节", " bytes")) }
+            val cases = listOf(
+                    Lang.t("段0 字节4-5（疑似频点）=FFFF", "band0 bytes4-5 =FFFF") to intArrayOf(4, 5),
+                    Lang.t("段0 字节6-7（疑似Q）=7FFF", "band0 bytes6-7 =7FFF") to intArrayOf(6, 7),
+                    Lang.t("段0 字节9-10（疑似增益）=7FFF", "band0 bytes9-10 =7FFF") to intArrayOf(9, 10),
+                    Lang.t("段0 字节8 =7F", "band0 byte8 =7F") to intArrayOf(8)
+            )
+            for ((name, idxs) in cases) {
+                val v = base.copyOf()
+                for (i in idxs) if (i < v.size) v[i] = if (idxs.size == 1) 0x7F else 0xFF.toByte()
+                if (!MoondropSpp.writeCurve(v)) {
+                    ui.post { line("E", name + Lang.t(" 写入失败", " write failed")) }
+                    continue
+                }
+                Thread.sleep(600)
+                val back = MoondropSpp.readCurve()
+                if (back == null) { ui.post { line("W", name + Lang.t(" 回读超时", " readback timeout")) }; continue }
+                val diff = (0 until minOf(back.size, v.size)).filter { back[it] != v[it] }
+                val got = if (diff.isEmpty()) Lang.t("原样", "verbatim")
+                else diff.joinToString(" ") { i -> String.format("#%d %02x->%02x", i, v[i], back[i]) }
+                ui.post { line(if (diff.isEmpty()) "I" else "OK", name + " → " + got) }
+            }
+            // 收尾：把基准曲线写回去
+            MoondropSpp.writeCurve(base)
+            ui.post { line("I", Lang.t("探针结束，已写回基准曲线", "Probe done, base restored")) }
         }.start()
     }
 
