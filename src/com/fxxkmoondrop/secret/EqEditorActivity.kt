@@ -76,8 +76,9 @@ class EqEditorActivity : Activity() {
         // 独立 Activity 需要一个返回键：浮在大标题左上角
         val back = M3Ui.arrowBack(this, pal) { finish() }
         // 让出状态栏：容器顶部内缩 sbh，否则大标题会被状态栏时间压住（真机截图确认过）
-        // 返回键单独占一行，标题在它下方：否则大标题会压在返回键上（真机截图确认）
-        page.container.setPadding(0, sbh + dp(48), 0, 0)
+        // 返回键固定在状态栏下方左上角（不再给容器加内边距，否则会把标题区整体顶到屏幕中间）；
+        // 大标题栏左侧留出 56dp，滚动收缩成顶栏时标题落在返回键右侧，不会被压住。
+        page.header.view.setPadding(dp(56), 0, 0, 0)
         page.container.addView(back, android.widget.FrameLayout.LayoutParams(
                 dp(48), dp(48), Gravity.TOP or Gravity.START).also {
             it.topMargin = sbh + dp(4); it.leftMargin = dp(4)
