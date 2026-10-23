@@ -128,7 +128,9 @@ class AboutFragment : Fragment() {
         val tag = UpdateChecker.localStableTag(requireContext())
         fetchReleaseBody(tag) { notes ->
             if (!dlg.isShowing) return@fetchReleaseBody
-            renderChangelog(content, contentSv, notes, availW, maxH, pal)
+            // 远端拿不到就用 APK 内置的 CHANGELOG 兜底（离线也能看到本版说明）
+            val body = notes?.takeIf { it.isNotBlank() } ?: localChangelogSection()
+            renderChangelog(content, contentSv, body, availW, maxH, pal)
         }
     }
 
@@ -151,6 +153,28 @@ class AboutFragment : Fragment() {
      * 高度必须重算：初始高度是按 loading 占位量出来的，换成整篇日志后不重算，
      * 要么留一大片空白，要么内容被截断。
      */
+    /**
+     * 从 APK 内置的 assets/CHANGELOG.md 里截出「本机版本」那一段。
+     *
+     * 为什么需要：Release 说明走 GitHub API / atom，离线或接口异常时整块空白；
+     * 打包时把 CHANGELOG 一起带上，更新日志就永远有内容可看（远端仍优先）。
+     */
+    private fun localChangelogSection(): String? {
+        return try {
+            val ctx = requireContext()
+            val text = ctx.assets.open("CHANGELOG.md").bufferedReader().use { it.readText() }
+            val name = try {
+                @Suppress("DEPRECATION")
+                ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName
+            } catch (_: Throwable) { null } ?: return null
+            val idx = text.indexOf("## " + name)
+            if (idx < 0) return null
+            val rest = text.substring(idx)
+            val next = rest.indexOf("\n## ", 4)
+            (if (next > 0) rest.substring(0, next) else rest).trim().ifBlank { null }
+        } catch (_: Throwable) { null }
+    }
+
     private fun renderChangelog(content: LinearLayout, sv: ScrollView, notes: String?,
                                 availW: Int, maxH: Int, pal: ThemeUtil.Palette) {
         try {

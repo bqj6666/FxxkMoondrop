@@ -382,14 +382,19 @@ object UpdateChecker {
         return body
     }
 
-    private fun bodyCacheKey(tag: String) = "release_body_" + tag
+    // v2：旧前缀存进过「只有版本名」的坏值 —— 换前缀让它们自然失效。
+    private fun bodyCacheKey(tag: String) = "release_body_v2_" + tag
+
+    /** 正文至少要像一段话：太短的多半是版本名之类的残片，不缓存也不回放。 */
+    private fun looksLikeBody(s: String?): Boolean = (s?.trim()?.length ?: 0) >= 40
 
     private fun readBodyCache(app: Context, tag: String): String? = try {
-        prefs(app).getString(bodyCacheKey(tag), null)?.ifBlank { null }
+        prefs(app).getString(bodyCacheKey(tag), null)?.takeIf { looksLikeBody(it) }
     } catch (_: Throwable) { null }
 
     private fun writeBodyCache(app: Context, tag: String, body: String) {
         try {
+            if (!looksLikeBody(body)) return
             prefs(app).edit().putString(bodyCacheKey(tag), body).apply()
         } catch (_: Throwable) { }
     }

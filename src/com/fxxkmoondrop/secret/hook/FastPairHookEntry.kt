@@ -745,12 +745,21 @@ class FastPairHookEntry {
         }
     }
 
+    /** 档位按钮的底：方形=corners 12dp 的圆角方块，圆形=oval。直接返回新 drawable，不共享状态。 */
+    private fun shapeBg(density: Float, color: Int, square: Boolean): android.graphics.drawable.GradientDrawable =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = if (square) android.graphics.drawable.GradientDrawable.RECTANGLE
+                        else android.graphics.drawable.GradientDrawable.OVAL
+                cornerRadius = if (square) 12f * density else 0f
+                setColor(color)
+            }
+
     /** alpha1.20: 把弹窗三按钮中对应 mode 的按钮置为高亮（其余恢复默认） */
     private fun applyModeHighlight(mode: Int) {
         try {
             val act = sHalfSheetActivity ?: return
             val decor = act.window.decorView
-            for (m in 0..3) {
+            for (m in 0..6) {
                 val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
                 val bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg") ?: holder
                 val mp = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(act) } catch (_: Throwable) { null }
@@ -760,9 +769,9 @@ class FastPairHookEntry {
                     on -> mp.primary
                     else -> mp.container
                 }
-                val dd = bgV.resources.displayMetrics.density
-                val radius = if (on) 12f else 24f
-                bgV.background = modeShapeBg(dd, fill, on, radius)
+                // 形状直接用 GradientDrawable 画：选中=圆角方形，未选中=圆形。
+                // 不经过资源 id、不经过 tintList —— 这两条路都会被系统状态刷新打回圆形。
+                bgV.background = shapeBg(act.resources.displayMetrics.density, fill, on)
                 holder.isSelected = on
                 // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
                 try {
@@ -1145,8 +1154,8 @@ class FastPairHookEntry {
         val pal = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(bctx) } catch (_: Throwable) { null }
         val bg = android.view.View(act)
         bg.tag = "fxxk_mode_bg"
-        bg.background = modeShapeBg(bg.resources.displayMetrics.density,
-                if (pal != null) pal.container else 0x29FFFFFF, false, 24f)
+        // 初始态：圆形（未选中）。形状由 GradientDrawable 持有，任何状态刷新都改不动
+        bg.background = shapeBg(d, if (pal != null) pal.container else 0x29FFFFFF, false)
         holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
@@ -1156,13 +1165,12 @@ class FastPairHookEntry {
         holder.addView(iv, android.widget.FrameLayout.LayoutParams(iconPx, iconPx,
                 android.view.Gravity.CENTER))
         holder.setOnTouchListener { v, e ->
-            val d0 = v.resources.displayMetrics.density
-            val bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg")
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> animateModeShape(bgV, d0, 12f)
+                android.view.MotionEvent.ACTION_DOWN ->
+                    v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(90).start()
                 android.view.MotionEvent.ACTION_UP,
                 android.view.MotionEvent.ACTION_CANCEL ->
-                    animateModeShape(bgV, d0, if (holder.isSelected) 12f else 24f)
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
             }
             false
         }
