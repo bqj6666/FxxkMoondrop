@@ -70,19 +70,26 @@ class EqEditorActivity : Activity() {
         val sbh = resources.getIdentifier("status_bar_height", "dimen", "android")
                 .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
 
-        // 官方大标题页骨架（与概览/设置/关于同款）：上滑时标题从大字号收缩成顶栏
-        val page = M3Ui.largeHeaderPage(this, pal, Lang.t("均衡器", "Equalizer"))
+        // 固定顶栏：返回键与标题同一栏。大标题页骨架在本页需要一个「跟随滚动」的返回键，
+        // 而 M3Ui.largeHeaderPage 的头栏没有这一层，硬塞一个悬浮返回键就会出现
+        // 「不随滚动、压在卡片上」的问题（真机截图确认），因此这里用稳定的顶栏实现。
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(pal.surface)
+        root.setPadding(dp(12), sbh + dp(8), dp(12), dp(16))
 
-        // 独立 Activity 需要一个返回键：浮在大标题左上角
-        val back = M3Ui.arrowBack(this, pal) { finish() }
-        // 让出状态栏：容器顶部内缩 sbh，否则大标题会被状态栏时间压住（真机截图确认过）
-        // 返回键固定在状态栏下方左上角（不再给容器加内边距，否则会把标题区整体顶到屏幕中间）；
-        // 大标题栏左侧留出 56dp，滚动收缩成顶栏时标题落在返回键右侧，不会被压住。
-        page.header.view.setPadding(dp(56), 0, 0, 0)
-        page.container.addView(back, android.widget.FrameLayout.LayoutParams(
-                dp(48), dp(48), Gravity.TOP or Gravity.START).also {
-            it.topMargin = sbh + dp(4); it.leftMargin = dp(4)
-        })
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        header.addView(M3Ui.arrowBack(this, pal) { finish() },
+                LinearLayout.LayoutParams(dp(48), dp(48)))
+        val title = TextView(this)
+        title.text = Lang.t("均衡器", "Equalizer")
+        title.textSize = 22f
+        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        title.setTextColor(pal.onSurface)
+        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f).also { it.marginStart = dp(8) })
+        root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         val body = LinearLayout(this)
         body.orientation = LinearLayout.VERTICAL
@@ -140,9 +147,10 @@ class EqEditorActivity : Activity() {
 
         contentOf(content)
 
-        body.setPadding(dp(12), dp(8), dp(12), dp(16))
-        page.sv.addView(body, LinearLayout.LayoutParams(-1, -2))
-        setContentView(page.container)
+        val sv = ScrollView(this)
+        sv.addView(body, LinearLayout.LayoutParams(-1, -2))
+        root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
         M3Ui.fitSystemBars(this, pal)
 
         alive = true
