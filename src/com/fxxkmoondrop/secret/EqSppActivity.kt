@@ -33,10 +33,10 @@ class EqSppActivity : Activity() {
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        header.addView(M3Ui.arrowBack(this, pal) { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(M3Ui.backButton(this, pal) { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         val t = TextView(this)
         t.text = Lang.t("EQ 通道（SPP）", "EQ over SPP")
-        t.textSize = 20f
+        t.textSize = 28f
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(pal.onSurface)
         val lp = LinearLayout.LayoutParams(0, -2, 1f); lp.marginStart = dp(8)

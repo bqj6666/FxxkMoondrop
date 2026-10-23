@@ -57,11 +57,11 @@ class ConnectLogActivity : Activity() {
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        val back = M3Ui.arrowBack(this, pal) { finish() }
+        val back = M3Ui.backButton(this, pal) { finish() }
         header.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
         val title = TextView(this)
         title.text = Lang.t("连接过程", "Connection log")
-        title.textSize = 20f
+        title.textSize = 28f
         title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         title.setTextColor(pal.onSurface)
         val tlp = LinearLayout.LayoutParams(0, -2, 1f)
