@@ -15,6 +15,7 @@ class EqSppActivity : Activity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var logBox: LinearLayout
+    private lateinit var sv: ScrollView
     private val ui = Handler(Looper.getMainLooper())
     private var lastCurve: ByteArray? = null
     private var addr: String? = null
@@ -58,17 +59,13 @@ class EqSppActivity : Activity() {
         addBtn(row2, Lang.t("监听", "Monitor")) { act { MoondropSpp.setPreset(2) } }
         addBtn(row2, Lang.t("预设4", "Preset 4")) { act { MoondropSpp.setPreset(3) } }
         addBtn(row2, Lang.t("探测", "Probe")) { probe() }
-        addBtn(row2, Lang.t("回写曲线", "Write curve")) {
-            val c = lastCurve
-            if (c == null) line("E", Lang.t("先读一次曲线", "Read a curve first"))
-            else act { MoondropSpp.writeCurve(c) }
-        }
+        addBtn(row2, Lang.t("回写曲线", "Write curve"), onLong = { restoreOfficial() }) { writeBack() }
         root.addView(row2, LinearLayout.LayoutParams(-1, -2))
 
         logBox = LinearLayout(this)
         logBox.orientation = LinearLayout.VERTICAL
         logBox.setPadding(dp(12), dp(12), dp(12), dp(12))
-        val sv = ScrollView(this)
+        sv = ScrollView(this)
         sv.addView(M3Ui.groupCard(this, pal, logBox), LinearLayout.LayoutParams(-1, -2))
         root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
@@ -77,7 +74,7 @@ class EqSppActivity : Activity() {
         line("I", Lang.t("SPP 通道已就绪，点「连接」建立链路", "Ready. Tap Connect to open the SPP link"))
     }
 
-    private fun addBtn(parent: LinearLayout, text: String, onClick: () -> Unit) {
+    private fun addBtn(parent: LinearLayout, text: String, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
         val b = TextView(this)
         b.text = text
         b.textSize = 13f
@@ -86,6 +83,7 @@ class EqSppActivity : Activity() {
         b.setPadding(dp(10), dp(10), dp(10), dp(10))
         b.background = M3Ui.pressRipple(this, null)
         b.setOnClickListener { onClick() }
+        if (onLong != null) b.setOnLongClickListener { onLong(); true }
         val lp = LinearLayout.LayoutParams(0, dp(44), 1f); lp.marginEnd = dp(6)
         parent.addView(b, lp)
     }
@@ -156,6 +154,21 @@ class EqSppActivity : Activity() {
         }.start()
     }
 
+    /** 回写并回读校验（设备实测原样存储，所以「写→读→逐字节比对」就是可信判据） */
+    private fun writeBack() {
+        val c = lastCurve
+        if (c == null) { line("E", Lang.t("先读一次曲线", "Read a curve first")); return }
+        Thread {
+            val sent = c.joinToString("") { String.format("%02x", it) }
+            ui.post { line("I", Lang.t("下发：", "TX: ") + sent) }
+            val ok = MoondropSpp.writeCurveVerified(c)
+            ui.post {
+                if (ok) line("OK", Lang.t("写入成功，回读逐字节一致", "Written, read-back identical"))
+                else line("E", Lang.t("写入失败或回读不一致", "Write failed or read-back mismatch"))
+            }
+        }.start()
+    }
+
     private fun act(block: () -> ByteArray?) {
         Thread {
             val r = block()
@@ -166,6 +179,28 @@ class EqSppActivity : Activity() {
                     line("OK", hex)
                     if (r.size >= 39) lastCurve = r
                 }
+            }
+        }.start()
+    }
+
+    /**
+     * 诊断用（长按「回写曲线」）：写回官方 App 抓到的标准档曲线，用来还原被旧版错帧污染的设备槽位。
+     * 来源：官方 write 帧 `ff040027001d0a060004ff8e…ffc4`（FxxkMoondropSpp 抓包），
+     * 不是我们编的数据，写完照例回读校验。
+     */
+    private fun restoreOfficial() {
+        val hex = "0004ff8e0018080000fefe0082899900005a01904000000078145004cc00ff221d4c14cc00ffc4"
+        val bytes = ByteArray(hex.length / 2) {
+            hex.substring(it * 2, it * 2 + 2).toInt(16).toByte()
+        }
+        Thread {
+            ui.post { line("I", Lang.t("写入官方抓包曲线：", "Restoring official curve: ") + bytes.size + Lang.t(" 字节", " bytes")) }
+            val ok = MoondropSpp.writeCurveVerified(bytes)
+            ui.post {
+                if (ok) {
+                    lastCurve = bytes
+                    line("OK", Lang.t("官方曲线已写回，回读一致", "Official curve restored, read-back identical"))
+                } else line("E", Lang.t("官方曲线写回失败", "Restore failed"))
             }
         }.start()
     }
@@ -184,6 +219,7 @@ class EqSppActivity : Activity() {
         tv.setTextColor(color)
         tv.setPadding(0, dp(3), 0, dp(3))
         logBox.addView(tv, LinearLayout.LayoutParams(-1, -2))
+        sv.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }   // 新日志自动滚到底（不然写了啥根本看不见）
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

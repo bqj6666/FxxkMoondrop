@@ -28,8 +28,6 @@ object MoondropSpp {
     private var ins: InputStream? = null
     private var outs: OutputStream? = null
 
-    @Volatile private var lastReply: ByteArray? = null
-
     fun isConnected(): Boolean = try { socket?.isConnected == true } catch (_: Throwable) { false }
 
     fun connect(address: String): Boolean {
@@ -58,36 +56,80 @@ object MoondropSpp {
         socket = null; ins = null; outs = null
     }
 
-    /** 组帧：FF 04 len(u16be) + payload */
-    private fun frame(payload: ByteArray, dataLen: Int = payload.size - 4): ByteArray {
-        val n = dataLen.coerceAtLeast(0)
+    /** 组帧：FF 04 len(u16be) + payload（payload = 00 1D cmd data…，len 只数 cmd 之后的 data） */
+    private fun frame(payload: ByteArray): ByteArray {
+        val n = payload.size - 4
         val head = byteArrayOf(0xFF.toByte(), 0x04, ((n shr 8) and 0xFF).toByte(), (n and 0xFF).toByte())
         return head + payload
     }
 
-    /** 发一条命令并等待回包（返回原始字节，超时返回 null） */
-    fun request(payload: ByteArray, timeoutMs: Int = 1500, dataLen: Int = payload.size - 4): ByteArray? {
+    /**
+     * 收包缓冲。设备会在同一次 read 里塞进多帧（实测：
+     * `ff040001001d0b0301` 后面直接跟着 `ff040001001d0a8101`），
+     * 也会把一帧拆成两次到（实测读到 37/39 字节的半包），
+     * 所以必须自己按 FF 04 <len> 分帧，不能「读一次就当一帧」。
+     */
+    private val rx = java.io.ByteArrayOutputStream()
+
+    private fun hex(b: ByteArray): String = b.joinToString("") { String.format("%02x", it) }
+
+    /** 从残留 + 新数据里切出一整帧；不足一帧返回 null（继续等） */
+    private fun nextFrame(): ByteArray? {
+        val b = rx.toByteArray()
+        var i = 0
+        while (i + 8 <= b.size) {
+            if ((b[i].toInt() and 0xFF) == 0xFF && (b[i + 1].toInt() and 0xFF) == 0x04) {
+                val len = ((b[i + 2].toInt() and 0xFF) shl 8) or (b[i + 3].toInt() and 0xFF)
+                val total = 8 + len            // 4 头 + 4 (00 1D cmd…) + len
+                if (b.size - i >= total) {
+                    val f = b.copyOfRange(i, i + total)
+                    rx.reset(); rx.write(b, i + total, b.size - (i + total))
+                    return f
+                }
+                return null                    // 头齐了但数据没齐，等下一块
+            }
+            i++
+        }
+        if (b.size > 512) rx.reset()           // 全是垃圾就丢掉，防止无限增长
+        return null
+    }
+
+    /**
+     * 发一条命令并等一整帧回包（超时返回 null）。
+     *
+     * 设备会主动推事件帧（实测 `ff040001001d0a8101` 会紧跟在应答后面），
+     * 所以按命令字过滤：应答命令字 = 请求命令字 | 0x01（实测 0A05 → 0B05）。
+     */
+    fun request(payload: ByteArray, timeoutMs: Int = 1500, expectCmd: Int = -1): ByteArray? {
         val o = outs ?: return null
         val i = ins ?: return null
+        val want = if (expectCmd >= 0) expectCmd else (payload[2].toInt() and 0xFF)
         return try {
             synchronized(this) {
-                lastReply = null
-                o.write(frame(payload, dataLen)); o.flush()
+                val tx = frame(payload)
+                rx.reset()
+                Log.i(TAG, "tx " + hex(tx))
+                o.write(tx); o.flush()
                 val deadline = System.currentTimeMillis() + timeoutMs
-                val buf = ByteArray(256)
+                val buf = ByteArray(512)
                 while (System.currentTimeMillis() < deadline) {
+                    while (true) {
+                        val f = nextFrame() ?: break
+                        val cmd = f[6].toInt() and 0xFF
+                        if ((cmd and 0xFE) == (want and 0xFE)) {
+                            Log.i(TAG, "rx " + hex(f))
+                            return f
+                        }
+                        Log.i(TAG, "event(ignored) " + hex(f))
+                    }
                     if (i.available() > 0) {
                         val n = i.read(buf)
-                        if (n > 0) {
-                            val got = buf.copyOf(n)
-                            lastReply = got
-                            Log.i(TAG, "reply " + got.joinToString("") { String.format("%02x", it) })
-                            return got
-                        }
+                        if (n > 0) rx.write(buf, 0, n)
                     } else {
                         Thread.sleep(20)
                     }
                 }
+                Log.w(TAG, "timeout, rx partial=" + hex(rx.toByteArray()))
                 null
             }
         } catch (t: Throwable) {
@@ -109,7 +151,9 @@ object MoondropSpp {
      */
     fun readCurve(): ByteArray? {
         val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x05)) ?: return null
-        return extractData(r)
+        val d = extractData(r) ?: return null
+        lastCurveLen = d.size
+        return d
     }
 
     /**
@@ -117,15 +161,15 @@ object MoondropSpp {
      * 规则按实测回包的通用形态推导（长度字段即数据长度），不做型号假设。
      */
     private fun extractData(raw: ByteArray): ByteArray? {
-        if (raw.size < 8) return null
+        if (raw.size < 6) return null
         // 找 00 1D 同步头
         var i = 0
-        while (i + 6 < raw.size && !(raw[i] == 0.toByte() && raw[i + 1] == 0x1D.toByte())) i++
-        if (i + 6 > raw.size) return null
+        while (i + 4 < raw.size && !(raw[i] == 0.toByte() && raw[i + 1] == 0x1D.toByte())) i++
+        if (i + 4 >= raw.size) return null
         val lenField = ((raw[2].toInt() and 0xFF) shl 8) or (raw[3].toInt() and 0xFF)
-        // 形态 A：00 1D cmd 00 04 + data
-        val hasSub = raw[i + 4] == 0.toByte() && raw[i + 5] == 0x04.toByte()
-        val start = if (hasSub) i + 6 else i + 3
+        // 实测形态：FF 04 <len> 00 1D <cmd> <data…>，data 直接从 cmd 之后开始、长度为 len
+        // （读曲线 0A05 的 data 就是 "00 04 + 37B"，写回时原样带回，不做二次拆分）
+        val start = i + 4
         if (start >= raw.size) return null
         val n = if (lenField in 1..(raw.size - start)) lenField else raw.size - start
         return raw.copyOfRange(start, start + n)
@@ -159,11 +203,50 @@ object MoondropSpp {
      * ⚠️ 不写死 39 字节：不同型号的频点数量/参数长度可能不同，
      * 一律以「读回来多少就写回多少」为准，保证同一套协议的各型号都能用。
      */
-    fun writeCurve(params: ByteArray): ByteArray? {
-        if (params.size < 8) return null
-        // 实测写帧：FF 04 <len> 00 1D 0A 06 00 04 <data>，len = data 长度
-        val payload = byteArrayOf(0x00, 0x1D, 0x0A, 0x06, 0x00, 0x04) + params
-        return request(payload, 2500, params.size)
+    /**
+     * 写 EQ 曲线：把参数原样下发。
+     *
+     * ⚠️ 设备对 0A 06 **不回 ACK**（实测：写入后 2.5s 内无 0B 06 回包，
+     * 用 0A 05 回读才看到内容已经变了），所以这里只判「帧是否成功写出」，
+     * 不判回包；要确认效果用 [writeCurveVerified]。
+     *
+     * ⚠️ 不写死 39 字节：不同型号的频点数量/参数长度可能不同，
+     * 一律以「读回来多少就写回多少」为准，保证同一套协议的各型号都能用。
+     */
+    fun writeCurve(params: ByteArray): Boolean {
+        if (params.isEmpty()) return false
+        val o = outs ?: return false
+        if (params.size != lastCurveLen && lastCurveLen > 0) {
+            Log.w(TAG, "curve size ${params.size} != device $lastCurveLen")
+            return false
+        }
+        return try {
+            val tx = frame(byteArrayOf(0x00, 0x1D, 0x0A, 0x06) + params)
+            o.write(tx); o.flush()
+            Log.i(TAG, "tx " + hex(tx))
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "writeCurve fail: $t")
+            false
+        }
+    }
+
+    /** 最近一次读到的曲线长度（设备自己告诉我们它是多长，写回时必须一致） */
+    @Volatile private var lastCurveLen = 0
+
+    /**
+     * 写曲线并回读校验。设备实测原样存储（官方写入字节 = 0A05 读回字节），
+     * 且写完要等一会儿才回应答，所以回读带重试。
+     */
+    fun writeCurveVerified(params: ByteArray): Boolean {
+        if (!writeCurve(params)) return false
+        repeat(4) { k ->
+            Thread.sleep(if (k == 0) 500L else 800L)
+            val back = readCurve() ?: return@repeat
+            if (back.size == params.size && back.contentEquals(params)) return true
+            Log.w(TAG, "readback mismatch: " + hex(back))
+        }
+        return false
     }
 
     /** 任意 00 1D 命令（供上层做能力探测，不写死具体型号） */
