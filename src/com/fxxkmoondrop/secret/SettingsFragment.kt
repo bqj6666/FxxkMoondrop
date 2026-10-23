@@ -769,10 +769,12 @@ class SettingsFragment : Fragment() {
         // 所以放在「诊断」分组卡的第一行。默认关 —— 普通用户不需要看到能发私有协议命令的入口。
         val debugOn = getSP().getBoolean("debug_mode", false)
         val swDebug = makeThemeSwitch("debug_mode", false, Lang.t("调试模式", "Debug mode"))
-        val rowDebug = makeSwitchRow(Lang.t("调试模式", "Debug mode"),
+        // 用带多彩图标容器的行（与「检查权限」「日志抓取」同款），保持诊断区视觉一致
+        val rowDebug = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
+                Lang.t("调试模式", "Debug mode"),
                 Lang.t("显示「服务探测（GATT）」与「EQ 通道（SPP）」等排查入口",
                         "Show diagnostics-only entries such as the GATT service probe and the SPP EQ channel"),
-                swDebug)
+                swDebug, null)
         // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
         val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
                 Lang.t("服务探测（GATT）", "Service probe (GATT)"),

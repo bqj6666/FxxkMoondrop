@@ -39,6 +39,7 @@ class EqEditorActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var retryBtn: TextView
+    private lateinit var errorBox: LinearLayout
     private lateinit var loading: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var applyBtn: TextView
@@ -92,8 +93,12 @@ class EqEditorActivity : Activity() {
         loading = LinearLayout(this)
         loading.orientation = LinearLayout.VERTICAL
         loading.gravity = Gravity.CENTER_HORIZONTAL
-        loading.setPadding(0, dp(64), 0, dp(64))
-        loading.addView(M3Ui.circularLoader(this, 40, pal.primary))
+        loading.setPadding(0, dp(72), 0, dp(72))
+        // 官方 M3 加载指示器：直径 48dp、轨道 4dp（Material3 规范值）
+        val ind = com.google.android.material.loadingindicator.LoadingIndicator(this)
+        ind.indicatorSize = dp(48)
+        ind.setIndicatorColor(pal.primary)
+        loading.addView(ind)
         val lt = TextView(this)
         lt.text = Lang.t("正在读取耳机参数…", "Reading from headset…")
         lt.textSize = 13f
@@ -108,14 +113,19 @@ class EqEditorActivity : Activity() {
         status.textSize = 12f
         status.setTextColor(pal.onVariant)
         status.setPadding(dp(12), dp(2), dp(12), dp(8))
-        status.visibility = View.GONE
-        body.addView(status, LinearLayout.LayoutParams(-1, -2))
+        errorBox = LinearLayout(this)
+        errorBox.orientation = LinearLayout.VERTICAL
+        errorBox.gravity = Gravity.CENTER_HORIZONTAL
+        errorBox.setPadding(dp(24), dp(48), dp(24), dp(24))
+        errorBox.visibility = View.GONE
+        body.addView(errorBox, LinearLayout.LayoutParams(-1, -2))
+
+        status = status.apply { gravity = Gravity.CENTER; textAlignment = View.TEXT_ALIGNMENT_CENTER }
+        errorBox.addView(status, LinearLayout.LayoutParams(-1, -2))
 
         retryBtn = m3Text(Lang.t("重试", "Retry")) { doRead(null) }
-        retryBtn.visibility = View.GONE
-        body.addView(retryBtn, LinearLayout.LayoutParams(-2, dp(40)).also {
-            it.topMargin = dp(4); it.bottomMargin = dp(4)
-            it.gravity = Gravity.CENTER_HORIZONTAL
+        errorBox.addView(retryBtn, LinearLayout.LayoutParams(-2, dp(40)).also {
+            it.topMargin = dp(8); it.gravity = Gravity.CENTER_HORIZONTAL
         })
 
         content = LinearLayout(this)
@@ -241,8 +251,7 @@ class EqEditorActivity : Activity() {
 
     /** 成功状态不显示任何「已读取/已应用」字样（按设计要求） */
     private fun clearStatus() {
-        status.visibility = View.GONE
-        retryBtn.visibility = View.GONE
+        errorBox.visibility = View.GONE
     }
 
     /** 出错：只显示一行说明 + 重试，内容区收起（不留空壳） */
@@ -251,16 +260,14 @@ class EqEditorActivity : Activity() {
         content.visibility = View.GONE
         status.text = msg
         status.setTextColor(pal.red)
-        status.visibility = View.VISIBLE
-        retryBtn.visibility = View.VISIBLE
+        errorBox.visibility = View.VISIBLE
     }
 
     /** 加载态：整页转圈；只有拿到数据才露出内容 */
     private fun setLoading() {
         loading.visibility = View.VISIBLE
         content.visibility = View.GONE
-        status.visibility = View.GONE
-        retryBtn.visibility = View.GONE
+        errorBox.visibility = View.GONE
     }
 
     private fun showContent() {
@@ -412,7 +419,7 @@ class EqEditorActivity : Activity() {
         }
         for (id in presetIds) {
             val chip = pill(presetLabel(id), id == currentPreset) { setPreset(id) }
-            presetBox.addView(chip, LinearLayout.LayoutParams(-2, dp(32)).also { it.marginEnd = dp(8) })
+            presetBox.addView(chip, LinearLayout.LayoutParams(-2, -2).also { it.marginEnd = dp(8) })
         }
     }
 
@@ -448,7 +455,7 @@ class EqEditorActivity : Activity() {
         c.isChipIconVisible = false
         c.isCheckedIconVisible = false
         c.chipMinHeight = dp(32).toFloat()
-        c.setPadding(dp(16), 0, dp(16), 0)
+        c.setPadding(dp(16), dp(8), dp(16), dp(8))
         c.shapeAppearanceModel = c.shapeAppearanceModel.toBuilder()
                 .setAllCornerSizes(dp(8).toFloat()).build()
         c.chipStrokeWidth = dp(1).toFloat()
@@ -500,6 +507,12 @@ class EqEditorActivity : Activity() {
     }
 
     private fun doRead(afterWrite: ByteArray?) {
+        // 关键：doWrite / setPreset 在后台线程完成后会回调这里，而 setLoading() 会动 View。
+        // 不在主线程就先抛回主线程，避免 CalledFromWrongThreadException（真机崩溃堆栈见 260 行）。
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            ui.post { if (alive) doRead(afterWrite) }
+            return
+        }
         setLoading()
         resolveDevice { target ->
             if (target == null) {
@@ -514,7 +527,6 @@ class EqEditorActivity : Activity() {
                 val ids = MoondropSpp.readPresetIds()
                 val cur = MoondropSpp.readCurrentPreset()
                 val raw = MoondropSpp.readCurve()
-                MoondropSpp.disconnect()   // 读完就放链路，不长期占着耳机
                 if (raw == null) {
                     ui.post {
                         if (!alive) return@post
@@ -554,24 +566,38 @@ class EqEditorActivity : Activity() {
         }
     }
 
+    @Volatile private var busy = false
+
     private fun doWrite() {
         val p = profile ?: return
         if (!editable) { showError(Lang.t("当前为只读模式", "Read-only mode")); return }
+        if (busy) return
         val target = addr
         if (target == null) { showError(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device")); return }
-        val raw = MoondropEq.encode(p)
-        setApplyEnabled(false)
+        // 写之前按官方文档范围钳制（频点 20–20000 Hz、增益 −12…+3 dB、Q 0.1…12、预增益 −24…0）。
+        // 越界系数会让耳机 DSP 自己重启 —— 这是「写完之后耳机反复重连」最合理的软件诱因。
+        val safe = p.duplicate()
+        safe.preampDb = safe.preampDb.coerceIn(-24f, 0f)
+        safe.bands.forEach { b ->
+            b.freq = b.freq.coerceIn(20, 20000)
+            b.gainDb = b.gainDb.coerceIn(-12f, 3f)
+            b.q = b.q.coerceIn(0.1f, 12f)
+        }
+        val raw = MoondropEq.encode(safe)
+        busy = true
+        // 注意：这里不立刻 setEnabled(false)——那会吞掉 MaterialButton 的点击波纹与状态动画；
+        // 用 busy 标记防重入，写完再决定按钮状态。
         Thread {
             // 读完就会断开（不长期占链路），写之前自己把链路建起来
             if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
-                ui.post { if (alive) { applyBtn.isEnabled = editable; showError(Lang.t("写入前建链失败", "Connect failed")) } }
+                ui.post { busy = false; if (alive) { setApplyEnabled(editable); showError(Lang.t("写入前建链失败", "Connect failed")) } }
                 return@Thread
             }
             val ok = MoondropSpp.writeCurve(raw)
             ui.post {
+                busy = false
                 if (!alive) return@post
-                applyBtn.isEnabled = editable
-                applyBtn.alpha = if (editable) 1f else 0.5f
+                setApplyEnabled(editable)
                 if (!ok) showError(Lang.t("写入失败（链路断开？）", "Write failed"))
             }
             if (ok) { Thread.sleep(500); doRead(raw) }
@@ -588,7 +614,6 @@ class EqEditorActivity : Activity() {
                 return@Thread
             }
             val r = MoondropSpp.setPreset(idx)
-            MoondropSpp.disconnect()
             ui.post {
                 if (!alive) return@post
                 if (r == null) showError(Lang.t("切换预设失败", "Preset switch failed"))
@@ -599,6 +624,12 @@ class EqEditorActivity : Activity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    /** 页面可见期间保持 SPP（避免每次读写都重开 RFCOMM 导致耳机反复重连），离开就断开 */
+    override fun onStop() {
+        MoondropSpp.disconnect()
+        super.onStop()
+    }
 
     override fun onDestroy() {
         alive = false
