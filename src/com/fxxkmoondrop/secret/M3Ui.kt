@@ -142,13 +142,7 @@ class M3Ui {
                 it.rightMargin = dp(act, 16)
             })
 
-            val back = arrowBack(act, pal, onBack)
-            // arrowBack 用的是 materialIconButtonStyle，自带 4dp inset：直接塞进 48dp 位置时
-            // 背景/涟漪会被内缩，看起来就是「按压缩放轮廓偏了」。这里把 inset 归零让背景铺满 48dp。
-            (back as? MaterialButton)?.apply {
-                insetLeft = 0; insetRight = 0; insetTop = 0; insetBottom = 0
-                setPadding(0, 0, 0, 0)
-            }
+            val back = backButton(act, pal, onBack)
             // 返回键与标题**同一行**：展开时一起下移到标题那一行，收缩时一起上移（只改位置，不改标题字号）
             val backLp = android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
                     Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 56) }
@@ -177,8 +171,8 @@ class M3Ui {
                 val titleTm = dp(act, (56 - 38 * t).toInt())
                 val lp = barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams
                 if (lp != null) {
-                    if (lp.topMargin != titleTm || lp.leftMargin != dp(act, 72)) {
-                        lp.topMargin = titleTm; lp.leftMargin = dp(act, 72); barTitle.layoutParams = lp
+                    if (lp.topMargin != titleTm || lp.leftMargin != dp(act, 56)) {
+                        lp.topMargin = titleTm; lp.leftMargin = dp(act, 56); barTitle.layoutParams = lp
                     }
                 }
                 if (backLp.topMargin != backTm) { backLp.topMargin = backTm; back.layoutParams = backLp }
@@ -340,6 +334,30 @@ class M3Ui {
             b.layoutParams = LinearLayout.LayoutParams(dp(c, 48), dp(c, 48))
             if (onBack != null) b.setOnClickListener { onBack.run() }
             return b
+        }
+
+
+        /**
+         * 简洁返回键：48dp 容器 + 居中箭头 + 圆形涟漪（半径 24dp 正好铺满触摸区）。
+         * 不用 Material 图标按钮：它的 inset/padding/背景形状会让按压轮廓偏移，
+         * 这个自绘版本位置与轮廓都完全可控。
+         */
+        @JvmStatic
+        fun backButton(act: Activity, pal: ThemeUtil.Palette, onBack: Runnable?): View {
+            val box = android.widget.FrameLayout(act)
+            val mask = android.graphics.drawable.GradientDrawable()
+            mask.shape = android.graphics.drawable.GradientDrawable.OVAL
+            mask.setColor(0xFFFFFFFF.toInt())
+            val rippleColor = android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x2B000000)
+            box.background = android.graphics.drawable.RippleDrawable(rippleColor, null, mask)
+            val iv = android.widget.ImageView(act)
+            iv.setImageResource(R.drawable.abc_ic_ab_back_material)
+            iv.imageTintList = android.content.res.ColorStateList.valueOf(pal.onSurface)
+            iv.isClickable = false
+            box.addView(iv, android.widget.FrameLayout.LayoutParams(dp(act, 24), dp(act, 24),
+                    Gravity.CENTER))
+            if (onBack != null) box.setOnClickListener { onBack.run() }
+            return box
         }
 
         /** 行尾 chevron（12dp 矢量，M3 navigation 指示） */
