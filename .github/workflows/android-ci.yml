@@ -171,11 +171,10 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          name: FxxkMoondrop ${{ github.ref_name }}
+          name: MoonEar ${{ github.ref_name }}
           body_path: release_body.md
           files: |
             app/build/outputs/apk/release/*.apk
-            app/build/outputs/apk/debug/*.apk
           prerelease: false
           fail_on_unmatched_files: false
           generate_release_notes: false
