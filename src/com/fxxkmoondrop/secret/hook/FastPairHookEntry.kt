@@ -757,10 +757,18 @@ class FastPairHookEntry {
                 if (mb != null) {
                     val mp = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(mb.context) } catch (_: Throwable) { null }
                     if (mp != null) {
+                        val on = m == mode
                         mb.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                                if (m == mode) mp.primary else mp.container)
+                                if (on) mp.primary else mp.container)
                         mb.iconTint = android.content.res.ColorStateList.valueOf(
-                                if (m == mode) mp.onPrimary else mp.onContainer)
+                                if (on) mp.onPrimary else mp.onContainer)
+                        // M3 Expressive：toggle 图标按钮「选中 = 圆角方形（12dp），未选中 = 圆形」，
+                        // 按压时再往 12dp 收；形变的 idle 值要跟着选中态变，否则选中后按下去会被拉回圆
+                        val d = mb.resources.displayMetrics.density
+                        val idle = if (on) 12f else 24f
+                        mb.shapeAppearanceModel = mb.shapeAppearanceModel.toBuilder()
+                                .setAllCornerSizes(idle * d).build()
+                        com.fxxkmoondrop.secret.M3Ui.attachPressMorph(mb.context, mb, idle, 12f)
                     }
                 } else {
                     bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
