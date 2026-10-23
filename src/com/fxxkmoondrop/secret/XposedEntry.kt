@@ -1249,6 +1249,29 @@ class XposedEntry : XposedModule() {
                     Log.i(TAG, "official gatt hooked: " + m.name)
                 }
             }
+            // SPP/RFCOMM 通道：官方 EQ 走经典蓝牙 Socket，这里 hook OutputStream.write
+            // 只打印「看起来像 Moondrop 帧」的数据（含 00 1D 或 0B FF 起始），避免刷屏。
+            val osCls = Class.forName("java.io.OutputStream")
+            for (m in osCls.declaredMethods) {
+                if (m.name != "write") continue
+                val ps = m.parameterTypes
+                if (ps.isEmpty() || ps[0] != ByteArray::class.java) continue
+                runCatching {
+                    hook(m).intercept { chain ->
+                        try {
+                            val buf = chain.args.getOrNull(0) as? ByteArray
+                            if (buf != null && buf.size in 4..200) {
+                                val hx = buf.joinToString("") { String.format("%02x", it) }
+                                if (hx.contains("001d") || hx.startsWith("0bff") || hx.startsWith("09ef")) {
+                                    Log.i("FxxkMoondropSpp", "write " + hx)
+                                }
+                            }
+                        } catch (_: Throwable) { }
+                        chain.proceed()
+                    }
+                    Log.i(TAG, "official spp hooked: " + m.name + "/" + m.parameterCount)
+                }
+            }
         }.onFailure { Log.d(TAG, "hookOfficialGatt fail: " + it) }
     }
 
