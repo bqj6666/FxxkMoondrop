@@ -241,7 +241,17 @@ class EqSppActivity : Activity() {
                         (dec?.bands?.size ?: -1) + Lang.t(" 段", " bands") +
                         if (generic) " ✓" else " ✗")
         if (generic) pass++
-        val total = frames.size + 1
+        // 反证：布局不符时必须拒绝解释（对应「别的型号 → 只读」的降级路径）
+        val good = ByteArray(39).also { it[1] = 0x04; it[8] = 0x00 }
+        val padBad = good.copyOf().also { it[8] = 0x7F }            // 段尾标记不为 0
+        val lenBad = ByteArray(38)                                   // 长度反推不出整数段
+        val rPad = MoondropEq.decode(padBad) == null
+        val rLen = MoondropEq.decode(lenBad) == null
+        line(if (rPad && rLen) "OK" else "E",
+                Lang.t("布局不符必须拒绝：段尾标记", "reject bad layout: pad ") + (if (rPad) "✓" else "✗") +
+                        Lang.t("、长度 ", ", length ") + (if (rLen) "✓" else "✗"))
+        if (rPad && rLen) pass++
+        val total = frames.size + 2
         line(if (pass == total) "OK" else "E",
                 Lang.t("编解码自检 ", "codec self-test ") + pass + "/" + total)
     }
