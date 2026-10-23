@@ -56,6 +56,7 @@
 
             <TextView
                 android:id="@+id/notif_btn0_text"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
@@ -81,6 +82,7 @@
 
             <TextView
                 android:id="@+id/notif_btn1_text"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
@@ -106,6 +108,7 @@
 
             <TextView
                 android:id="@+id/notif_btn2_text"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
@@ -131,6 +134,7 @@
 
             <TextView
                 android:id="@+id/notif_btn3_text"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
@@ -158,6 +162,7 @@
 
             <TextView
                 android:id="@+id/notif_btn4_text"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"

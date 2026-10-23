@@ -21,8 +21,34 @@
         <item name="colorOnSurfaceVariant">@color/m3_on_surface_variant</item>
         <item name="colorOutline">@color/m3_outline</item>
         <item name="colorOutlineVariant">@color/m3_outline_variant</item>
-        <item name="android:colorBackground">@color/m3_surface</item>
-        <item name="android:colorBackgroundFloating">@color/m3_surface_container_high</item>
+        <!-- Keep framework widgets, dialogs and menus on the resolved Activity roles too. -->
+        <item name="android:colorBackground">?attr/colorSurface</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
+        <item name="android:colorBackgroundFloating">?attr/colorSurfaceContainerHigh</item>
+        <item name="colorOnBackground">?attr/colorOnSurface</item>
+        <item name="android:colorForeground">?attr/colorOnSurface</item>
+        <item name="android:colorError">?attr/colorError</item>
+        <item name="android:textColorPrimary">@color/theme_text_primary</item>
+        <item name="android:textColorPrimaryDisableOnly">@color/theme_text_primary</item>
+        <item name="android:textColorSecondary">@color/theme_text_secondary</item>
+        <item name="android:textColorTertiary">@color/theme_text_secondary</item>
+        <item name="android:textColorHint">@color/theme_text_secondary</item>
+        <item name="android:textColorAlertDialogListItem">@color/theme_text_primary</item>
+        <item name="android:textColorPrimaryInverse">?attr/colorOnSurfaceInverse</item>
+        <item name="android:textColorSecondaryInverse">?attr/colorOnSurfaceInverse</item>
+        <item name="android:textColorTertiaryInverse">?attr/colorOnSurfaceInverse</item>
+        <item name="android:textColorHintInverse">?attr/colorOnSurfaceInverse</item>
+        <item name="android:textColorPrimaryInverseDisableOnly">?attr/colorOnSurfaceInverse</item>
+        <item name="android:textColorHighlight">@color/theme_highlight</item>
+        <item name="android:textColorHighlightInverse">@color/theme_highlight_inverse</item>
+        <item name="android:colorControlHighlight">@color/theme_highlight</item>
+        <item name="colorControlHighlight">@color/theme_highlight</item>
+        <item name="android:colorAccent">?attr/colorPrimary</item>
+        <item name="colorAccent">?attr/colorPrimary</item>
+        <item name="android:colorControlActivated">?attr/colorPrimary</item>
+        <item name="android:colorControlNormal">?attr/colorOnSurfaceVariant</item>
+        <item name="colorControlActivated">?attr/colorPrimary</item>
+        <item name="colorControlNormal">?attr/colorOnSurfaceVariant</item>
     </style>
 
     <!-- M3 Expressive 按钮尺寸档：Medium（视觉 56dp / 左右 24dp / 图标 24dp / 16sp）。

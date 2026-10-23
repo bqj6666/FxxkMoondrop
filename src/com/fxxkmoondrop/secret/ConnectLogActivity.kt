@@ -40,7 +40,12 @@ class ConnectLogActivity : Activity() {
     private var finished = false
     private var lastState = ""
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         pal = ThemeUtil.Palette(this)
         targetName = intent.getStringExtra(EXTRA_NAME) ?: "?"
@@ -148,7 +153,7 @@ class ConnectLogActivity : Activity() {
         val color = when (level) {
             "OK" -> pal.primary
             "E" -> pal.red
-            "W" -> 0xFFFFA000.toInt()
+            "W" -> pal.warning
             else -> pal.onVariant
         }
         val row = LinearLayout(this)

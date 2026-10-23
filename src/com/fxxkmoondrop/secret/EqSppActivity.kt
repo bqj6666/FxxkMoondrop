@@ -20,7 +20,12 @@ class EqSppActivity : Activity() {
     private var lastCurve: ByteArray? = null
     private var addr: String? = null
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         pal = ThemeUtil.Palette(this)
         val root = LinearLayout(this)
@@ -260,7 +265,7 @@ class EqSppActivity : Activity() {
         val color = when (level) {
             "OK" -> pal.primary
             "E" -> pal.red
-            "W" -> 0xFFFFA000.toInt()
+            "W" -> pal.warning
             else -> pal.onSurface
         }
         val tv = TextView(this)

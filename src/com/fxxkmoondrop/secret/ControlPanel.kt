@@ -93,7 +93,8 @@ object ControlPanel {
         tv.setTextColor(pal.onContainer)
         row.addView(tv, LinearLayout.LayoutParams(-2, -2))
         row.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-        row.addView(buildSwitch(ctx, pal, switchTag), LinearLayout.LayoutParams(-2, -2))
+        row.addView(buildSwitch(ctx, pal, switchTag).apply { contentDescription = label },
+            LinearLayout.LayoutParams(-2, -2))
         return row
     }
 
@@ -228,11 +229,14 @@ object ControlPanel {
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(ctx)
             icon.tag = "dc_icon"
+            icon.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             icon.setImageDrawable(DcIcons.build(ctx, 1, gm, dp(22), onContainerC))
             val il = FrameLayout.LayoutParams(dp(22), dp(22))
             il.gravity = Gravity.CENTER
             holder.addView(icon, il)
             holder.tag = "dc_btn_gain_" + gm
+            holder.contentDescription = Lang.t(ctx, "增益", "Gain") + ": " + AncProfileLib.gainLabels(ctx)[gm]
+            holder.isFocusable = true
             holder.setOnClickListener { callbacks.setGain(gm) }
             val sz = dp(48)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
@@ -277,11 +281,14 @@ object ControlPanel {
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val icon = ImageView(ctx)
             icon.tag = "dc_icon"
+            icon.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             icon.setImageDrawable(DcIcons.build(ctx, 2, lm, dp(22), onContainerC))
             val il = FrameLayout.LayoutParams(dp(22), dp(22))
             il.gravity = Gravity.CENTER
             holder.addView(icon, il)
             holder.tag = "dc_btn_led_" + lm
+            holder.contentDescription = Lang.t(ctx, "指示灯", "Indicator") + ": " + ledNames[lm]
+            holder.isFocusable = true
             holder.setOnClickListener { callbacks.setLed(lm) }
             val sz = dp(48)
             col.addView(holder, LinearLayout.LayoutParams(sz, sz))
@@ -320,17 +327,10 @@ object ControlPanel {
         val anyVisible = profile.hasGain || profile.hasLed || windVisible
         card.visibility = if (anyVisible) View.VISIBLE else View.GONE
 
-        // alpha2.39.1: 禁用态用暗中性灰（dark 下 onVariant 偏浅会发白），不发白
-        // system_neutral1_80 不是有效 tone（Android 只有 0/10/50/…/1000），原先恒走 fallback。
-        // 且禁用灰在两个主题下方向相反：深色要偏暗、浅色要偏亮，必须分主题取不同 tone。
-        val darkCp = ThemeUtil.isDark(ctx)
-        val grey = if (darkCp) ThemeUtil.dyn(ctx, "system_neutral1_800", 0xFF2A2A2E.toInt())
-        else ThemeUtil.dyn(ctx, "system_neutral1_100", 0xFFE0E0E0.toInt())
-        val primary = ThemeUtil.dyn(ctx, "system_accent1_400",
-            if (ThemeUtil.isDark(ctx)) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
-        // 与 buildDcCard 初始底色一致：深色用 system_accent1_800（深紫），避免发白
-        val containerCal = ThemeUtil.dyn(ctx, "system_accent1_800",
-            if (ThemeUtil.isDark(ctx)) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
+        val pal = ThemeUtil.Palette(ctx)
+        val grey = pal.surfaceContainerHighest
+        val primary = pal.primary
+        val containerCal = pal.container
 
         val gLevel = state.gainLevel
         val ledOn = state.ledOn
@@ -356,7 +356,8 @@ object ControlPanel {
                         else -> false
                     }
                     // 同主界面：选中态底色是 primary，前景必须用 onPrimary 才满足对比度
-                    val iconColor = if (active) onPrimaryOf(ctx) else onContainerOf(ctx)
+                    holder.isSelected = active
+                    val iconColor = if (active) pal.onPrimary else pal.onContainer
                     val featType = when (feature) { "gain" -> 1; "led" -> 2; else -> 0 }
                     if (!state.gaiaReady) {
                         holder.isEnabled = false
@@ -367,7 +368,7 @@ object ControlPanel {
                             g.setColor(grey)
                             bgV.background = M3Ui.pressRipple(ctx, g)
                         }
-                        iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), grey))
+                        iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), pal.onVariant))
                     } else {
                         holder.isEnabled = true
                         holder.alpha = 1f
@@ -375,7 +376,7 @@ object ControlPanel {
                             val g = GradientDrawable()
                             g.shape = GradientDrawable.OVAL
                             g.setColor(if (active) primary else containerCal)
-                            if (active) g.setStroke(dp(2), onPrimaryOf(ctx))
+                            if (active) g.setStroke(dp(2), pal.onPrimary)
                             bgV.background = M3Ui.pressRipple(ctx, g)
                         }
                         iv?.setImageDrawable(DcIcons.build(ctx, featType, idx, dp(22), iconColor))
@@ -434,14 +435,6 @@ object ControlPanel {
         // alpha2.52: 统一走 M3Ui 的 Material Symbols 矢量图标（设置 hook 面板 / GMS 弹窗同源）
         return M3Ui.ancModeDrawable(ctx, mode, px, color)
     }
-
-    private fun onContainerOf(ctx: Context): Int = ThemeUtil.dyn(ctx, "system_accent1_50",
-        if (ThemeUtil.isDark(ctx)) 0xFF4F378B.toInt() else 0xFFE8DEF8.toInt())
-
-    /** 与 ThemeUtil.Palette.onPrimary 同源：primary 上的前景色（深色主题=深色，浅色主题=白）。 */
-    private fun onPrimaryOf(ctx: Context): Int =
-        if (ThemeUtil.isDark(ctx)) ThemeUtil.dyn(ctx, "system_accent1_900", 0xFF21005D.toInt())
-        else 0xFFFFFFFF.toInt()
 
     private fun dp(ctx: Context, px: Int): Int = (px * ctx.resources.displayMetrics.density).toInt()
 

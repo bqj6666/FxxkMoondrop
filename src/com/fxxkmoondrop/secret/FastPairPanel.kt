@@ -22,7 +22,7 @@ object FastPairPanel {
 
     /** 与 App 内一致的四档：降噪 / 关闭 / 透传 / 自适应 */
     fun buildView(ctx: Context, onPick: (Int) -> Unit): View {
-        val themed = android.view.ContextThemeWrapper(ctx, R.style.Theme_FxxkMoondrop)
+        val themed = ThemeUtil.moduleUiContext(ctx)
         val pal = ThemeUtil.Palette(themed)
 
         val card = LinearLayout(themed)
@@ -47,20 +47,26 @@ object FastPairPanel {
         card.addView(row, LinearLayout.LayoutParams(-1, -2))
 
         for ((mode, label) in listOf(
-                0 to Lang.t(themed, "降噪", "ANC"),
-                1 to Lang.t(themed, "关闭", "Off"),
+                1 to Lang.t(themed, "降噪", "ANC"),
+                0 to Lang.t(themed, "关闭", "Off"),
                 2 to Lang.t(themed, "透传", "Pass"),
                 4 to Lang.t(themed, "自适应", "Auto"))) {
             val btn = M3Ui.actionButton(themed, label, 0,
                     pal.surfaceContainerHighest, pal.onSurface,
                     android.view.View.OnClickListener { onPick(mode) })
             btn.tag = "fp_btn_$mode"
+            btn.isCheckable = true
+            btn.isToggleCheckedStateOnClick = false
             row.addView(btn, LinearLayout.LayoutParams(0, -2, 1f).also {
                 it.marginEnd = dp(themed, 6)
             })
         }
         return card
     }
+
+    // AncBridge retains its cached mode after disconnect; it is not current until GAIA is ready.
+    internal fun selectedMode(mode: Int, connected: Boolean, gaiaReady: Boolean): Int =
+        if (connected && gaiaReady) mode else -1
 
     /** 按当前档位刷新选中态（选中用 primary 填充） */
     fun refresh(panel: View, mode: Int) {
@@ -70,6 +76,7 @@ object FastPairPanel {
             val b = row.getChildAt(i) as? com.google.android.material.button.MaterialButton ?: continue
             val m = (b.tag as? String)?.removePrefix("fp_btn_")?.toIntOrNull() ?: continue
             val pal = ThemeUtil.Palette(b.context)
+            b.isChecked = m == mode
             b.backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (m == mode) pal.primary else pal.surfaceContainerHighest)
             b.setTextColor(if (m == mode) pal.onPrimary else pal.onSurface)
