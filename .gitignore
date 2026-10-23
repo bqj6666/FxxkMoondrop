@@ -60,3 +60,8 @@ src/**/*.bak*
 
 # Kotlin 2.x 会话目录（构建产物，不入库）
 .kotlin/
+
+# —— 内部开发档案（10-23 从仓库移除，仅本地保留）——
+*.g9bak
+/docs/superpowers/
+/docs/XIAOMI_INTEGRATION_PROGRESS.md
