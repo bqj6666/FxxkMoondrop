@@ -38,10 +38,13 @@ class EqEditorActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
 
     private lateinit var status: TextView
+    private lateinit var retryBtn: TextView
+    private lateinit var loading: LinearLayout
+    private lateinit var content: LinearLayout
+    private lateinit var applyBtn: TextView
     private lateinit var curveView: EqCurveView
     private lateinit var paramsBox: LinearLayout
     private lateinit var presetBox: LinearLayout
-    private lateinit var writeBtn: TextView
 
     private val infoV = ArrayList<TextView>()
     private val gainV = ArrayList<TextView>()
@@ -85,21 +88,48 @@ class EqEditorActivity : Activity() {
         val body = LinearLayout(this)
         body.orientation = LinearLayout.VERTICAL
 
+        // 加载态：整页显示进度圈 + 一行说明（读不到参数时不展示半成品界面）
+        loading = LinearLayout(this)
+        loading.orientation = LinearLayout.VERTICAL
+        loading.gravity = Gravity.CENTER_HORIZONTAL
+        loading.setPadding(0, dp(64), 0, dp(64))
+        loading.addView(M3Ui.circularLoader(this, 40, pal.primary))
+        val lt = TextView(this)
+        lt.text = Lang.t("正在读取耳机参数…", "Reading from headset…")
+        lt.textSize = 13f
+        lt.setTextColor(pal.onVariant)
+        lt.gravity = Gravity.CENTER
+        lt.setPadding(0, dp(16), 0, 0)
+        loading.addView(lt)
+        body.addView(loading, LinearLayout.LayoutParams(-1, -2))
+
+        // 出错时才用的一行说明（成功不再显示任何“已读取”字样）
         status = TextView(this)
         status.textSize = 12f
         status.setTextColor(pal.onVariant)
         status.setPadding(dp(12), dp(2), dp(12), dp(8))
-        status.text = Lang.t("正在连接耳机…", "Connecting…")
+        status.visibility = View.GONE
         body.addView(status, LinearLayout.LayoutParams(-1, -2))
+
+        retryBtn = m3Text(Lang.t("重试", "Retry")) { doRead(null) }
+        retryBtn.visibility = View.GONE
+        body.addView(retryBtn, LinearLayout.LayoutParams(-1, dp(40)).also {
+            it.topMargin = dp(4); it.bottomMargin = dp(4)
+        })
+
+        content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.visibility = View.GONE
+        body.addView(content, LinearLayout.LayoutParams(-1, -2))
 
         // 频响预览卡
         curveView = EqCurveView()
         val curveHolder = LinearLayout(this)
         curveHolder.setPadding(dp(8), dp(8), dp(8), dp(8))
         curveHolder.addView(curveView, LinearLayout.LayoutParams(-1, dp(132)))
-        body.addView(M3Ui.groupCard(this, pal, curveHolder), LinearLayout.LayoutParams(-1, -2))
+        content.addView(M3Ui.groupCard(this, pal, curveHolder), LinearLayout.LayoutParams(-1, -2))
 
-        contentOf(body)
+        contentOf(content)
 
         val sv = ScrollView(this)
         sv.addView(body, LinearLayout.LayoutParams(-1, -2))
@@ -111,69 +141,132 @@ class EqEditorActivity : Activity() {
         doRead(null)
     }
 
-    /** 参数区 / 预设区 / 操作区（参数与预设的行在拿到数据后动态重建） */
+    /**
+     * 内容区结构（顺序按设计：参数 → 应用 → 预设 → 操作）。
+     * 尺寸全部走 Material 3 规范值：按钮高 40dp / 圆角 20dp / 14sp，chip 高 32dp / 圆角 8dp / 14sp。
+     */
     private fun contentOf(body: LinearLayout) {
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("参数", "Bands")))
         paramsBox = LinearLayout(this)
         paramsBox.orientation = LinearLayout.VERTICAL
         body.addView(paramsBox, LinearLayout.LayoutParams(-1, -2))
-        showPlaceholder()
+
+        // 应用：M3 Filled Button（40dp 高、20dp 圆角、14sp），位置在参数卡下方、预设上方
+        applyBtn = m3Filled(Lang.t("应用", "Apply")) { doWrite() }
+        applyBtn.isEnabled = false
+        applyBtn.alpha = 0.38f
+        body.addView(applyBtn, LinearLayout.LayoutParams(-1, dp(40)).also {
+            it.topMargin = dp(12); it.bottomMargin = dp(4)
+        })
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("预设", "Presets")))
+        val presetScroll = android.widget.HorizontalScrollView(this)
+        presetScroll.isHorizontalScrollBarEnabled = false
         presetBox = LinearLayout(this)
         presetBox.orientation = LinearLayout.HORIZONTAL
-        presetBox.setPadding(dp(4), dp(4), dp(4), dp(4))
-        body.addView(presetBox, LinearLayout.LayoutParams(-1, -2))
+        presetBox.setPadding(dp(20), dp(2), dp(20), dp(6))
+        presetScroll.addView(presetBox, LinearLayout.LayoutParams(-2, -2))
+        body.addView(presetScroll, LinearLayout.LayoutParams(-1, -2))
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("操作", "Actions")))
-        val actions = LinearLayout(this)
-        actions.orientation = LinearLayout.VERTICAL
-        actions.setPadding(dp(4), dp(4), dp(4), dp(4))
-
-        writeBtn = M3Ui.filledButton(this, pal, Lang.t("写入耳机", "Write to headset")) { doWrite() }
-        writeBtn.isEnabled = false
-        actions.addView(writeBtn, LinearLayout.LayoutParams(-1, dp(48)).also { it.bottomMargin = dp(4) })
-
-        val more = LinearLayout(this)
-        more.orientation = LinearLayout.HORIZONTAL
-        more.addView(M3Ui.textButton(this, pal, Lang.t("重新读取", "Reload")) { doRead(null) },
-                LinearLayout.LayoutParams(0, -2, 1f))
-        more.addView(M3Ui.textButton(this, pal, Lang.t("自动预增益", "Auto preamp")) {
+        val ops = LinearLayout(this)
+        ops.orientation = LinearLayout.HORIZONTAL
+        ops.setPadding(dp(12), dp(2), dp(12), dp(4))
+        ops.addView(m3Text(Lang.t("重新读取", "Reload")) { doRead(null) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        ops.addView(m3Text(Lang.t("自动预增益", "Auto preamp")) {
             profile?.let { profile = MoondropEq.withAutoPreamp(it); renderAll() }
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        more.addView(M3Ui.textButton(this, pal, Lang.t("全部归零", "Flatten")) {
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        ops.addView(m3Text(Lang.t("全部归零", "Flatten")) {
             profile?.let { p ->
                 p.bands.forEach { it.gainDb = 0f }
                 renderAll()
-                setStatus(Lang.t("已归零，点「写入耳机」生效", "Flattened — tap Write"))
             }
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(more, LinearLayout.LayoutParams(-1, -2))
-        body.addView(actions, LinearLayout.LayoutParams(-1, -2))
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        body.addView(ops, LinearLayout.LayoutParams(-1, -2))
 
         val hint = TextView(this)
-        hint.textSize = 11f
+        hint.textSize = 12f
         hint.setTextColor(pal.onVariant)
-        hint.setPadding(dp(16), dp(8), dp(16), dp(8))
+        hint.setPadding(dp(20), dp(10), dp(20), dp(8))
         hint.text = Lang.t(
-                "读写耳机内的参数均衡（预增益 + 每段频点/增益/Q）。切换预设会覆盖当前调音，写回前先确认。",
+                "读写耳机内的参数均衡（预增益 + 每段频点/增益/Q）。切换预设会覆盖当前调音，应用前先确认。",
                 "Edits the parametric EQ stored in the headset. Switching a preset replaces the current tuning.")
         body.addView(hint, LinearLayout.LayoutParams(-1, -2))
     }
 
-    private fun showPlaceholder() {
-        paramsBox.removeAllViews()
-        val t = TextView(this)
-        t.text = Lang.t("尚未读取", "Nothing read yet")
-        t.textSize = 13f
-        t.setTextColor(pal.onVariant)
-        t.setPadding(dp(20), dp(16), dp(20), dp(16))
-        paramsBox.addView(M3Ui.groupCard(this, pal, t), LinearLayout.LayoutParams(-1, -2))
+    /**
+     * M3 Filled Button（官方 MaterialButton）：高 40dp、圆角 20dp、14sp。
+     * 关键是把官方控件自带的 inset 归零、minHeight 设成 40dp —— 否则内部 6dp inset 会把
+     * 文字挤出去、出现重影。
+     */
+    private fun m3Filled(text: String, onClick: () -> Unit): TextView {
+        val b = com.google.android.material.button.MaterialButton(this)
+        b.text = text
+        b.textSize = 14f
+        b.letterSpacing = 0.01f
+        b.insetTop = 0
+        b.insetBottom = 0
+        b.setPadding(dp(24), 0, dp(24), 0)
+        b.minHeight = dp(40)
+        b.minimumHeight = dp(40)
+        b.cornerRadius = dp(20)
+        b.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.primary)
+        b.setTextColor(pal.onPrimary)
+        b.setOnClickListener { onClick() }
+        return b
     }
 
-    private fun setStatus(msg: String, error: Boolean = false) {
+    /** M3 Text Button（官方 MaterialButton，透明底）：高 40dp、圆角 20dp、14sp */
+    private fun m3Text(text: String, onClick: () -> Unit): TextView {
+        val b = com.google.android.material.button.MaterialButton(this)
+        b.text = text
+        b.textSize = 14f
+        b.letterSpacing = 0.01f
+        b.insetTop = 0
+        b.insetBottom = 0
+        b.setPadding(dp(16), 0, dp(16), 0)
+        b.minHeight = dp(40)
+        b.minimumHeight = dp(40)
+        b.cornerRadius = dp(20)
+        b.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+        b.setTextColor(pal.primary)
+        b.setOnClickListener { onClick() }
+        return b
+    }
+
+    /** 成功状态不显示任何「已读取/已应用」字样（按设计要求） */
+    private fun clearStatus() {
+        status.visibility = View.GONE
+        retryBtn.visibility = View.GONE
+    }
+
+    /** 出错：只显示一行说明 + 重试，内容区收起（不留空壳） */
+    private fun showError(msg: String) {
+        loading.visibility = View.GONE
+        content.visibility = View.GONE
         status.text = msg
-        status.setTextColor(if (error) pal.red else pal.onVariant)
+        status.setTextColor(pal.red)
+        status.visibility = View.VISIBLE
+        retryBtn.visibility = View.VISIBLE
+    }
+
+    /** 加载态：整页转圈；只有拿到数据才露出内容 */
+    private fun setLoading() {
+        loading.visibility = View.VISIBLE
+        content.visibility = View.GONE
+        status.visibility = View.GONE
+        retryBtn.visibility = View.GONE
+    }
+
+    private fun showContent() {
+        loading.visibility = View.GONE
+        content.visibility = View.VISIBLE
+        clearStatus()
+    }
+
+    private fun setApplyEnabled(on: Boolean) {
+        applyBtn.isEnabled = on
+        applyBtn.alpha = if (on) 1f else 0.38f
     }
 
     // ───────────────────────── 参数行（M3 Slider） ─────────────────────────
@@ -271,7 +364,7 @@ class EqEditorActivity : Activity() {
     private fun editBand(i: Int) {
         val b = profile?.bands?.getOrNull(i) ?: return
         if (!editable) {
-            setStatus(Lang.t("这台设备的载荷未通过自洽校验，只能看不能改", "Read-only: layout not verified"), true)
+            showError(Lang.t("这台设备的载荷未通过自洽校验，只能查看", "Read-only: layout not verified"))
             return
         }
         val box = LinearLayout(this)
@@ -326,20 +419,45 @@ class EqEditorActivity : Activity() {
         else -> Lang.t("预设 ", "Preset ") + (id + 1)
     }
 
-    private fun pill(text: String, selected: Boolean, onClick: () -> Unit): TextView {
+    /** 布局不认识时的占位（只读提示） */
+    private fun showPlaceholder() {
+        paramsBox.removeAllViews()
         val t = TextView(this)
-        t.text = text
+        t.text = Lang.t("这台设备的载荷布局与已知格式不同", "Payload layout doesn't match the known format")
         t.textSize = 13f
-        t.gravity = Gravity.CENTER
-        t.setPadding(dp(16), dp(10), dp(16), dp(10))
-        val bg = GradientDrawable()
-        bg.cornerRadius = dp(20).toFloat()
-        bg.setColor(if (selected) pal.container else pal.surfaceContainerHighest)
-        if (!selected) bg.setStroke(Math.max(1, dp(1)), pal.cardStroke)
-        t.background = bg
-        t.setTextColor(if (selected) pal.onContainer else pal.onSurface)
-        t.setOnClickListener { onClick() }
-        return t
+        t.setTextColor(pal.onVariant)
+        t.setPadding(dp(20), dp(16), dp(20), dp(16))
+        paramsBox.addView(M3Ui.groupCard(this, pal, t), LinearLayout.LayoutParams(-1, -2))
+    }
+
+    /** M3 Filter Chip（官方 Chip）：高 32dp、圆角 8dp、14sp；未选中描边、选中 secondaryContainer */
+    private fun pill(text: String, selected: Boolean, onClick: () -> Unit): TextView {
+        val c = com.google.android.material.chip.Chip(this)
+        c.text = text
+        c.textSize = 14f
+        c.isCheckable = true
+        c.isChecked = selected
+        c.isChipIconVisible = false
+        c.isCheckedIconVisible = false
+        c.chipStrokeWidth = dp(1).toFloat()
+        c.chipStrokeColor = cs(intArrayOf() to pal.outline)
+        c.chipBackgroundColor = cs(
+                intArrayOf(android.R.attr.state_checked) to pal.container,
+                intArrayOf() to android.graphics.Color.TRANSPARENT)
+        c.setTextColor(cs(
+                intArrayOf(android.R.attr.state_checked) to pal.onContainer,
+                intArrayOf() to pal.onSurface))
+        c.chipMinHeight = dp(32).toFloat()
+        c.setOnClickListener { onClick() }
+        return c
+    }
+
+    private fun cs(vararg pairs: Pair<IntArray, Int>): android.content.res.ColorStateList {
+        val states = arrayOfNulls<IntArray>(pairs.size)
+        val colors = IntArray(pairs.size)
+        pairs.forEachIndexed { i, p -> states[i] = p.first; colors[i] = p.second }
+        @Suppress("UNCHECKED_CAST")
+        return android.content.res.ColorStateList(states as Array<IntArray>, colors)
     }
 
     // ───────────────────────── 设备与协议 ─────────────────────────
@@ -371,14 +489,14 @@ class EqEditorActivity : Activity() {
     }
 
     private fun doRead(afterWrite: ByteArray?) {
-        setStatus(Lang.t("正在读取均衡参数…", "Reading…"))
+        setLoading()
         resolveDevice { target ->
             if (target == null) {
-                setStatus(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device"), true); return@resolveDevice
+                showError(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device")); return@resolveDevice
             }
             Thread {
                 if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
-                    ui.post { if (alive) setStatus(Lang.t("SPP 连接失败（耳机被官方 App 占用或已休眠？）", "SPP connect failed"), true) }
+                    ui.post { if (alive) showError(Lang.t("SPP 连接失败（耳机被官方 App 占用或已休眠？）", "SPP connect failed")) }
                     return@Thread
                 }
                 // 预设表/当前档位：和曲线同一次连接里一并读，读完一起断开
@@ -389,12 +507,12 @@ class EqEditorActivity : Activity() {
                 if (raw == null) {
                     ui.post {
                         if (!alive) return@post
-                        setStatus(Lang.t("读不到曲线：这台设备可能不支持该协议", "No curve reply — protocol not supported"), true)
+                        showError(Lang.t("读不到曲线：这台设备可能不支持该协议", "No curve reply — protocol not supported"))
                     }
                     return@Thread
                 }
                 if (afterWrite != null && !afterWrite.contentEquals(raw)) {
-                    ui.post { if (alive) setStatus(Lang.t("写入后回读不一致（设备没接受这组参数）", "Read-back mismatch"), true) }
+                    ui.post { if (alive) showError(Lang.t("写入后回读不一致（设备没接受这组参数）", "Read-back mismatch")) }
                     return@Thread
                 }
                 val pr = MoondropEq.decode(raw)
@@ -406,23 +524,19 @@ class EqEditorActivity : Activity() {
                     currentPreset = cur
                     rebuildPresets()
                     if (pr == null) {
-                        setStatus(Lang.t("载荷布局不认识（", "Unrecognised payload (") + raw.size +
-                                Lang.t(" 字节）", " bytes)"), true)
-                        editable = false; writeBtn.isEnabled = false
+                        showError(Lang.t("载荷布局不认识（", "Unrecognised payload (") + raw.size +
+                                Lang.t(" 字节）", " bytes)"))
+                        editable = false; setApplyEnabled(false)
+                        showContent()
                         showPlaceholder()
                     } else {
                         profile = pr
                         editable = ok
-                        writeBtn.isEnabled = ok
-                        writeBtn.alpha = if (ok) 1f else 0.5f
                         rebuildParams(pr)
-                        setStatus(
-                                when {
-                                    afterWrite != null && ok -> Lang.t("已写入并回读一致 ✓", "Written, read-back identical")
-                                    ok -> Lang.t("已读取耳机当前参数 ✓", "Loaded from headset")
-                                    else -> Lang.t("这台设备的载荷没能自洽还原，已转只读（避免写坏）", "Layout not self-consistent — read-only")
-                                },
-                                !ok)
+                        showContent()
+                        setApplyEnabled(ok)
+                        if (!ok) showError(Lang.t("这台设备的载荷没能自洽还原，只能查看",
+                                "Layout not self-consistent — read only"))
                     }
                 }
             }.start()
@@ -431,24 +545,23 @@ class EqEditorActivity : Activity() {
 
     private fun doWrite() {
         val p = profile ?: return
-        if (!editable) { setStatus(Lang.t("当前为只读模式", "Read-only mode"), true); return }
+        if (!editable) { showError(Lang.t("当前为只读模式", "Read-only mode")); return }
         val target = addr
-        if (target == null) { setStatus(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device"), true); return }
+        if (target == null) { showError(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device")); return }
         val raw = MoondropEq.encode(p)
-        writeBtn.isEnabled = false
-        setStatus(Lang.t("正在写入…", "Writing…"))
+        setApplyEnabled(false)
         Thread {
             // 读完就会断开（不长期占链路），写之前自己把链路建起来
             if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
-                ui.post { if (alive) { writeBtn.isEnabled = editable; setStatus(Lang.t("写入前建链失败", "Connect failed"), true) } }
+                ui.post { if (alive) { applyBtn.isEnabled = editable; showError(Lang.t("写入前建链失败", "Connect failed")) } }
                 return@Thread
             }
             val ok = MoondropSpp.writeCurve(raw)
             ui.post {
                 if (!alive) return@post
-                writeBtn.isEnabled = editable
-                writeBtn.alpha = if (editable) 1f else 0.5f
-                if (!ok) setStatus(Lang.t("写入失败（链路断开？）", "Write failed"), true)
+                applyBtn.isEnabled = editable
+                applyBtn.alpha = if (editable) 1f else 0.5f
+                if (!ok) showError(Lang.t("写入失败（链路断开？）", "Write failed"))
             }
             if (ok) { Thread.sleep(500); doRead(raw) }
         }.start()
@@ -456,19 +569,18 @@ class EqEditorActivity : Activity() {
 
     private fun setPreset(idx: Int) {
         val target = addr ?: run {
-            setStatus(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device"), true); return
+            showError(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device")); return
         }
-        setStatus(Lang.t("正在切换预设…", "Switching preset…"))
         Thread {
             if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
-                ui.post { if (alive) setStatus(Lang.t("切换预设前建链失败", "Connect failed"), true) }
+                ui.post { if (alive) showError(Lang.t("切换预设前建链失败", "Connect failed")) }
                 return@Thread
             }
             val r = MoondropSpp.setPreset(idx)
             MoondropSpp.disconnect()
             ui.post {
                 if (!alive) return@post
-                if (r == null) setStatus(Lang.t("切换预设失败", "Preset switch failed"), true)
+                if (r == null) showError(Lang.t("切换预设失败", "Preset switch failed"))
                 else { currentPreset = idx; rebuildPresets() }
             }
             if (r != null) { Thread.sleep(300); doRead(null) }
