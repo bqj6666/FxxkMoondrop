@@ -113,8 +113,9 @@ class EqEditorActivity : Activity() {
 
         retryBtn = m3Text(Lang.t("重试", "Retry")) { doRead(null) }
         retryBtn.visibility = View.GONE
-        body.addView(retryBtn, LinearLayout.LayoutParams(-1, dp(40)).also {
+        body.addView(retryBtn, LinearLayout.LayoutParams(-2, dp(40)).also {
             it.topMargin = dp(4); it.bottomMargin = dp(4)
+            it.gravity = Gravity.CENTER_HORIZONTAL
         })
 
         content = LinearLayout(this)
@@ -157,6 +158,7 @@ class EqEditorActivity : Activity() {
         applyBtn.alpha = 0.38f
         body.addView(applyBtn, LinearLayout.LayoutParams(-1, dp(40)).also {
             it.topMargin = dp(12); it.bottomMargin = dp(4)
+            it.leftMargin = dp(8); it.rightMargin = dp(8)
         })
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("预设", "Presets")))
@@ -172,16 +174,18 @@ class EqEditorActivity : Activity() {
         val ops = LinearLayout(this)
         ops.orientation = LinearLayout.HORIZONTAL
         ops.setPadding(dp(12), dp(2), dp(12), dp(4))
-        ops.addView(m3Text(Lang.t("重新读取", "Reload")) { doRead(null) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        val opLp = { LinearLayout.LayoutParams(0, dp(40), 1f) }
+        ops.addView(m3Text(Lang.t("重新读取", "Reload")) { doRead(null) },
+                opLp().also { it.marginEnd = dp(4) })
         ops.addView(m3Text(Lang.t("自动预增益", "Auto preamp")) {
             profile?.let { profile = MoondropEq.withAutoPreamp(it); renderAll() }
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        }, opLp().also { it.marginEnd = dp(4) })
         ops.addView(m3Text(Lang.t("全部归零", "Flatten")) {
             profile?.let { p ->
                 p.bands.forEach { it.gainDb = 0f }
                 renderAll()
             }
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        }, opLp())
         body.addView(ops, LinearLayout.LayoutParams(-1, -2))
 
         val hint = TextView(this)
@@ -195,40 +199,41 @@ class EqEditorActivity : Activity() {
     }
 
     /**
-     * M3 Filled Button（官方 MaterialButton）：高 40dp、圆角 20dp、14sp。
-     * 关键是把官方控件自带的 inset 归零、minHeight 设成 40dp —— 否则内部 6dp inset 会把
-     * 文字挤出去、出现重影。
+     * 官方 M3 Filled Button：直接套 ?attr/materialButtonStyle（Material3 规范自带
+     * 40dp 高、20dp 圆角、14sp、横向 24dp 内边距、inset 为 0），这里只负责内容和点击。
      */
     private fun m3Filled(text: String, onClick: () -> Unit): TextView {
-        val b = com.google.android.material.button.MaterialButton(this)
+        val b = com.google.android.material.button.MaterialButton(
+                this, null, com.google.android.material.R.attr.materialButtonStyle)
         b.text = text
-        b.textSize = 14f
-        b.letterSpacing = 0.01f
+        b.isAllCaps = false
+        // Material3 规范：高 40dp；官方样式默认 minHeight 48dp + 6dp inset，这里按规范收紧
         b.insetTop = 0
         b.insetBottom = 0
-        b.setPadding(dp(24), 0, dp(24), 0)
         b.minHeight = dp(40)
         b.minimumHeight = dp(40)
-        b.cornerRadius = dp(20)
-        b.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.primary)
-        b.setTextColor(pal.onPrimary)
+        b.setPadding(dp(24), 0, dp(24), 0)
         b.setOnClickListener { onClick() }
         return b
     }
 
-    /** M3 Text Button（官方 MaterialButton，透明底）：高 40dp、圆角 20dp、14sp */
+    /**
+     * 官方 M3 Text Button：MaterialButton + 透明底 + primary 文字，
+     * 尺寸按规范：高 40dp、圆角 20dp、14sp、横向 12dp 内边距。
+     */
     private fun m3Text(text: String, onClick: () -> Unit): TextView {
         val b = com.google.android.material.button.MaterialButton(this)
         b.text = text
         b.textSize = 14f
-        b.letterSpacing = 0.01f
+        b.isAllCaps = false
         b.insetTop = 0
         b.insetBottom = 0
-        b.setPadding(dp(16), 0, dp(16), 0)
         b.minHeight = dp(40)
         b.minimumHeight = dp(40)
         b.cornerRadius = dp(20)
+        b.setPadding(dp(12), 0, dp(12), 0)
         b.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+        b.rippleColor = android.content.res.ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000)
         b.setTextColor(pal.primary)
         b.setOnClickListener { onClick() }
         return b
@@ -407,7 +412,7 @@ class EqEditorActivity : Activity() {
         }
         for (id in presetIds) {
             val chip = pill(presetLabel(id), id == currentPreset) { setPreset(id) }
-            presetBox.addView(chip, LinearLayout.LayoutParams(-2, -2).also { it.marginEnd = dp(8) })
+            presetBox.addView(chip, LinearLayout.LayoutParams(-2, dp(32)).also { it.marginEnd = dp(8) })
         }
     }
 
@@ -430,7 +435,10 @@ class EqEditorActivity : Activity() {
         paramsBox.addView(M3Ui.groupCard(this, pal, t), LinearLayout.LayoutParams(-1, -2))
     }
 
-    /** M3 Filter Chip（官方 Chip）：高 32dp、圆角 8dp、14sp；未选中描边、选中 secondaryContainer */
+    /**
+     * 官方 M3 Filter Chip：Material Chip + 规范尺寸（高 32dp、圆角 8dp、14sp、横向 16dp），
+     * 未选中 1dp 描边、选中 secondaryContainer。
+     */
     private fun pill(text: String, selected: Boolean, onClick: () -> Unit): TextView {
         val c = com.google.android.material.chip.Chip(this)
         c.text = text
@@ -439,6 +447,10 @@ class EqEditorActivity : Activity() {
         c.isChecked = selected
         c.isChipIconVisible = false
         c.isCheckedIconVisible = false
+        c.chipMinHeight = dp(32).toFloat()
+        c.setPadding(dp(16), 0, dp(16), 0)
+        c.shapeAppearanceModel = c.shapeAppearanceModel.toBuilder()
+                .setAllCornerSizes(dp(8).toFloat()).build()
         c.chipStrokeWidth = dp(1).toFloat()
         c.chipStrokeColor = cs(intArrayOf() to pal.outline)
         c.chipBackgroundColor = cs(
@@ -447,7 +459,6 @@ class EqEditorActivity : Activity() {
         c.setTextColor(cs(
                 intArrayOf(android.R.attr.state_checked) to pal.onContainer,
                 intArrayOf() to pal.onSurface))
-        c.chipMinHeight = dp(32).toFloat()
         c.setOnClickListener { onClick() }
         return c
     }
