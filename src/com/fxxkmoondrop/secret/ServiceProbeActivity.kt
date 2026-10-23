@@ -137,6 +137,17 @@ class ServiceProbeActivity : Activity() {
                     }
                     line(if (known.isNotEmpty()) "OK" else "I",
                             s.uuid.toString() + (if (known.isEmpty()) "" else "   ← " + known))
+                    // 展开特征：UUID + 读写/通知属性（判断这条服务能不能下发 EQ 报文）
+                    for (ch in s.characteristics) {
+                        val props = buildString {
+                            if (ch.properties and 0x02 != 0) append("R ")
+                            if (ch.properties and 0x08 != 0) append("W ")
+                            if (ch.properties and 0x04 != 0) append("WNR ")
+                            if (ch.properties and 0x10 != 0) append("N ")
+                            if (ch.properties and 0x20 != 0) append("I ")
+                        }.trim()
+                        line("I", "    └ " + ch.uuid.toString() + "   [" + props + "]")
+                    }
                 }
                 try { g.disconnect() } catch (_: Throwable) { }
             }

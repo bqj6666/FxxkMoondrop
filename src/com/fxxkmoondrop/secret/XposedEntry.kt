@@ -178,6 +178,9 @@ class XposedEntry : XposedModule() {
     /** 按进程/包名分发注入。onPackageReady 与 onHotReloaded 共用同一份逻辑。 */
     private fun installFor(name: String, cl: ClassLoader) {
         if (name == "com.android.settings") runCatching { hookSliceManager() }
+        // 官方 App 的 BLE 报文旁路日志：用于逆向它那套 EQ 协议（FF10/FF12），
+        // 只在官方包里启用，不影响任何其它应用。
+        if (name.startsWith("com.moondroplab.moondrop")) runCatching { hookOfficialGatt(cl) }
         when {
             name.startsWith(PKG_SETTINGS) -> {
                 hookSettings(cl); hookDeviceDetailsPanel(cl); hookDetailProfileVisibility(cl)
@@ -1220,6 +1223,34 @@ class XposedEntry : XposedModule() {
     /** 是否已经挂上过切片（官方的或我们自己的），用于让承载分类显形 */
     @Volatile
     private var sourceSliceAttached = false
+
+    /**
+     * 官方 App 的 GATT 旁路日志：print 每次 write/notify 的 UUID 与完整 payload。
+     * 目的：搞清它把「场景预设 / 在线交互 DSP」发到 FF10(FFF1) 还是 FF12(FF13/FF15)，
+     * 以及报文格式。只读、不修改任何行为（proceed 原样放行）。
+     */
+    private fun hookOfficialGatt(cl: ClassLoader) {
+        runCatching {
+            val gattCls = Class.forName("android.bluetooth.BluetoothGatt", false, cl)
+            for (m in gattCls.declaredMethods) {
+                val n = m.name
+                if (n != "writeCharacteristic" && n != "readCharacteristic") continue
+                runCatching {
+                    hook(m).intercept { chain ->
+                        try {
+                            val ch = chain.args.getOrNull(0)
+                            val uuid = HookHelper.callMethod(ch, "getUuid")?.toString() ?: "?"
+                            val valArg = chain.args.firstOrNull { it is ByteArray } as? ByteArray
+                            Log.i("FxxkMoondropGatt", n + " " + uuid + " " +
+                                    (valArg?.joinToString("") { String.format("%02x", it) } ?: ""))
+                        } catch (_: Throwable) { }
+                        chain.proceed()
+                    }
+                    Log.i(TAG, "official gatt hooked: " + m.name)
+                }
+            }
+        }.onFailure { Log.d(TAG, "hookOfficialGatt fail: " + it) }
+    }
 
     /**
      * 直接 hook Settings 进程里的 SliceManager.bindSlice：
