@@ -908,6 +908,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                        icon: android.graphics.drawable.Drawable?,
                        sizeDp: Int = 56, iconDp: Int = 28): android.widget.FrameLayout {
             val holder = android.widget.FrameLayout(c)
+            // 用 Expressive 图标按钮样式：按下有官方形状形变（普通 materialIconButtonStyle 在
+            // 这套主题下不带动画，用户反馈「降噪/增益按钮按下去没有圆角→方形形变」）
             val btn = MaterialButton(c, null, com.google.android.material.R.attr.materialIconButtonStyle)
             btn.text = ""
             btn.isCheckable = true

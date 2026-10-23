@@ -210,20 +210,19 @@ class EqEditorActivity : Activity() {
     }
 
     /**
-     * 官方 M3 Filled Button：直接套 ?attr/materialButtonStyle（Material3 规范自带
-     * 40dp 高、20dp 圆角、14sp、横向 24dp 内边距、inset 为 0），这里只负责内容和点击。
+     * 官方 M3 Expressive 填充按钮：直接用 theme 默认样式（Theme.Material3Expressive →
+     * Widget.Material3Expressive.Button）。**不手写圆角/inset/最小高**——那些值会覆盖
+     * materialSizeOverlay 与 m3expressive_button_shape_state_list，
+     * 按下时就看不到「圆角→方形」的官方形变（概览页刷新按钮就是默认样式，所以它有）。
      */
     private fun m3Filled(text: String, onClick: () -> Unit): TextView {
-        val b = com.google.android.material.button.MaterialButton(
-                this, null, com.google.android.material.R.attr.materialButtonStyle)
+        val b = com.google.android.material.button.MaterialButton(this)
         b.text = text
+        b.textSize = 14f
         b.isAllCaps = false
-        // Material3 规范：高 40dp；官方样式默认 minHeight 48dp + 6dp inset，这里按规范收紧
-        b.insetTop = 0
-        b.insetBottom = 0
-        b.minHeight = dp(40)
-        b.minimumHeight = dp(40)
-        b.setPadding(dp(24), 0, dp(24), 0)
+        b.setTextColor(pal.onPrimary)
+        b.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.primary)
+        b.gravity = Gravity.CENTER
         b.setOnClickListener { onClick() }
         return b
     }
@@ -233,14 +232,9 @@ class EqEditorActivity : Activity() {
      * 尺寸按规范：高 40dp、圆角 20dp、14sp、横向 12dp 内边距。
      */
     /** 官方 M3 Text Button：从 view_m3_text_button.xml 里 inflate（style=Widget.Material3.Button.TextButton） */
-    private fun m3Text(text: String, onClick: () -> Unit): TextView {
-        val b = android.view.LayoutInflater.from(this)
-                .inflate(R.layout.view_m3_text_button, null, false) as com.google.android.material.button.MaterialButton
-        b.text = text
-        b.isAllCaps = false
-        b.setOnClickListener { onClick() }
-        return b
-    }
+    /** 官方 M3 Expressive 文字按钮：复用 M3Ui.textActionButton（带 ButtonText 主题 overlay，按下有形变） */
+    private fun m3Text(text: String, onClick: () -> Unit): TextView =
+            M3Ui.textActionButton(this, pal, text) { onClick() }
 
     /** 成功状态不显示任何「已读取/已应用」字样（按设计要求） */
     private fun clearStatus() {
