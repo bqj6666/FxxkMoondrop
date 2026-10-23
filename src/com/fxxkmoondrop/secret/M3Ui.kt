@@ -895,6 +895,43 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             return b
         }
 
+
+        /**
+         * 按压缩放形变（形状插值）：M3 Expressive 的按钮按下会缩小圆角，但 material 1.14
+         * **没有** Widget.Material3Expressive.IconButton 这类样式给图标按钮用（编译验证不存在），
+         * 所以这里用官方 MaterialShapeDrawable 自己做同语义的插值：按下 → 圆角变小，松手 → 复原。
+         * 只动 shapeAppearanceModel，不改尺寸/背景/状态层，点击行为不受影响（触摸监听返回 false）。
+         */
+        @JvmStatic
+        fun attachPressMorph(c: Context, v: View, idleDp: Float, pressedDp: Float) {
+            val btn = v as? MaterialButton ?: return
+            val density = c.resources.displayMetrics.density
+            var cur = idleDp * density
+            var anim: android.animation.ValueAnimator? = null
+            fun animateTo(target: Float) {
+                anim?.cancel()
+                val from = cur
+                anim = android.animation.ValueAnimator.ofFloat(from, target).also { a ->
+                    a.duration = 120
+                    a.interpolator = android.view.animation.DecelerateInterpolator()
+                    a.addUpdateListener {
+                        cur = it.animatedValue as Float
+                        btn.shapeAppearanceModel = btn.shapeAppearanceModel.toBuilder()
+                                .setAllCornerSizes(cur).build()
+                    }
+                    a.start()
+                }
+            }
+            btn.setOnTouchListener { _, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> animateTo(pressedDp * density)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> animateTo(idleDp * density)
+                }
+                false
+            }
+        }
+
         /**
          * 官方 M3 Icon Button（toggle 用法）+ 居中自绘图标。
          *
@@ -919,6 +956,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             btn.insetBottom = 0
             btn.setPadding(0, 0, 0, 0)
             btn.tag = "it_btn"
+            // 圆形 → 按下收成 12dp 圆角（与 M3 Expressive 按钮的按压缩角语义一致）
+            attachPressMorph(c, btn, sizeDp / 2f, 12f)
             btn.backgroundTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(pal.primary, pal.container))
