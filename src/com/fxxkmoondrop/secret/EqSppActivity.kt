@@ -17,6 +17,7 @@ class EqSppActivity : Activity() {
     private lateinit var logBox: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
     private var lastCurve: ByteArray? = null
+    private var addr: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +45,7 @@ class EqSppActivity : Activity() {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.setPadding(0, dp(8), 0, dp(8))
-        addBtn(row, Lang.t("连接", "Connect")) { connect() }
+        addBtn(row, Lang.t("连接", "Connect")) { pickDevice() }
         addBtn(row, Lang.t("读预设", "Read preset")) { act { MoondropSpp.readPreset() } }
         addBtn(row, Lang.t("读曲线", "Read curve")) { act { MoondropSpp.readCurve() } }
         root.addView(row, LinearLayout.LayoutParams(-1, -2))
@@ -55,10 +56,11 @@ class EqSppActivity : Activity() {
         addBtn(row2, Lang.t("流行", "Pop")) { act { MoondropSpp.setPreset(0) } }
         addBtn(row2, Lang.t("标准", "Standard")) { act { MoondropSpp.setPreset(1) } }
         addBtn(row2, Lang.t("监听", "Monitor")) { act { MoondropSpp.setPreset(2) } }
+        addBtn(row2, Lang.t("预设4", "Preset 4")) { act { MoondropSpp.setPreset(3) } }
         addBtn(row2, Lang.t("回写曲线", "Write curve")) {
             val c = lastCurve
-            if (c == null || c.size < 39) line("E", Lang.t("先读一次曲线", "Read a curve first"))
-            else act { MoondropSpp.writeCurve(c.copyOfRange(c.size - 39, c.size)) }
+            if (c == null) line("E", Lang.t("先读一次曲线", "Read a curve first"))
+            else act { MoondropSpp.writeCurve(c) }
         }
         root.addView(row2, LinearLayout.LayoutParams(-1, -2))
 
@@ -87,14 +89,47 @@ class EqSppActivity : Activity() {
         parent.addView(b, lp)
     }
 
+    /** 通用：列出所有已配对的水月雨设备供选择（不绑定具体型号） */
+    private fun pickDevice() {
+        val bonded = try {
+            android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.bondedDevices?.toList().orEmpty()
+        } catch (_: Throwable) { emptyList() }
+        val md = bonded.filter { DeviceMatcher.isMoondrop(try { it.name } catch (_: Throwable) { null }) }
+        val list = if (md.isNotEmpty()) md else bonded
+        if (list.isEmpty()) { line("E", Lang.t("没有已配对设备", "No bonded devices")); return }
+        val names = list.map { d ->
+            (try { d.name } catch (_: Throwable) { null } ?: "?") +
+                    (if (md.isNotEmpty() && md.contains(d)) "  ✓" else "")
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+                .setTitle(Lang.t("选择水月雨设备", "Choose a Moondrop device"))
+                .setItems(names) { _, which ->
+                    addr = try { list[which].address } catch (_: Throwable) { null }
+                    line("I", Lang.t("目标设备：", "Target: ") + addr)
+                    connect()
+                }
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .show()
+    }
+
     private fun connect() {
-        val addr = GaiaBleClient.getInstance().deviceAddress
-        if (addr.isNullOrEmpty()) { line("E", Lang.t("没有已连接设备地址", "No device address")); return }
+        val addr = addr ?: run { pickDevice(); return }
         Thread {
             val ok = MoondropSpp.connect(addr)
             ui.post {
                 line(if (ok) "OK" else "E",
                         if (ok) Lang.t("SPP 连接成功", "SPP connected") else Lang.t("SPP 连接失败", "SPP connect failed"))
+                if (ok) {
+                    // 能力探测：不问型号，直接问协议
+                    val p = MoondropSpp.readPreset()
+                    line("I", Lang.t("预设查询：", "preset query: ") +
+                            (p?.joinToString("") { String.format("%02x", it) } ?: "-"))
+                    val c = MoondropSpp.readCurve()
+                    if (c != null) {
+                        lastCurve = c
+                        line("I", Lang.t("曲线读取：", "curve read: ") + c.size + Lang.t(" 字节", " bytes"))
+                    } else line("W", Lang.t("读曲线无回包（该型号可能不支持）", "No curve reply (model may not support)"))
+                }
             }
         }.start()
     }

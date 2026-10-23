@@ -106,10 +106,19 @@ object MoondropSpp {
     /** 读当前 EQ 曲线（39 字节参数或其查询回包） */
     fun readCurve(): ByteArray? = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x0A.toByte()))
 
-    /** 写 EQ 曲线：把 39 字节参数原样下发 */
-    fun writeCurve(params39: ByteArray): ByteArray? {
-        if (params39.size != 39) return null
-        val payload = byteArrayOf(0x00, 0x1D, 0x0A, 0x06) + params39
+    /**
+     * 写 EQ 曲线：把参数原样下发。
+     *
+     * ⚠️ 不写死 39 字节：不同型号的频点数量/参数长度可能不同，
+     * 一律以「读回来多少就写回多少」为准，保证同一套协议的各型号都能用。
+     */
+    fun writeCurve(params: ByteArray): ByteArray? {
+        if (params.size < 8) return null          // 太短肯定不是有效参数
+        val payload = byteArrayOf(0x00, 0x1D, 0x0A, 0x06) + params
         return request(payload, 2500)
     }
+
+    /** 任意 00 1D 命令（供上层做能力探测，不写死具体型号） */
+    fun raw(cmd: Int, vararg data: Int): ByteArray? =
+        request(byteArrayOf(0x00, 0x1D, cmd.toByte()) + data.map { it.toByte() }.toByteArray())
 }
