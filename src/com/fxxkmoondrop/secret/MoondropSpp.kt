@@ -188,26 +188,29 @@ object MoondropSpp {
         return raw.copyOfRange(start, start + n)
     }
 
-    /** 预设列表：0A 01 回包 → 数据区首字节是档位数，其后是各档 id */
-    fun readPresetList(): IntArray? {
+    /**
+     * 预设列表（0A 01）。
+     *
+     * 实测回包：`ff04 0007 001d 0b01 | 06 00 01 02 03 04 3f`
+     * 第一字节 = 其后字节数（含末尾那个不是 id 的尾字节），中间才是各档 id。
+     * 所以按「首字节 == size-1 时砍掉尾字节」解析，并只保留 0..31 的值当 id，
+     * 解析不出就返回 null（上层退化成只显示已知的三档），不瞎猜。
+     */
+    fun readPresetIds(): IntArray? {
         val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x01)) ?: return null
         val d = extractData(r) ?: return null
-        if (d.size < 2) return null
-        val count = d[0].toInt() and 0xFF
-        val ids = d.copyOfRange(1, Math.min(d.size, 1 + count))
-        return IntArray(ids.size) { ids[it].toInt() and 0xFF }
+        if (d.size < 3) return null
+        val n = d[0].toInt() and 0xFF
+        val body = if (n == d.size - 1) d.copyOfRange(1, d.size - 1) else d.copyOfRange(1, d.size)
+        val ids = body.map { it.toInt() and 0xFF }.filter { it in 0..31 }
+        return if (ids.isEmpty()) null else ids.toIntArray()
     }
 
-    /** 当前预设：0A 02 回包数据区 */
-    fun readPresetRaw(): Int {
-        val d = readPresetData() ?: return -1
-        if (d.isEmpty()) return -1
-        return d[0].toInt() and 0xFF
-    }
-
-    fun readPresetData(): ByteArray? {
-        val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x02)) ?: return null
-        return extractData(r)
+    /** 当前预设下标（0A 02），读不到返回 -1 */
+    fun readCurrentPreset(): Int {
+        val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x02)) ?: return -1
+        val d = extractData(r) ?: return -1
+        return if (d.isEmpty()) -1 else d[0].toInt() and 0xFF
     }
 
     /**

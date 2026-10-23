@@ -765,6 +765,16 @@ class SettingsFragment : Fragment() {
         // ── 诊断与测试：权限检查 / 日志抓取 / 弹窗图标 / 模拟测试，
         //    全是「排查与验证」用途，原来分散在「通用」与独立段，现在收拢一处 ──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("诊断", "Diagnostics")))
+        // 调试模式：控制下面两个「排查用」入口（服务探测 / EQ 通道）是否出现。
+        // 默认关 —— 普通用户不需要看到能对耳机发私有协议命令的入口。
+        val debugOn = getSP().getBoolean("debug_mode", false)
+        val swDebug = makeThemeSwitch("debug_mode", false, Lang.t("调试模式", "Debug mode"))
+        box.addView(M3Ui.groupCard(requireActivity(), pal,
+                makeSwitchRow(Lang.t("调试模式", "Debug mode"),
+                        Lang.t("显示「服务探测（GATT）」与「EQ 通道（SPP）」等排查入口",
+                                "Show diagnostics-only entries such as the GATT service probe and the SPP EQ channel"),
+                        swDebug)))
+        box.addView(spacer(dp(10)))
         // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
         val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
                 Lang.t("服务探测（GATT）", "Service probe (GATT)"),
@@ -781,7 +791,9 @@ class SettingsFragment : Fragment() {
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), EqSppActivity::class.java))
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon, rowProbe, rowEq))
+        val diagRows = mutableListOf<View>(rowPerm, rowLog, rowIcon)
+        if (debugOn) { diagRows.add(rowProbe); diagRows.add(rowEq) }   // 只有调试模式才暴露
+        box.addView(M3Ui.groupCard(requireActivity(), pal, *diagRows.toTypedArray()))
         box.addView(spacer(dp(10)))
         box.addView(makeSubLabel(Lang.t("模拟测试", "Simulation Test")))
         val simBox = LinearLayout(requireContext())
