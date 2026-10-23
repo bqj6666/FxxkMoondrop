@@ -14,6 +14,8 @@ class PopupGate {
         private const val TAG = "MoondropHeadset"
         private val connectedShown = HashSet<String?>()
         private val disconnectedShown = HashSet<String?>()
+        // Protected ACL disconnects can lose their name while the popup is still suppressed by name.
+        private val connectedNames = HashMap<String, String?>()
         /** alpha2.41.6: 用户主动关闭弹窗后，本次连接（断开前）不再自动重弹 */
         private val userClosedKeys = HashSet<String?>()
 
@@ -164,6 +166,7 @@ class PopupGate {
                     return
                 }
                 val i = Intent(ACTION_FP_TRIGGER)
+                i.setPackage(HookIpc.GMS)
                 i.putExtra(EXTRA_FP_DEVICE_NAME, name)
                 var addr = address
                 if (addr == null) {
@@ -209,6 +212,7 @@ class PopupGate {
                 Log.i(TAG, "connected popup skip (not Moondrop): $name")
                 return false
             }
+            if (address != null) connectedNames[address] = name
             val key = if (isSimKey(address, name)) address else (name ?: address)
             if (userClosedKeys.contains(key)) {
                 Log.i(TAG, "connected popup skip (user closed): $name")
@@ -234,6 +238,7 @@ class PopupGate {
                 Log.i(TAG, "tryShowConnectedDeferred sim key ignored: $name ($address)")
                 return false
             }
+            if (address != null) connectedNames[address] = name
             val key = name ?: address
             if (userClosedKeys.contains(key)) {
                 Log.i(TAG, "deferred connected popup skip (user closed): $name")
@@ -244,13 +249,14 @@ class PopupGate {
             // 3.2.12: 用户选择「连上就弹」时不必等 GAIA，直接进出口。
             // 那一刻左右耳电量通常还没读到，卡片会先出现、电量随后由 FastPairHook 侧刷新；
             // 代价是可能短暂没有电量数字，换来「戴上就看见」的即时反馈 —— 这正是该选项的取舍。
-            if (!waitGaia(c)) {
+            // With monitoring off, no background GAIA readings will arrive; still apply delay/privacy gates.
+            if (!waitGaia(c) || !KeepAlive.enabled(c)) {
                 appContext = c.applicationContext
                 disconnectedShown.remove(key)
                 headsetConnected = true
                 connectedShown.add(key)
                 showConnectedPopup(c, name, address)
-                Log.i(TAG, "connected popup immediate (waitGaia=off) for $name")
+                Log.i(TAG, "connected popup without GAIA wait for $name")
                 return true
             }
 
@@ -308,12 +314,14 @@ class PopupGate {
         @JvmStatic
         @Synchronized
         fun tryShowDisconnected(c: Context, address: String?, name: String?): Boolean {
-            if (!DeviceMatcher.isMoondrop(name)) {
+            val resolvedName = name?.takeIf { it.isNotEmpty() } ?: connectedNames[address]
+            if (!DeviceMatcher.isMoondrop(resolvedName)) {
                 Log.i(TAG, "disconnected skip (not Moondrop): $name")
                 return false
             }
+            connectedNames.entries.removeAll { it.key == address || it.value == resolvedName }
             cancelPending()
-            val key = if (isSimKey(address, name)) address else (name ?: address)
+            val key = if (isSimKey(address, resolvedName)) address else (resolvedName ?: address)
             if (disconnectedShown.contains(key)) return false
             disconnectedShown.add(key)
             connectedShown.remove(key)
@@ -326,6 +334,7 @@ class PopupGate {
         @JvmStatic
         @Synchronized
         fun clear(address: String?, name: String?) {
+            connectedNames.entries.removeAll { it.key == address || (name != null && it.value == name) }
             if (address != null) {
                 connectedShown.remove(address)
                 disconnectedShown.remove(address)

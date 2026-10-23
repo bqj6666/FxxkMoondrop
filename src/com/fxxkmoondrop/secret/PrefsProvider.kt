@@ -1,8 +1,14 @@
 package com.fxxkmoondrop.secret
 
+import android.bluetooth.BluetoothDevice
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.os.Binder
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.util.Log
@@ -42,8 +48,16 @@ class PrefsProvider : ContentProvider() {
         selectionArgs: Array<String>?,
         sortOrder: String?
     ): Cursor? {
+        HookIpc.enforceCaller(requireNotNull(context))
         val key = uri.lastPathSegment ?: return null
-        if (key == "dc_cmd") return handleDcCmd(uri)
+        if (key == "dc_cmd") {
+            val token = Binder.clearCallingIdentity()
+            try {
+                return handleDcCmd(uri)
+            } finally {
+                Binder.restoreCallingIdentity(token)
+            }
+        }
         val sp = context?.getSharedPreferences("cfg", Context.MODE_PRIVATE) ?: return null
         val value: Int = when {
             key == "lang" -> sp.getInt("lang", 0)
@@ -67,6 +81,8 @@ class PrefsProvider : ContentProvider() {
      * 走的是系统 ContentResolver 通道，与 show_wind / lang 同一条链路。
      */
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
+        HookIpc.enforceCaller(requireNotNull(context))
+        if (mode != "r") throw SecurityException("Icon is read-only")
         val key = uri.lastPathSegment
         if (key != "moondrop_icon") return super.openFile(uri, mode)
         val ctx = context ?: return null
@@ -78,6 +94,26 @@ class PrefsProvider : ContentProvider() {
             Log.w("PrefsProvider", "openFile icon failed: $t")
             null
         }
+    }
+
+    override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+        val ctx = requireNotNull(context)
+        HookIpc.enforceCaller(ctx, allowSettings = false)
+        require(method == HookIpc.EVENT && arg in HOOK_EVENTS) { "Unknown hook event" }
+        val intent = Intent(arg).setPackage(HookIpc.APP)
+        if (extras != null) intent.putExtras(extras)
+        // Run as the app on its main thread, just like the former broadcast receivers.
+        Handler(Looper.getMainLooper()).post {
+            when (arg) {
+                BluetoothDevice.ACTION_ACL_CONNECTED,
+                BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                "com.fxxkmoondrop.secret.FASTPAIR_MODE_CHANGED",
+                "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST",
+                "com.fxxkmoondrop.secret.FASTPAIR_SHEET_CLOSED" -> HeadsetReceiver().onReceive(ctx, intent)
+                else -> ctx.sendBroadcast(intent)
+            }
+        }
+        return Bundle.EMPTY
     }
 
     private fun handleDcCmd(uri: Uri): Cursor? {
@@ -128,7 +164,13 @@ class PrefsProvider : ContentProvider() {
         return c
     }
 
-    override fun getType(uri: Uri): String = "vnd.android.cursor.item/vnd.fxxkmoondrop.pref"
+    override fun getType(uri: Uri): String {
+        HookIpc.enforceCaller(requireNotNull(context))
+        return "vnd.android.cursor.item/vnd.fxxkmoondrop.pref"
+    }
+
+    // The framework clears caller identity for anonymous MIME lookups; disclose no data there.
+    override fun getTypeAnonymous(uri: Uri): String? = null
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
 
@@ -142,6 +184,17 @@ class PrefsProvider : ContentProvider() {
     ): Int = 0
 
     companion object {
+        private val HOOK_EVENTS = setOf(
+            BluetoothDevice.ACTION_ACL_CONNECTED,
+            BluetoothDevice.ACTION_ACL_DISCONNECTED,
+            "com.fxxkmoondrop.secret.FASTPAIR_MODE_CHANGED",
+            "com.fxxkmoondrop.secret.FASTPAIR_MODE_REQUEST",
+            "com.fxxkmoondrop.secret.FASTPAIR_SHEET_CLOSED",
+            "com.fxxkmoondrop.secret.ACTION_LE_ADDR_FOUND",
+            "com.fxxkmoondrop.secret.FASTPAIR_CONNECTED",
+            "com.fxxkmoondrop.secret.FASTPAIR_PONG",
+        )
+
         /** dc_cmd 跨进程 uri */
         const val DC_CMD_URI = "content://com.fxxkmoondrop.secret.prefs/dc_cmd"
     }

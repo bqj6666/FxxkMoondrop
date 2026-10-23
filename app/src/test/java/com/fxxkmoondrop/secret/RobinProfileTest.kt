@@ -1,5 +1,8 @@
 package com.fxxkmoondrop.secret
 
+import android.content.ContextWrapper
+import android.content.SharedPreferences
+import java.lang.reflect.Proxy
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +32,46 @@ import org.junit.Test
 class RobinProfileTest {
 
     private val name = "ROBIN'S EARPHONES"
+
+    @Test fun effectiveMapPreservesUnsupportedProfileAndCustomSlots() {
+        val previous = GaiaBleClient.instance
+        GaiaBleClient.instance = null
+        try {
+            val client = GaiaBleClient.getInstance()
+            GaiaBleClient::class.java.getDeclaredField("connectedDeviceName").apply {
+                isAccessible = true
+                set(client, this@RobinProfileTest.name)
+            }
+            val path = GaiaCommands.ANC_PATH_AUDIO_CURATION
+            val profile = client.getEffectiveAncMap()
+            assertArrayEquals(intArrayOf(-1, 1, 2, -1), profile)
+            assertEquals(1, GaiaCommands.ancDevFromUi(path, 1, profile))
+            assertEquals(2, GaiaCommands.ancDevFromUi(path, 2, profile))
+            assertEquals(2, GaiaCommands.ancUiFromDev(path, 2, profile))
+            for (mode in listOf(0, 3)) {
+                assertEquals(-1, GaiaCommands.ancDevFromUi(path, mode, profile))
+            }
+
+            val values = mapOf("anc_map_migrated_v3" to 1, "anc_map_custom" to 1,
+                    "anc_map_1" to -1, "anc_map_2" to 99)
+            val prefs = Proxy.newProxyInstance(SharedPreferences::class.java.classLoader,
+                    arrayOf(SharedPreferences::class.java)) { _, method, args ->
+                check(method.name == "getInt")
+                values[args!![0]] ?: args[1]
+            } as SharedPreferences
+            val context = object : ContextWrapper(null) {
+                override fun getSharedPreferences(name: String, mode: Int) = prefs
+            }
+            GaiaBleClient::class.java.getDeclaredField("context").apply {
+                isAccessible = true
+                set(client, context)
+            }
+            // Explicit -1 stays unsupported; an invalid value falls back to that model's slot.
+            assertArrayEquals(intArrayOf(-1, -1, 2, -1), client.getEffectiveAncMap())
+        } finally {
+            GaiaBleClient.instance = previous
+        }
+    }
 
     /** SET：降噪 -> 1，透传 -> 2。 */
     @Test

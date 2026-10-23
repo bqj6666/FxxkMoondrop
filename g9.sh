@@ -14,13 +14,9 @@
 #
 # ⚠️ /dev 是 tmpfs，重启即失。缓存没了就重新执行 setup 段。
 #
-# ⚠️ gradle.properties 里的 aapt2FromMavenOverride **必须保留**。
-#    本机是 aarch64，官方 aapt2 是 x86_64 二进制，必须经 qemu 包装才能跑；
-#    删掉它会报 "AAPT2 Daemon startup failed"。
-#    该行必须与 AGP 版本严格同步 —— AGP 8.6.1 时它指向 aapt2-861，
-#    升到 9.4.1 后若不更新，资源打包会**静默失败**：
-#    assembleRelease 每一步都报成功，产物却缺 AndroidManifest.xml 与整个 res/。
-#    详见 gradle.properties 里的注释。
+# ARM64 的 AAPT2 包装器路径放在 ~/.gradle/gradle.properties；本脚本会同步这份本机配置。
+# 也可传入 -Pandroid.aapt2FromMavenOverride=/absolute/path/to/aapt2，不要写入仓库配置。
+# 包装器版本必须与 AGP 同步，详见 DEVELOPMENT.md 的本机 AAPT2 覆盖说明。
 #
 # 用法：./g9.sh assembleDebug
 #      ./g9.sh testDebugUnitTest
@@ -42,6 +38,13 @@ if [ ! -d "$GUH/caches" ] || [ ! -d "$GUH/wrapper" ]; then
     mkdir -p "$GUH/tmp"
     [ -d /root/.gradle/caches ] && cp -r /root/.gradle/caches "$GUH/" 2>/dev/null || true
     [ -d /root/.gradle/wrapper ] && cp -r /root/.gradle/wrapper "$GUH/" 2>/dev/null || true
+fi
+
+# Changing GRADLE_USER_HOME must not discard the user's machine-local AAPT2 override.
+if [ -f "$HOME/.gradle/gradle.properties" ]; then
+    cp "$HOME/.gradle/gradle.properties" "$GUH/gradle.properties"
+else
+    rm -f "$GUH/gradle.properties"
 fi
 
 TMPD=/dev/gtmp2

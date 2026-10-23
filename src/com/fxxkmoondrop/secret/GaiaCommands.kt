@@ -615,7 +615,7 @@ object GaiaCommands {
     @JvmStatic
     fun isFeaturePairList(payload: ByteArray?): Boolean {
         val p = payload ?: return false
-        return p.size >= 3 && p.size % 2 == 1 && (p[0].toInt() and 0xFF) <= 1
+        return p.isNotEmpty() && p.size % 2 == 1 && (p[0].toInt() and 0xFF) <= 1
     }
 
     /** 能力位图是否被截断（位图长度非 4 的倍数，末尾 feature word 会丢失）。

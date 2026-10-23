@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.util.Log;
 
 import java.util.Arrays;
+import java.util.function.BooleanSupplier;
 
 /**
  * BleSourceSwitch（9ECA0000）事务客户端，复用 GaiaBleClient 的同一 GATT 连接。
@@ -28,12 +29,27 @@ public class BleSourceSwitchClient {
         void onSrcNotification(BleSourceProtocol.SrcNotification n);
     }
 
+    /** The queue calls start under the shared lock immediately before ATT submission; false skips retired work. */
+    public interface GattOperations {
+        boolean write(BluetoothGattCharacteristic ch, byte[] value, BooleanSupplier start);
+        boolean read(BluetoothGattCharacteristic ch, BooleanSupplier start);
+    }
+
+    private GattOperations operations;
+    private Runnable timeout;
+
+    public void setGattOperations(GattOperations operations) {
+        synchronized (lock) { this.operations = operations; }
+    }
+
     private BluetoothGatt gatt;
     private BluetoothGattCharacteristic cmdChar;
     private BluetoothGattCharacteristic respChar;
     private BluetoothGattCharacteristic notifyChar;
     private BluetoothGattCharacteristic capChar;
     private BluetoothGattCharacteristic infoChar;
+    // Share the transport's lock so retirement cannot race the actual ATT submission.
+    private final Object lock;
     private final Handler handler;
     private final Listener listener;
 
@@ -54,8 +70,13 @@ public class BleSourceSwitchClient {
     private int nextSequence;
 
     public BleSourceSwitchClient(Handler handler, Listener listener) {
+        this(handler, listener, new Object());
+    }
+
+    public BleSourceSwitchClient(Handler handler, Listener listener, Object lock) {
         this.handler = handler;
         this.listener = listener;
+        this.lock = lock;
     }
 
     /** 服务发现完成后绑定特征（同一 GATT 连接）。 */
@@ -65,189 +86,208 @@ public class BleSourceSwitchClient {
                      BluetoothGattCharacteristic notifyChar,
                      BluetoothGattCharacteristic capChar,
                      BluetoothGattCharacteristic infoChar) {
-        this.gatt = gatt;
-        this.cmdChar = cmdChar;
-        this.respChar = respChar;
-        this.notifyChar = notifyChar;
-        this.capChar = capChar;
-        this.infoChar = infoChar;
-        this.pending = null;
-        this.pendingCapability = null;
-        this.pendingInfo = null;
+        synchronized (lock) {
+            cancelTimeout();
+            this.gatt = gatt;
+            this.cmdChar = cmdChar;
+            this.respChar = respChar;
+            this.notifyChar = notifyChar;
+            this.capChar = capChar;
+            this.infoChar = infoChar;
+            this.pending = null;
+            this.pendingCapability = null;
+            this.pendingInfo = null;
+        }
     }
 
     public void clear() {
-        pending = null;
-        pendingCapability = null;
-        pendingInfo = null;
+        synchronized (lock) {
+            Pending oldPending = pending;
+            SrcCallback<BleSourceProtocol.SrcSourceCapability> oldCapability = pendingCapability;
+            SrcCallback<BleSourceProtocol.SrcFwInfo> oldInfo = pendingInfo;
+            pending = null;
+            pendingCapability = null;
+            pendingInfo = null;
+            gatt = null;
+            cmdChar = respChar = notifyChar = capChar = infoChar = null;
+            operations = null;
+            cancelTimeout();
+            if (oldPending != null) fail(oldPending.cb, "9ECA 连接已关闭");
+            if (oldCapability != null) fail(oldCapability, "9ECA 连接已关闭");
+            if (oldInfo != null) fail(oldInfo, "9ECA 连接已关闭");
+        }
     }
 
     public boolean isPresent() {
-        return gatt != null && cmdChar != null && respChar != null;
+        synchronized (lock) { return gatt != null && cmdChar != null && respChar != null; }
     }
 
-    public boolean hasCapabilityChar() { return capChar != null; }
-    public boolean hasInfoChar() { return infoChar != null; }
+    public boolean hasCapabilityChar() { synchronized (lock) { return capChar != null; } }
+    public boolean hasInfoChar() { synchronized (lock) { return infoChar != null; } }
 
     // ---------- 通用执行 ----------
     public void execute(int cmdId, byte[] payload, SrcCallback<BleSourceProtocol.SrcResponse> cb) {
-        if (gatt == null || cmdChar == null) {
-            fail(cb, "9ECA 服务未连接");
-            return;
-        }
-        if (pending != null || pendingCapability != null || pendingInfo != null) {
-            fail(cb, "另一条 9ECA 操作进行中");
-            return;
-        }
-        int seq = (nextSequence++ ) & 0xFF;
-        byte[] frame;
-        try {
-            frame = BleSourceProtocol.buildCommand(cmdId, seq, payload);
-        } catch (Exception e) {
-            fail(cb, "帧构造失败: " + e.getMessage());
-            return;
-        }
-        final Pending p = new Pending(cmdId, seq, cb);
-        pending = p;
-        startTimeout(new Runnable() {
-            @Override public void run() {
-                if (pending == p) {
-                    pending = null;
-                    fail(cb, "9ECA 命令超时");
-                }
-            }
-        });
-        try {
-            if (cmdChar.getWriteType() != BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
-                cmdChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-            }
-            cmdChar.setValue(frame);
-            boolean ok = gatt.writeCharacteristic(cmdChar);
-            if (!ok) {
-                // 回退 no-response 重试一次（官方客户端用 WRITE_TYPE_NO_RESPONSE）
-                try {
-                    cmdChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-                    cmdChar.setValue(frame);
-                    ok = gatt.writeCharacteristic(cmdChar);
-                } catch (Exception ignored) { }
-            }
-            if (!ok) {
-                pending = null;
-                fail(cb, "9ECA 写入失败");
+        synchronized (lock) {
+            if (gatt == null || cmdChar == null) {
+                fail(cb, "9ECA 服务未连接");
                 return;
             }
-            Log.d(TAG, "SRC TX cmd=" + cmdId + " seq=" + seq + " " + Arrays.toString(frame));
-            AppLog.d(TAG, "9ECA TX cmd=" + cmdId + " seq=" + seq + " hex=" + AppLog.hex(frame));
-        } catch (SecurityException e) {
-            pending = null;
-            fail(cb, "9ECA 写入权限不足");
-        } catch (Exception e) {
-            pending = null;
-            fail(cb, "9ECA 写入异常: " + e);
+            if (pending != null || pendingCapability != null || pendingInfo != null) {
+                fail(cb, "另一条 9ECA 操作进行中");
+                return;
+            }
+            int seq = (nextSequence++ ) & 0xFF;
+            byte[] frame;
+            try {
+                frame = BleSourceProtocol.buildCommand(cmdId, seq, payload);
+            } catch (Exception e) {
+                fail(cb, "帧构造失败: " + e.getMessage());
+                return;
+            }
+            final Pending p = new Pending(cmdId, seq, cb);
+            pending = p;
+            BooleanSupplier start = () -> {
+                if (pending != p) return false;
+                startTimeout(() -> {
+                    if (pending == p) {
+                        pending = null;
+                        fail(cb, "9ECA 命令超时");
+                    }
+                });
+                return true;
+            };
+            try {
+                boolean ok = operations != null && operations.write(cmdChar, frame, start);
+                if (!ok) {
+                    if (pending == p) {
+                        pending = null;
+                        cancelTimeout();
+                        fail(cb, "9ECA 写入失败");
+                    }
+                    return;
+                }
+                Log.d(TAG, "SRC TX cmd=" + cmdId + " seq=" + seq + " " + Arrays.toString(frame));
+                AppLog.d(TAG, "9ECA TX cmd=" + cmdId + " seq=" + seq + " hex=" + AppLog.hex(frame));
+            } catch (Exception e) {
+                if (pending == p) {
+                    pending = null;
+                    cancelTimeout();
+                    fail(cb, "9ECA 写入异常: " + e);
+                }
+            }
         }
     }
 
     /** 特征直读：9ECA0004 能力表（整表） */
     public void readSourceCapability(SrcCallback<BleSourceProtocol.SrcSourceCapability> cb) {
-        if (gatt == null || capChar == null) { fail(cb, "9ECA 能力特征不可用"); return; }
-        if (pending != null || pendingCapability != null || pendingInfo != null) {
-            fail(cb, "另一条 9ECA 操作进行中"); return;
-        }
-        pendingCapability = cb;
-        startTimeout(new Runnable() {
-            @Override public void run() {
-                if (pendingCapability != null) {
-                    pendingCapability = null;
-                    fail(cb, "读取 9ECA 能力超时");
-                }
+        synchronized (lock) {
+            if (gatt == null || capChar == null) { fail(cb, "9ECA 能力特征不可用"); return; }
+            if (pending != null || pendingCapability != null || pendingInfo != null) {
+                fail(cb, "另一条 9ECA 操作进行中"); return;
             }
-        });
-        try {
-            if (!gatt.readCharacteristic(capChar)) {
+            pendingCapability = cb;
+            BooleanSupplier start = () -> {
+                if (pendingCapability != cb) return false;
+                startTimeout(() -> {
+                    if (pendingCapability == cb) {
+                        pendingCapability = null;
+                        fail(cb, "读取 9ECA 能力超时");
+                    }
+                });
+                return true;
+            };
+            if ((operations == null || !operations.read(capChar, start)) && pendingCapability == cb) {
                 pendingCapability = null;
+                cancelTimeout();
                 fail(cb, "9ECA 能力读取失败");
             }
-        } catch (SecurityException e) {
-            pendingCapability = null;
-            fail(cb, "9ECA 能力读取权限不足");
         }
     }
 
     /** 特征直读：9ECA0005 协议与固件信息 */
     public void readProtocolFirmwareInfo(SrcCallback<BleSourceProtocol.SrcFwInfo> cb) {
-        if (gatt == null || infoChar == null) { fail(cb, "9ECA 固件信息特征不可用"); return; }
-        if (pending != null || pendingCapability != null || pendingInfo != null) {
-            fail(cb, "另一条 9ECA 操作进行中"); return;
-        }
-        pendingInfo = cb;
-        startTimeout(new Runnable() {
-            @Override public void run() {
-                if (pendingInfo != null) {
-                    pendingInfo = null;
-                    fail(cb, "读取 9ECA 固件信息超时");
-                }
+        synchronized (lock) {
+            if (gatt == null || infoChar == null) { fail(cb, "9ECA 固件信息特征不可用"); return; }
+            if (pending != null || pendingCapability != null || pendingInfo != null) {
+                fail(cb, "另一条 9ECA 操作进行中"); return;
             }
-        });
-        try {
-            if (!gatt.readCharacteristic(infoChar)) {
+            pendingInfo = cb;
+            BooleanSupplier start = () -> {
+                if (pendingInfo != cb) return false;
+                startTimeout(() -> {
+                    if (pendingInfo == cb) {
+                        pendingInfo = null;
+                        fail(cb, "读取 9ECA 固件信息超时");
+                    }
+                });
+                return true;
+            };
+            if ((operations == null || !operations.read(infoChar, start)) && pendingInfo == cb) {
                 pendingInfo = null;
+                cancelTimeout();
                 fail(cb, "9ECA 固件信息读取失败");
             }
-        } catch (SecurityException e) {
-            pendingInfo = null;
-            fail(cb, "9ECA 固件信息读取权限不足");
         }
     }
 
     // ---------- GATT 事件入口（由 GaiaBleClient 转发） ----------
     public void onCharacteristicChanged(BluetoothGattCharacteristic ch, byte[] value) {
-        AppLog.d(TAG, "9ECA RX hex=" + AppLog.hex(value));
-        if (value == null || value.length < BleSourceProtocol.HEADER_SIZE) return;
-        if (BleSourceProtocol.isFrame(value, BleSourceProtocol.FRAME_RESPONSE)) {
-            onResponse(value);
-        } else if (BleSourceProtocol.isFrame(value, BleSourceProtocol.FRAME_NOTIFICATION)) {
-            BleSourceProtocol.SrcNotification n = BleSourceProtocol.parseNotification(value);
-            if (n != null) {
-                Log.d(TAG, "SRC NOTIF " + n.notifId + " seq=" + n.seq + " " + Arrays.toString(n.payload));
-                if (listener != null) listener.onSrcNotification(n);
+        synchronized (lock) {
+            if (value == null || value.length < BleSourceProtocol.HEADER_SIZE) return;
+            AppLog.d(TAG, "9ECA RX hex=" + AppLog.hex(value));
+            if (BleSourceProtocol.isFrame(value, BleSourceProtocol.FRAME_RESPONSE)) {
+                onResponse(value);
+            } else if (BleSourceProtocol.isFrame(value, BleSourceProtocol.FRAME_NOTIFICATION)) {
+                BleSourceProtocol.SrcNotification n = BleSourceProtocol.parseNotification(value);
+                if (n != null) {
+                    Log.d(TAG, "SRC NOTIF " + n.notifId + " seq=" + n.seq + " " + Arrays.toString(n.payload));
+                    if (listener != null) listener.onSrcNotification(n);
+                }
             }
         }
     }
 
     public void onCharacteristicRead(BluetoothGattCharacteristic ch, int status, byte[] value) {
-        AppLog.d(TAG, "9ECA RD status=" + status + " hex=" + AppLog.hex(value));
-        if (ch == null) return;
-        if (ch.equals(respChar)) {
-            if (status == BluetoothGatt.GATT_SUCCESS) onResponse(value);
-            else if (pending != null) {
-                SrcCallback<BleSourceProtocol.SrcResponse> cb = pending.cb;
-                pending = null;
-                fail(cb, "9ECA 响应读取失败 status=" + status);
-            }
-            return;
-        }
-        if (ch.equals(capChar)) {
-            SrcCallback<BleSourceProtocol.SrcSourceCapability> cb = pendingCapability;
-            pendingCapability = null;
-            if (status != BluetoothGatt.GATT_SUCCESS || value == null) {
-                fail(cb, "9ECA 能力读取失败 status=" + status);
+        synchronized (lock) {
+            AppLog.d(TAG, "9ECA RD status=" + status + " hex=" + (value == null ? "null" : AppLog.hex(value)));
+            if (ch == null) return;
+            if (ch.equals(respChar)) {
+                if (status == BluetoothGatt.GATT_SUCCESS) onResponse(value);
+                else if (pending != null) {
+                    SrcCallback<BleSourceProtocol.SrcResponse> cb = pending.cb;
+                    pending = null;
+                    cancelTimeout();
+                    fail(cb, "9ECA 响应读取失败 status=" + status);
+                }
                 return;
             }
-            BleSourceProtocol.SrcSourceCapability cap = BleSourceProtocol.parseSourceCapability(value);
-            if (cap != null) cb.onSuccess(cap);
-            else fail(cb, "9ECA 能力数据解析失败");
-            return;
-        }
-        if (ch.equals(infoChar)) {
-            SrcCallback<BleSourceProtocol.SrcFwInfo> cb = pendingInfo;
-            pendingInfo = null;
-            if (status != BluetoothGatt.GATT_SUCCESS || value == null) {
-                fail(cb, "9ECA 固件信息读取失败 status=" + status);
+            if (ch.equals(capChar)) {
+                SrcCallback<BleSourceProtocol.SrcSourceCapability> cb = pendingCapability;
+                if (cb == null) return;
+                pendingCapability = null;
+                cancelTimeout();
+                if (status != BluetoothGatt.GATT_SUCCESS || value == null) {
+                    fail(cb, "9ECA 能力读取失败 status=" + status);
+                    return;
+                }
+                BleSourceProtocol.SrcSourceCapability cap = BleSourceProtocol.parseSourceCapability(value);
+                if (cap != null) cb.onSuccess(cap);
+                else fail(cb, "9ECA 能力数据解析失败");
                 return;
             }
-            BleSourceProtocol.SrcFwInfo info = BleSourceProtocol.parseProtocolFirmwareInfo(value);
-            if (info != null) cb.onSuccess(info);
-            else fail(cb, "9ECA 固件信息数据解析失败");
+            if (ch.equals(infoChar)) {
+                SrcCallback<BleSourceProtocol.SrcFwInfo> cb = pendingInfo;
+                if (cb == null) return;
+                pendingInfo = null;
+                cancelTimeout();
+                if (status != BluetoothGatt.GATT_SUCCESS || value == null) {
+                    fail(cb, "9ECA 固件信息读取失败 status=" + status);
+                    return;
+                }
+                BleSourceProtocol.SrcFwInfo info = BleSourceProtocol.parseProtocolFirmwareInfo(value);
+                if (info != null) cb.onSuccess(info);
+                else fail(cb, "9ECA 固件信息数据解析失败");
+            }
         }
     }
 
@@ -259,21 +299,34 @@ public class BleSourceSwitchClient {
             return;
         }
         if (r.commandId != pending.cmdId || r.seq != pending.seq) {
-            SrcCallback<BleSourceProtocol.SrcResponse> cb = pending.cb;
-            pending = null;
-            fail(cb, "9ECA 响应不匹配 cmd=" + r.commandId + " seq=" + r.seq);
+            Log.w(TAG, "Ignoring unmatched 9ECA response cmd=" + r.commandId + " seq=" + r.seq);
             return;
         }
         SrcCallback<BleSourceProtocol.SrcResponse> cb = pending.cb;
         pending = null;
+        cancelTimeout();
         Log.d(TAG, "SRC RX cmd=" + r.commandId + " seq=" + r.seq + " kind=" + r.kind);
         cb.onSuccess(r);
     }
 
     // ---------- 超时 ----------
+    private void cancelTimeout() {
+        if (timeout != null) handler.removeCallbacks(timeout);
+        timeout = null;
+    }
+
     private void startTimeout(Runnable r) {
-        final Runnable restore = r;
-        handler.postDelayed(r, OP_TIMEOUT_MS);
+        cancelTimeout();
+        timeout = new Runnable() {
+            @Override public void run() {
+                synchronized (lock) {
+                    if (timeout != this) return;
+                    timeout = null;
+                    r.run();
+                }
+            }
+        };
+        handler.postDelayed(timeout, OP_TIMEOUT_MS);
     }
 
     private <T> void fail(SrcCallback<T> cb, String msg) {
@@ -380,7 +433,10 @@ public class BleSourceSwitchClient {
         execute(BleSourceProtocol.CMD_GET_PRESET_EQ, null,
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.presetInfo != null) cb.onSuccess(r.presetInfo);
+                        if (r.presetInfo != null && r.presetInfo.statusCode == BleSourceProtocol.ST_OK
+                                && r.presetInfo.presetCount > 0
+                                && r.presetInfo.presetCount <= BleSourceProtocol.USER_PEQ_PRESET + 1
+                                && r.presetInfo.currentPreset < r.presetInfo.presetCount) cb.onSuccess(r.presetInfo);
                         else cb.onError("GET_PRESET_EQ 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -388,10 +444,15 @@ public class BleSourceSwitchClient {
     }
 
     public void setPresetEq(int presetIndex, SrcCallback<BleSourceProtocol.SrcPresetEqChange> cb) {
+        if (presetIndex < 0 || presetIndex > BleSourceProtocol.USER_PEQ_PRESET) {
+            fail(cb, "presetIndex 0..7"); return;
+        }
         execute(BleSourceProtocol.CMD_SET_PRESET_EQ, new byte[]{(byte) presetIndex},
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.presetChange != null) cb.onSuccess(r.presetChange);
+                        if (r.presetChange != null && r.presetChange.statusCode == BleSourceProtocol.ST_OK
+                                && r.presetChange.currentPreset <= BleSourceProtocol.USER_PEQ_PRESET
+                                && r.presetChange.previousPreset <= BleSourceProtocol.USER_PEQ_PRESET) cb.onSuccess(r.presetChange);
                         else cb.onError("SET_PRESET_EQ 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -402,7 +463,9 @@ public class BleSourceSwitchClient {
         execute(BleSourceProtocol.CMD_GET_PEQ_CONFIG, null,
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.peqConfig != null) cb.onSuccess(r.peqConfig);
+                        if (r.peqConfig != null && r.peqConfig.statusCode == BleSourceProtocol.ST_OK
+                                && r.peqConfig.preset <= BleSourceProtocol.USER_PEQ_PRESET
+                                && r.peqConfig.pointCount <= BleSourceProtocol.PEQ_POINT_COUNT) cb.onSuccess(r.peqConfig);
                         else cb.onError("GET_PEQ_CONFIG 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -414,7 +477,7 @@ public class BleSourceSwitchClient {
         execute(BleSourceProtocol.CMD_SET_PEQ_PREGAIN, BleSourceProtocol.concatPregain(preGain),
                 wrapWith(new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.peqPreGain != null) cb.onSuccess(r.peqPreGain);
+                        if (r.peqPreGain != null && r.peqPreGain.statusCode == BleSourceProtocol.ST_OK) cb.onSuccess(r.peqPreGain);
                         else cb.onError("SET_PEQ_PREGAIN 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -422,10 +485,14 @@ public class BleSourceSwitchClient {
     }
 
     public void getPeqPoint(int index, SrcCallback<BleSourceProtocol.SrcPeqPoint> cb) {
+        if (index < 0 || index >= BleSourceProtocol.PEQ_POINT_COUNT) {
+            fail(cb, "pointIndex 0..31"); return;
+        }
         execute(BleSourceProtocol.CMD_GET_PEQ_POINT, new byte[]{(byte) index},
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.peqPoint != null) cb.onSuccess(r.peqPoint);
+                        if (r.peqPoint != null && r.peqPoint.statusCode == BleSourceProtocol.ST_OK
+                                && r.peqPoint.pointIndex == index) cb.onSuccess(r.peqPoint);
                         else cb.onError("GET_PEQ_POINT 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -445,7 +512,8 @@ public class BleSourceSwitchClient {
         execute(BleSourceProtocol.CMD_SET_PEQ_POINT, payload,
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.peqPoint != null) cb.onSuccess(r.peqPoint);
+                        if (r.peqPoint != null && r.peqPoint.statusCode == BleSourceProtocol.ST_OK
+                                && r.peqPoint.pointIndex == index) cb.onSuccess(r.peqPoint);
                         else cb.onError("SET_PEQ_POINT 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }
@@ -464,7 +532,7 @@ public class BleSourceSwitchClient {
         execute(BleSourceProtocol.CMD_COMMIT_PEQ, payload,
                 new SrcCallback<BleSourceProtocol.SrcResponse>() {
                     @Override public void onSuccess(BleSourceProtocol.SrcResponse r) {
-                        if (r.peqCommit != null) cb.onSuccess(r.peqCommit);
+                        if (r.peqCommit != null && r.peqCommit.statusCode == BleSourceProtocol.ST_OK) cb.onSuccess(r.peqCommit);
                         else cb.onError("COMMIT_PEQ 响应异常");
                     }
                     @Override public void onError(String msg) { cb.onError(msg); }

@@ -877,26 +877,7 @@ class XposedEntry : XposedModule() {
             Log.i(TAG, "sliceChoose: gms=" + (gmsUri != null) + " useGms=" + useGms +
                     " own=" + (!useGms) + " uri=" + uri)
             if (uri != null) {
-                // 自测：用 Settings 自己的 SliceManager 去 bind 我们这个 URI，
-                // 判断到底是「provider 没内容」还是「Settings 不去 bind」
-                // SliceManager 只 bind「被授权」的 provider：先把 Settings 授权到我们这条 URI，
-                // 否则普通 App 的 provider 会被静默拒绝（实测：content=false 且 provider 从未被调用）。
-                try {
-                    val smCls = Class.forName("android.app.slice.SliceManager")
-                    val sm = ctx?.getSystemService("slice")
-                    val grant = smCls.declaredMethods.firstOrNull {
-                        it.name == "grantSlicePermission" && it.parameterTypes.size == 2
-                    }?.apply { isAccessible = true }
-                    if (sm != null && grant != null) {
-                        grant.invoke(sm, "com.android.settings", uri)
-                        Log.i(TAG, "sliceGrant: ok for com.android.settings")
-                    } else {
-                        Log.i(TAG, "sliceGrant: unavailable (sm=" + (sm != null) +
-                                " m=" + (grant != null) + ")")
-                    }
-                } catch (t: Throwable) {
-                    Log.e(TAG, "sliceGrant fail", t)
-                }
+                // The module provider authenticates and grants the real host UID on bind.
                 val okSelf = ctx != null && sliceHasContent(ctx, uri)
                 Log.i(TAG, "sliceSelfTest: uri=" + uri + " content=" + okSelf)
                 attachControlSlice(cl, ctx, screenObj, uri)
@@ -1279,7 +1260,7 @@ class XposedEntry : XposedModule() {
      * 直接 hook Settings 进程里的 SliceManager.bindSlice：
      * GMS 的 provider 不肯为这台设备返回 hearable_control 内容（实测只响应 /scan），
      * 与其绕 provider，不如在「取切片」这一步就地替换成我们构建的 Slice。
-     * ⚠️ 只对 path 含 hearable_control 且设备是水月童 生效，其它 URI 原样返回。
+     * 只对 GMS 的 hearable_control URI 且设备是水月雨生效，其它 URI 原样返回。
      */
     private fun hookSliceManager() {
         runCatching {
@@ -1290,27 +1271,22 @@ class XposedEntry : XposedModule() {
             for (m in targets) runCatching {
                 m.isAccessible = true
                 hook(m).intercept { chain ->
-                    val res = chain.proceed()
                     val uri = chain.args.getOrNull(0) as? android.net.Uri
+                    val ctx = settingsCtx ?: runCatching {
+                        val f = chain.thisObject!!.javaClass.getDeclaredField("mContext")
+                        f.isAccessible = true
+                        f.get(chain.thisObject) as? Context
+                    }.getOrNull()
+                    val eligible = ctx != null && uri != null &&
+                        HearableSliceProvider.isHostUri(uri.scheme, uri.authority, uri.path) &&
+                        runCatching { HookIpc.enforceCaller(ctx) }.isSuccess
+                    val res = chain.proceed()
+                    if (!eligible) return@intercept res
                     val hasContent = res != null && runCatching {
                         (res.javaClass.getMethod("getItems").invoke(res) as? List<*>)?.isNotEmpty() == true
                     }.getOrDefault(false)
-                    Log.i(TAG, "bindSlice call: path=" + uri?.path + " res=" + (res != null) +
-                            " hasContent=" + hasContent + " ctx=" + (settingsCtx != null))
-                    if (!hasContent && uri != null && uri.path?.contains("hearable_control") == true) {
-                        // settingsCtx 可能还没赋值（早期调用）：再从 SliceManager 实例里取 mContext
-                        val ctx = settingsCtx ?: runCatching {
-                            val f = chain.thisObject!!.javaClass.getDeclaredField("mContext")
-                            f.isAccessible = true
-                            f.get(chain.thisObject) as? Context
-                        }.getOrNull()
-                        val built = ctx?.let { HearableSliceProvider.buildFor(it, uri) }
-                        if (built != null) {
-                            Log.i(TAG, "bindSlice replaced: " + uri)
-                            return@intercept built
-                        }
-                    }
-                    res
+                    if (hasContent) return@intercept res
+                    runCatching { HearableSliceProvider.buildFor(ctx, uri) }.getOrNull() ?: res
                 }
                 n++
             }.onFailure { Log.d(TAG, "hookSliceManager one fail: " + it) }
@@ -1484,8 +1460,7 @@ class XposedEntry : XposedModule() {
         return try {
             val app = HookHelper.callStaticMethod(
                     Class.forName("android.app.ActivityThread", true, cl), "currentApplication")
-            val ctx = (app as? Context)?.createPackageContext(
-                    "com.fxxkmoondrop.secret", Context.CONTEXT_IGNORE_SECURITY) ?: return true
+            val ctx = app as? Context ?: return true
             val cur = ctx.contentResolver.query(
                     android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/" + key),
                     null, null, null, null) ?: return true

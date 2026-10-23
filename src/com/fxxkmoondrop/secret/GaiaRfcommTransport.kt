@@ -1,10 +1,11 @@
 package com.fxxkmoondrop.secret
 
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
 import android.os.Handler
 import android.util.Log
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 
 /**
@@ -27,12 +28,22 @@ import java.util.UUID
  * 协议来源: https://github.com/lingbai-rong/PuddingPods
  *           + 官方 Moondrop App 反编译 TransportProtocol.java（FF 帧格式）
  */
-class GaiaRfcommTransport(
-    private val handler: Handler,
+class GaiaRfcommTransport internal constructor(
+    private val post: (() -> Unit) -> Unit,
     private val onPacket: (ByteArray) -> Unit,
     private val onDisconnected: () -> Unit,
     private val onError: (String) -> Unit
 ) {
+    constructor(handler: Handler, onPacket: (ByteArray) -> Unit, onDisconnected: () -> Unit,
+                onError: (String) -> Unit) : this({ action -> handler.post { action() } }, onPacket, onDisconnected, onError)
+
+    internal interface Socket {
+        val inputStream: InputStream
+        val outputStream: OutputStream
+        fun connect()
+        fun close()
+    }
+
     companion object {
         private const val TAG = "GaiaRfcomm"
         /** 标准 SPP UUID */
@@ -54,7 +65,11 @@ class GaiaRfcommTransport(
         private const val MODE_TRY_MS = 3500L
     }
 
-    private var socket: BluetoothSocket? = null
+    @Volatile private var socket: Socket? = null
+    // A retired transport is never reused, including after a cancelled connect.
+    private var closed = false
+    @Volatile private var cancelled = false
+    private val writeLock = Any()
     @Volatile private var running = false
     @Volatile private var connected = false
     private var readThread: Thread? = null
@@ -78,26 +93,46 @@ class GaiaRfcommTransport(
     fun connect(device: BluetoothDevice): Boolean {
         return try {
             val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            s.connect()
-            socket = s
-            connected = true
-            running = true
-            framer.reset()
-            receivedAny = false
-            lockedMode = -1
-            lastSentMode = MODE_FRAMED_V4
-            connectedAt = System.currentTimeMillis()
-            readThread = Thread({ readLoop() }, "GaiaRfcomm-Reader").apply { isDaemon = true }
-            readThread?.start()
-            Log.i(TAG, "RFCOMM connected to " + device.address + " name=" + device.name)
-            true
+            connectSocket(object : Socket {
+                override val inputStream get() = s.inputStream
+                override val outputStream get() = s.outputStream
+                override fun connect() = s.connect()
+                override fun close() = s.close()
+            })
         } catch (e: SecurityException) {
             Log.e(TAG, "RFCOMM connect denied", e)
-            onError("缺少蓝牙权限")
+            disconnect()
+            post { onError("缺少蓝牙权限") }
             false
         } catch (e: Exception) {
             Log.e(TAG, "RFCOMM connect failed", e)
-            onError("RFCOMM 连接失败: " + e.message)
+            disconnect()
+            post { onError("RFCOMM 连接失败: " + e.message) }
+            false
+        }
+    }
+
+    internal fun connectSocket(s: Socket): Boolean {
+        synchronized(this) {
+            if (closed) {
+                try { s.close() } catch (_: Exception) { }
+                return false
+            }
+            socket = s
+        }
+        return try {
+            s.connect()
+            synchronized(this) {
+                if (closed || socket !== s) return false
+                connected = true
+                running = true
+                connectedAt = System.currentTimeMillis()
+                readThread = Thread({ readLoop() }, "GaiaRfcomm-Reader").apply { isDaemon = true; start() }
+            }
+            true
+        } catch (e: Exception) {
+            disconnect()
+            post { onError("RFCOMM 连接失败: " + e.message) }
             false
         }
     }
@@ -156,11 +191,11 @@ class GaiaRfcommTransport(
     }
 
     /** 发送 GAIA 帧（线程安全写入）。 */
-    fun send(packet: ByteArray) {
+    fun send(packet: ByteArray): Unit = synchronized(writeLock) {
         val s = socket
         if (s == null || !connected) {
-            onError("RFCOMM 未连接")
-            return
+            post { onError("RFCOMM 未连接") }
+            return@synchronized
         }
         try {
             val mode = currentMode()
@@ -176,23 +211,39 @@ class GaiaRfcommTransport(
             Log.d(TAG, "TX " + MODE_NAMES[mode] + " " + out.contentToString())
         } catch (e: IOException) {
             Log.e(TAG, "RFCOMM write failed", e)
-            onError("RFCOMM 写入失败: " + e.message)
+            post { onError("RFCOMM 写入失败: " + e.message) }
+            terminalDisconnect()
         }
     }
 
     /** 断开连接并释放资源。 */
+    @Synchronized
     fun disconnect() {
+        cancelled = true
+        closeSocket()
+    }
+
+    private fun closeSocket() {
+        closed = true
         running = false
         connected = false
         try { socket?.close() } catch (_: Exception) { }
         socket = null
         try { readThread?.interrupt() } catch (_: Exception) { }
         readThread = null
-        framer.reset()
         receivedAny = false
         lockedMode = -1
         connectedAt = 0L
         Log.d(TAG, "RFCOMM disconnected")
+    }
+
+    private fun terminalDisconnect() {
+        val notify = synchronized(this) {
+            val wasActive = !closed
+            closeSocket()
+            wasActive
+        }
+        if (notify) post { if (!cancelled) onDisconnected() }
     }
 
     /** 传输是否就绪。 */
@@ -211,7 +262,7 @@ class GaiaRfcommTransport(
             socket?.inputStream
         } catch (e: Exception) {
             Log.e(TAG, "getInputStream failed", e)
-            handler.post { onDisconnected() }
+            terminalDisconnect()
             return
         } ?: return
 
@@ -219,7 +270,8 @@ class GaiaRfcommTransport(
         while (running) {
             try {
                 val n = input.read(buf)
-                if (n <= 0) continue
+                if (n < 0) { terminalDisconnect(); break }
+                if (n == 0) continue
                 if (!running) break
 
                 // 3.0.2: 累积到静默期结束（旧实现只 sleep 固定 50ms 再查一次
@@ -251,7 +303,8 @@ class GaiaRfcommTransport(
                     markReceived()
                     Log.d(TAG, "RX pdu " + pdu.contentToString())
                     val copyForCallback = pdu.copyOf()
-                    handler.post { onPacket(copyForCallback) }
+                    // EOF closes I/O, but already parsed packets precede its disconnect callback.
+                    post { if (!cancelled) onPacket(copyForCallback) }
                 }
                 if (pdus.isEmpty() && framer.pendingSize() > 0) {
                     Log.d(TAG, "framer pending " + framer.pendingSize() + " bytes (partial frame)")
@@ -259,12 +312,15 @@ class GaiaRfcommTransport(
             } catch (e: IOException) {
                 if (running) {
                     Log.w(TAG, "RFCOMM read EOF, disconnected")
-                    connected = false
-                    handler.post { onDisconnected() }
+                    terminalDisconnect()
                 }
                 break
             } catch (e: Exception) {
-                Log.e(TAG, "readLoop unexpected error", e)
+                if (running) {
+                    Log.e(TAG, "readLoop unexpected error", e)
+                    terminalDisconnect()
+                }
+                break
             }
         }
     }

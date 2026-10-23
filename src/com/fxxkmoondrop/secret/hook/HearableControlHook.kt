@@ -1,5 +1,7 @@
 package com.fxxkmoondrop.secret.hook
 
+import com.fxxkmoondrop.secret.HookIpc
+
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
@@ -229,17 +231,10 @@ object HearableControlHook {
      * 我们把它换成自己构建的 Slice（内容仍是水月雨 才给），
      * Settings 侧拿到的就是「来自被信任 provider 的内容」。
      */
-    /** 已经挂过 hook 的 SliceProvider 子类（避免重复挂） */
-    private val sliceHookedClasses = java.util.Collections.newSetFromMap(
-        java.util.concurrent.ConcurrentHashMap<Class<*>, Boolean>())
+    private val sliceHookedCalls = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<java.lang.reflect.Method, Boolean>())
 
-    /**
-     * 关键点：GMS 的 provider **自己覆盖了 onBindSlice 且不调用 super**，
-     * 所以挂基类 `SliceProvider.onBindSlice` 一次都不会命中（实测：installed 但零 hit）。
-     *
-     * 改为在 `ContentProvider.attachInfo` 上挂一刀：任何 provider 实例初始化时，
-     * 只要它是 SliceProvider 的子类，就当场反射 hook 它**自己类**里的 onBindSlice。
-     */
+    /** Locate the actual Fast Pair provider, including overridden transport call methods. */
     private fun hookEmptySlice(xm: XposedModule) {
         runCatching {
             val cpCls = Class.forName("android.content.ContentProvider")
@@ -248,8 +243,12 @@ object HearableControlHook {
             for (m in targets) runCatching {
                 xm.hook(m).intercept { chain ->
                     val res = chain.proceed()
-                    val self = chain.thisObject
-                    if (self != null) attachSliceHookFor(xm, self.javaClass)
+                    val self = chain.thisObject as? android.content.ContentProvider
+                    val info = chain.args.filterIsInstance<android.content.pm.ProviderInfo>().firstOrNull()
+                    if (self != null && info?.authority?.split(';')?.contains(
+                            "com.google.android.gms.nearby.fastpair") == true) {
+                        attachSliceHookFor(xm, self.javaClass)
+                    }
                     res
                 }
             }
@@ -257,32 +256,35 @@ object HearableControlHook {
         }.onFailure { Log.d(TAG, "hookEmptySlice 失败: " + unwrap(it)) }
     }
 
-    /** 若是 SliceProvider 子类，则 hook 它自己的 onBindSlice（只挂一次） */
+    /** Check the transport entry, before a provider can clear Binder identity in onBindSlice. */
     private fun attachSliceHookFor(xm: XposedModule, cls: Class<*>) {
         try {
-            if (!sliceHookedClasses.add(cls)) return
-            val spCls = runCatching { Class.forName("android.app.slice.SliceProvider") }.getOrNull() ?: return
-            if (!spCls.isAssignableFrom(cls)) return
-            val methods = cls.declaredMethods.filter { it.name == "onBindSlice" }
-            if (methods.isEmpty()) return
-            for (m in methods) runCatching {
-                xm.hook(m).intercept { chain ->
-                    val res = chain.proceed()
-                    val uri = chain.args.getOrNull(0) as? android.net.Uri
-                    val itemsList = try {
-                        res?.javaClass?.getMethod("getItems")?.invoke(res) as? List<*>
-                    } catch (_: Throwable) { null }
-                    val hasContent = res != null && !itemsList.isNullOrEmpty()
-                    Log.i(TAG, "onBindSlice hit: cls=" + cls.simpleName + " path=" + uri?.path +
-                            " res=" + (res != null) + " hasContent=" + hasContent)
-                    if (!hasContent && uri != null && uri.path?.contains("hearable_control") == true) {
-                        val ctx = chain.thisObject as? android.content.Context
-                        com.fxxkmoondrop.secret.HearableSliceProvider.buildFor(ctx, uri) ?: res
-                    } else res
+            val method = cls.getMethod("call", String::class.java, String::class.java,
+                String::class.java, android.os.Bundle::class.java)
+            if (!sliceHookedCalls.add(method)) return
+            xm.hook(method).intercept { chain ->
+                val provider = chain.thisObject as? android.content.ContentProvider
+                val ctx = provider?.context
+                val extras = chain.args.getOrNull(3) as? android.os.Bundle
+                val uri = if (chain.args.getOrNull(0) == "com.google.android.gms.nearby.fastpair" &&
+                    chain.args.getOrNull(1) == "bind_slice")
+                    extras?.getParcelable<android.net.Uri>("slice_uri") else null
+                val eligible = ctx != null && uri != null &&
+                    com.fxxkmoondrop.secret.HearableSliceProvider.isHostUri(uri.scheme, uri.authority, uri.path) &&
+                    runCatching { HookIpc.enforceCaller(ctx) }.isSuccess
+                val res = chain.proceed()
+                if (!eligible) return@intercept res
+                val bundle = res as? android.os.Bundle
+                val slice = bundle?.getParcelable<android.app.slice.Slice>("slice")
+                if (!slice?.items.isNullOrEmpty()) return@intercept res
+                val replacement = runCatching {
+                    com.fxxkmoondrop.secret.HearableSliceProvider.buildFor(ctx, uri)
+                }.getOrNull() ?: return@intercept res
+                (bundle?.let { android.os.Bundle(it) } ?: android.os.Bundle()).apply {
+                    putParcelable("slice", replacement)
                 }
-                Log.i(TAG, "slice hook -> " + cls.name + "#" + m.name)
-            }.onFailure { Log.d(TAG, "hook subclass onBindSlice 失败: " + it) }
-        } catch (_: Throwable) { }
+            }
+        } catch (t: Throwable) { Log.d(TAG, "slice call hook failed: $t") }
     }
 
     fun install(xm: XposedModule, cl: ClassLoader) {
@@ -607,7 +609,7 @@ object HearableControlHook {
             return
         }
         val ctx = appCtx ?: return
-        ctx.sendBroadcast(Intent(ACTION_MODE_CHANGED).setPackage(PKG_APP).putExtra(EXTRA_MODE, ui))
+        HookIpc.sendToApp(ctx, Intent(ACTION_MODE_CHANGED).putExtra(EXTRA_MODE, ui))
         Log.d(TAG, "意图已转 GAIA: ui=" + ui)
     }
 
@@ -645,9 +647,7 @@ object HearableControlHook {
                     return
                 }
                 val ctx = appCtx ?: return
-                ctx.sendBroadcast(Intent(ACTION_MODE_CHANGED)
-                        .setPackage(PKG_APP)
-                        .putExtra(EXTRA_MODE, ui))
+                HookIpc.sendToApp(ctx, Intent(ACTION_MODE_CHANGED).putExtra(EXTRA_MODE, ui))
                 Log.d(TAG, "SET ANC 已转 GAIA: ui=" + ui)
             }
             EV_GET_ANC_STATE -> {
@@ -1013,7 +1013,7 @@ object HearableControlHook {
         try {
             val i = Intent(ACTION_MODE_REQUEST)
             i.setPackage(PKG_APP)
-            ctx.sendBroadcast(i)
+            HookIpc.sendToApp(ctx, i)
             Log.d(TAG, "模式未知(" + from + ")，已向 App 索要当前模式")
         } catch (t: Throwable) {
             Log.d(TAG, "索要模式失败: " + unwrap(t))

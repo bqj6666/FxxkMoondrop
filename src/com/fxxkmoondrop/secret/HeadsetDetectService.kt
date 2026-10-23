@@ -153,9 +153,7 @@ class HeadsetDetectService : Service() {
         f.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
         f.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
         f.addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED")
-        f.addAction("com.fxxkmoondrop.secret.FASTPAIR_MODE_CHANGED") // alpha1.15: FastPair 弹窗模式回调
-        f.addAction("com.fxxkmoondrop.secret.FASTPAIR_SHEET_CLOSED") // alpha2.7: GMS 弹窗关闭 -> 模拟状态恢复
-        f.addAction(AncBridge.ACTION_FP_MODE_REQUEST) // alpha1.20: 弹窗请求当前模式（高亮同步）
+        // Custom hook events enter through the UID-checked provider, never this exported receiver.
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(receiver, f, Context.RECEIVER_EXPORTED)

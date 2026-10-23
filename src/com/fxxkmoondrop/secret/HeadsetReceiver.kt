@@ -107,7 +107,6 @@ class HeadsetReceiver : BroadcastReceiver() {
             else -> return
         }
 
-        if (name == null) name = "蓝牙设备"
         Log.i(TAG, "device: $name ($address) connected=$connected disconnected=$disconnected")
 
         if (connected && DeviceMatcher.isMoondrop(name)) {
@@ -117,12 +116,9 @@ class HeadsetReceiver : BroadcastReceiver() {
             // 就只能干等整个轮询周期，用户感知就是「连上半天不出电量」。
             wakeDetectService(c)
         } else if (disconnected) {
-            if (DeviceMatcher.isMoondrop(name)) {
-                // alpha1.40: 系统层断开（ACL/A2DP/HFP）立即清 HeadsetGate MAC 缓存，
-                // 主界面降噪面板/模拟区随真实状态刷新（GATT 断开由 GaiaBleClient 负责）
+            // PopupGate can identify a nameless disconnect by its previously connected address.
+            if (PopupGate.tryShowDisconnected(c, address, name) || DeviceMatcher.isMoondrop(name)) {
                 HeadsetGate.clearConnectedMac(c)
-                // 断开标记保留在 PopupGate 里防重复弹窗（连接时会自动清除）
-                PopupGate.tryShowDisconnected(c, address, name)
             }
         }
     }
