@@ -792,7 +792,19 @@ class SettingsFragment : Fragment() {
             startActivity(Intent(requireContext(), EqSppActivity::class.java))
         }
         val diagRows = mutableListOf<View>(rowDebug, rowPerm, rowLog)
-        if (debugOn) { diagRows.add(rowProbe); diagRows.add(rowEq) }   // 只有调试模式才暴露
+        if (debugOn) {
+            // 调试日志：只在调试模式下出现，里面能直接看 AppLog 与相关 logcat
+            val rowDebugLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
+                    Lang.t("调试日志", "Debug log"),
+                    Lang.t("查看应用内日志与系统 logcat（定位问题用）",
+                            "Inspect in-app log and logcat for troubleshooting"),
+                    M3Ui.chevron(requireContext(), pal.onVariant)) {
+                startActivity(Intent(requireContext(), DebugLogActivity::class.java))
+            }
+            diagRows.add(rowDebugLog)
+            diagRows.add(rowProbe)
+            diagRows.add(rowEq)
+        }   // 只有调试模式才暴露
         box.addView(M3Ui.groupCard(requireActivity(), pal, *diagRows.toTypedArray()))
         box.addView(spacer(dp(10)))
         box.addView(makeSubLabel(Lang.t("模拟测试", "Simulation Test")))

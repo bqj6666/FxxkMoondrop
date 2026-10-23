@@ -44,6 +44,8 @@
         <activity android:name=".PermissionActivity" android:exported="false" />
         <!-- 均衡器正式入口：经典蓝牙 SPP（0A05 读 / 0A06 写），5 段参数均衡可视化编辑 -->
         <activity android:name=".EqEditorActivity" android:exported="false" />
+        <!-- 调试日志：仅当设置里打开「调试模式」时可用 -->
+        <activity android:name=".DebugLogActivity" android:exported="false" />
 
 
         <activity android:name=".MainActivity" android:exported="true">

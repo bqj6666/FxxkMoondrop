@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 官方 M3 Text Button：透明底 + primary 文字 + 40dp 高 + 涟漪 -->
+<com.google.android.material.button.MaterialButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Material3.Button.TextButton"
+    android:layout_width="wrap_content"
+    android:layout_height="40dp"
+    android:minWidth="64dp" />

@@ -166,9 +166,9 @@ class EqEditorActivity : Activity() {
         applyBtn = m3Filled(Lang.t("应用", "Apply")) { doWrite() }
         applyBtn.isEnabled = false
         applyBtn.alpha = 0.38f
-        body.addView(applyBtn, LinearLayout.LayoutParams(-1, dp(40)).also {
-            it.topMargin = dp(12); it.bottomMargin = dp(4)
-            it.leftMargin = dp(8); it.rightMargin = dp(8)
+        body.addView(applyBtn, LinearLayout.LayoutParams(-2, -2).also {
+            it.topMargin = dp(12); it.bottomMargin = dp(8)
+            it.gravity = Gravity.CENTER_HORIZONTAL
         })
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("预设", "Presets")))
@@ -183,13 +183,14 @@ class EqEditorActivity : Activity() {
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("操作", "Actions")))
         val ops = LinearLayout(this)
         ops.orientation = LinearLayout.HORIZONTAL
-        ops.setPadding(dp(12), dp(2), dp(12), dp(4))
-        val opLp = { LinearLayout.LayoutParams(0, dp(40), 1f) }
+        ops.gravity = Gravity.CENTER_HORIZONTAL
+        ops.setPadding(dp(12), dp(2), dp(12), dp(6))
+        val opLp = { LinearLayout.LayoutParams(-2, -2) }
         ops.addView(m3Text(Lang.t("重新读取", "Reload")) { doRead(null) },
-                opLp().also { it.marginEnd = dp(4) })
+                opLp().also { it.marginEnd = dp(8) })
         ops.addView(m3Text(Lang.t("自动预增益", "Auto preamp")) {
             profile?.let { profile = MoondropEq.withAutoPreamp(it); renderAll() }
-        }, opLp().also { it.marginEnd = dp(4) })
+        }, opLp().also { it.marginEnd = dp(8) })
         ops.addView(m3Text(Lang.t("全部归零", "Flatten")) {
             profile?.let { p ->
                 p.bands.forEach { it.gainDb = 0f }
@@ -231,20 +232,12 @@ class EqEditorActivity : Activity() {
      * 官方 M3 Text Button：MaterialButton + 透明底 + primary 文字，
      * 尺寸按规范：高 40dp、圆角 20dp、14sp、横向 12dp 内边距。
      */
+    /** 官方 M3 Text Button：从 view_m3_text_button.xml 里 inflate（style=Widget.Material3.Button.TextButton） */
     private fun m3Text(text: String, onClick: () -> Unit): TextView {
-        val b = com.google.android.material.button.MaterialButton(this)
+        val b = android.view.LayoutInflater.from(this)
+                .inflate(R.layout.view_m3_text_button, null, false) as com.google.android.material.button.MaterialButton
         b.text = text
-        b.textSize = 14f
         b.isAllCaps = false
-        b.insetTop = 0
-        b.insetBottom = 0
-        b.minHeight = dp(40)
-        b.minimumHeight = dp(40)
-        b.cornerRadius = dp(20)
-        b.setPadding(dp(12), 0, dp(12), 0)
-        b.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
-        b.rippleColor = android.content.res.ColorStateList.valueOf((pal.primary and 0x00FFFFFF) or 0x1F000000)
-        b.setTextColor(pal.primary)
         b.setOnClickListener { onClick() }
         return b
     }
@@ -312,7 +305,8 @@ class EqEditorActivity : Activity() {
             val sl = Slider(this)
             sl.valueFrom = gMin
             sl.valueTo = gMax
-            sl.stepSize = 0.1f
+            // 不设 stepSize：M3 的刻度点只在有意义的步长时才该出现，
+            // 0.1 dB 细分会让整条轨道变成一串圆点（真机截图复现过）。精度在回调里四舍五入。
             sl.value = (Math.round(p.bands[i].gainDb * 10) / 10f).coerceIn(gMin, gMax)
             sl.setLabelFormatter { v -> String.format("%+.1f dB", v) }
             // 颜色交给主题（动态取色的 primary/secondary），Slider 的 track/thumb 不公开可写
