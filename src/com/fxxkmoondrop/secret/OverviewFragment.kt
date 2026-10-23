@@ -324,6 +324,8 @@ class OverviewFragment : Fragment() {
             btn.insetBottom = 0
             btn.setPadding(0, 0, 0, 0)
             btn.tag = "anc_btn"
+            // 这四个按钮是内联建的不是 M3Ui.iconToggle，之前漏了按压形变（用户反馈「增益有、降噪没有」）
+            M3Ui.attachPressMorph(requireContext(), btn, 28f, 12f)
             // 未选中 = surfaceContainer 圆底 / 选中 = primary 底（M3 filled icon button toggle 的配色）
             btn.backgroundTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
