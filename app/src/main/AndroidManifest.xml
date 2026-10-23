@@ -42,8 +42,6 @@
         android:allowBackup="false">
 
         <activity android:name=".PermissionActivity" android:exported="false" />
-        <!-- 3.2.12: 均衡器（9ECA/BLE 通道，老型号用）。不对外暴露，只能从应用内进入。 -->
-        <activity android:name=".EqActivity" android:exported="false" />
         <!-- 均衡器正式入口：经典蓝牙 SPP（0A05 读 / 0A06 写），5 段参数均衡可视化编辑 -->
         <activity android:name=".EqEditorActivity" android:exported="false" />
 

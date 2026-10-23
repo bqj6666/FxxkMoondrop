@@ -40,13 +40,10 @@ object MoondropSpp {
         disconnect()
         val adapter = try { BluetoothAdapter.getDefaultAdapter() } catch (_: Throwable) { null } ?: return false
         val dev = try { adapter.getRemoteDevice(address) } catch (_: Throwable) { return false }
+        // 只试两种正规建链方式：反复用反射强行通道 1 会把耳机当异常连接处理，得不偿失
         val attempts = listOf<Pair<String, () -> BluetoothSocket>>(
                 "secure" to { dev.createRfcommSocketToServiceRecord(SPP) },
-                "insecure" to { dev.createInsecureRfcommSocketToServiceRecord(SPP) },
-                "channel1" to {
-                    val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-                    m.invoke(dev, 1) as BluetoothSocket
-                }
+                "insecure" to { dev.createInsecureRfcommSocketToServiceRecord(SPP) }
         )
         for ((name, make) in attempts) {
             try {
