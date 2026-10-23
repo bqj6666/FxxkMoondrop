@@ -1,41 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  耳机 + 均衡器（细线条版）
-  · 头梁弧线 5dp、耳罩与均衡柱之间留出呼吸位，小尺寸下不糊成一团
-  · 三段柱保留旧图标语言（高度差 = 调音），全部落在 66dp 安全区内
--->
+<!-- 耳机 + 均衡器（细线条、留白版）：图形整体 1.08 放大，三柱拉开间距 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-
-    <!-- 头梁：先画一层深色描边增加对比度，再叠白色主线 -->
-    <group android:scaleX="1.1" android:scaleY="1.1" android:pivotX="54" android:pivotY="54">
-<path
-        android:pathData="M33,52 a21,21 0 0 1 42,0"
-        android:strokeColor="#FF3F2F70"
-        android:strokeWidth="8"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <path
-        android:pathData="M33,52 a21,21 0 0 1 42,0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-
-    <!-- 左耳罩 -->
-    <path android:fillColor="#FFFFFFFF"
-        android:strokeColor="#FF3F2F70" android:strokeWidth="1.6" android:pathData="M32,50 H34 A3.5,3.5 0 0 1 37.5,53.5 V59.5 A3.5,3.5 0 0 1 34,63 H32 A3.5,3.5 0 0 1 28.5,59.5 V53.5 A3.5,3.5 0 0 1 32,50 Z" />
-    <!-- 右耳罩 -->
-    <path android:fillColor="#FFFFFFFF"
-        android:strokeColor="#FF3F2F70" android:strokeWidth="1.6" android:pathData="M74,50 H76 A3.5,3.5 0 0 1 79.5,53.5 V59.5 A3.5,3.5 0 0 1 76,63 H74 A3.5,3.5 0 0 1 70.5,59.5 V53.5 A3.5,3.5 0 0 1 74,50 Z" />
-
-    <!-- 三段均衡柱：细、彼此留 3dp 间隙 -->
+  <group android:scaleX="1.08" android:scaleY="1.08" android:pivotX="54" android:pivotY="54">
+    <!-- 头梁：深色描边 + 白色主线 -->
+    <path android:pathData="M33,52 a21,21 0 0 1 42,0"
+        android:strokeColor="#FF3F2F70" android:strokeWidth="8" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M33,52 a21,21 0 0 1 42,0"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <!-- 左右耳罩 -->
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.6"
+        android:pathData="M32,50 H34 A3.5,3.5 0 0 1 37.5,53.5 V59.5 A3.5,3.5 0 0 1 34,63 H32 A3.5,3.5 0 0 1 28.5,59.5 V53.5 A3.5,3.5 0 0 1 32,50 Z" />
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.6"
+        android:pathData="M74,50 H76 A3.5,3.5 0 0 1 79.5,53.5 V59.5 A3.5,3.5 0 0 1 76,63 H74 A3.5,3.5 0 0 1 70.5,59.5 V53.5 A3.5,3.5 0 0 1 74,50 Z" />
+    <!-- 三段均衡柱：更细(4.5) 更分散(间隙3.5) 更长 -->
     <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
-        android:pathData="M46,60 a2.5,2.5 0 0 1 2.5,2.5 v5 a2.5,2.5 0 0 1 -5,0 v-5 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
+        android:pathData="M46,60 a2.25,2.25 0 0 1 2.25,2.25 v7.5 a2.25,2.25 0 0 1 -4.5,0 v-7.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
     <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
-        android:pathData="M54,54 a2.5,2.5 0 0 1 2.5,2.5 v11 a2.5,2.5 0 0 1 -5,0 v-11 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
+        android:pathData="M54,52 a2.25,2.25 0 0 1 2.25,2.25 v15.5 a2.25,2.25 0 0 1 -4.5,0 v-15.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
     <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
-        android:pathData="M62,57 a2.5,2.5 0 0 1 2.5,2.5 v8 a2.5,2.5 0 0 1 -5,0 v-8 a2.5,2.5 0 0 1 2.5,-2.5 Z" />
-</group>
+        android:pathData="M62,57 a2.25,2.25 0 0 1 2.25,2.25 v10.5 a2.25,2.25 0 0 1 -4.5,0 v-10.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
+  </group>
 </vector>
