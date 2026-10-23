@@ -752,9 +752,27 @@ class FastPairHookEntry {
             val decor = act.window.decorView
             for (m in 0..3) {
                 val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
-                var bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg")
-                if (bgV == null) bgV = holder
-                bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
+                val bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg") ?: holder
+                val mb = bgV as? com.google.android.material.button.MaterialButton
+                if (mb != null) {
+                    val mp = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(mb.context) } catch (_: Throwable) { null }
+                    if (mp != null) {
+                        val on = m == mode
+                        mb.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                                if (on) mp.primary else mp.container)
+                        mb.iconTint = android.content.res.ColorStateList.valueOf(
+                                if (on) mp.onPrimary else mp.onContainer)
+                        // M3 Expressive：toggle 图标按钮「选中 = 圆角方形（12dp），未选中 = 圆形」，
+                        // 按压时再往 12dp 收；形变的 idle 值要跟着选中态变，否则选中后按下去会被拉回圆
+                        val d = mb.resources.displayMetrics.density
+                        val idle = if (on) 12f else 24f
+                        mb.shapeAppearanceModel = mb.shapeAppearanceModel.toBuilder()
+                                .setAllCornerSizes(idle * d).build()
+                        com.fxxkmoondrop.secret.M3Ui.attachPressMorph(mb.context, mb, idle, 12f)
+                    }
+                } else {
+                    bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
+                }
                 // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
                 try {
                     bgV.alpha = 0.4f
@@ -1087,29 +1105,37 @@ class FastPairHookEntry {
         val item = android.widget.LinearLayout(act)
         item.orientation = android.widget.LinearLayout.VERTICAL
         item.gravity = android.view.Gravity.CENTER_HORIZONTAL
-        // 圆形按钮：Ripple 圆形背景 + 中央 Material 图标（24dp）
+        // 官方 M3 图标按钮：MaterialButton + 自绘图标，按压沿用 App 内同一套形状形变
+        // （原来是自绘圆底 + 0.85 缩放，与 App 内、蓝牙详情面板都不是一套，用户反馈「样式和动画不一致」）
         val holder = android.widget.FrameLayout(act)
         holder.tag = "fxxk_mode_btn_" + mode
-        val bg = android.view.View(act)
-        bg.tag = "fxxk_mode_bg" // alpha1.20: 高亮定位
-        bg.background = buildCircleRipple(act)
-        holder.addView(bg, android.widget.FrameLayout.LayoutParams(
+        val iconPx = (prof.modeItemIconPx * d).toInt()
+        val themed = sModCtx?.let {
+            android.view.ContextThemeWrapper(it, com.fxxkmoondrop.secret.R.style.Theme_FxxkMoondrop)
+        }
+        val bctx: android.content.Context = themed ?: act
+        val pal = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(bctx) } catch (_: Throwable) { null }
+        val btn = com.google.android.material.button.MaterialButton(bctx, null,
+                com.google.android.material.R.attr.materialIconButtonStyle)
+        btn.tag = "fxxk_mode_bg"
+        btn.text = ""
+        btn.icon = buildModeIcon(act, mode, iconPx)
+        btn.iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
+        btn.iconPadding = 0
+        btn.iconSize = iconPx
+        btn.setPadding(0, 0, 0, 0)
+        btn.insetLeft = 0; btn.insetRight = 0; btn.insetTop = 0; btn.insetBottom = 0
+        if (pal != null) {
+            btn.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.container)
+            btn.iconTint = android.content.res.ColorStateList.valueOf(pal.onContainer)
+            val sizeDp = prof.modeItemBtnPx.toFloat()
+            com.fxxkmoondrop.secret.M3Ui.attachPressMorph(bctx, btn, sizeDp / 2f, 12f)
+        }
+        holder.addView(btn, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-        val iconPx = (prof.modeItemIconPx * d).toInt() // Material 图标规范 24dp
-        val iv = ImageView(act)
-        iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
-        val il = android.widget.FrameLayout.LayoutParams(iconPx, iconPx)
-        il.gravity = android.view.Gravity.CENTER
-        holder.addView(iv, il)
-        holder.setOnClickListener {
+        btn.setOnClickListener {
             Log.d(TAG, "[FastPairHook] mode clicked: " + mode)
-            // alpha2.26.3: 点击缩放动画（Material 按压反馈：0.85 -> 回弹 1.0）
-            try {
-                holder.animate().scaleX(0.85f).scaleY(0.85f).setDuration(90).withEndAction {
-                    holder.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
-                }.start()
-            } catch (_: Throwable) { }
             // alpha1.21: 点击立即乐观高亮（应用回发 MODE_STATE 仍会校准）
             sLastMode = mode
             applyModeHighlight(mode)

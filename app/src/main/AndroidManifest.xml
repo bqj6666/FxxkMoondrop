@@ -35,15 +35,17 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
-        android:label="Fxxkmoondrop"
+        android:label="MoonEar"
         android:description="@string/module_description"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.FxxkMoondrop"
         android:allowBackup="false">
 
         <activity android:name=".PermissionActivity" android:exported="false" />
-        <!-- 3.2.12: 均衡器（预设可切 + 参量均衡只读）。不对外暴露，只能从应用内进入。 -->
-        <activity android:name=".EqActivity" android:exported="false" />
+        <!-- 均衡器正式入口：经典蓝牙 SPP（0A05 读 / 0A06 写），5 段参数均衡可视化编辑 -->
+        <activity android:name=".EqEditorActivity" android:exported="false" />
+        <!-- 调试日志：仅当设置里打开「调试模式」时可用 -->
+        <activity android:name=".DebugLogActivity" android:exported="false" />
 
 
         <activity android:name=".MainActivity" android:exported="true">
@@ -70,6 +72,28 @@
              exported 必须为 true（否则系统绑不上），但权限限定为
              BIND_QUICK_SETTINGS_TILE：只有持有该权限的系统服务能绑定，
              第三方应用绑不了。不涉及 SYSTEM_ALERT_WINDOW 或悬浮窗。 -->
+        <activity
+            android:name=".EqSppActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ServiceProbeActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ConnectLogActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ManualConnectActivity"
+            android:exported="false" />
+
+        <provider
+            android:name=".HearableSliceProvider"
+            android:authorities="com.fxxkmoondrop.secret.slices"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".AncTileService"
             android:exported="true"

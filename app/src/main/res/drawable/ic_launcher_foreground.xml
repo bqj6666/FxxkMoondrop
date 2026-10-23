@@ -1,40 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  alpha2.53: 自适应图标前景层。
-  Material 自适应图标规范：
-    画布 108x108dp；四周 18dp 为出血区（启动器遮罩会切掉），中心 72dp 为安全区，
-    图形控制在中心约 66dp 圆内，保证圆形遮罩下四角不被裁。
-
-  造型：两支对称入耳式耳塞（腔体圆 + 圆角音管，八字外撇）。
-  笔画刻意加粗（腔体 r=11、音管宽 10dp）：单色主题图标模式下图标会缩到约 24-48dp，
-  细笔画在那个尺寸会糊成一团，实心块面才立得住。
-  图形重心精确对齐画布中心 (54,54)。
--->
+<!-- 耳机 + 均衡器（细线条、留白版）：图形整体 1.08 放大，三柱拉开间距 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- 左耳塞：腔体 -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M40,44m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
-    <!-- 左耳塞：音管 -->
-    <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="10"
-        android:strokeLineCap="round"
-        android:pathData="M40,54 L34,72" />
-
-    <!-- 右耳塞：腔体（镜像） -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M68,44m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
-    <!-- 右耳塞：音管（镜像） -->
-    <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="10"
-        android:strokeLineCap="round"
-        android:pathData="M68,54 L74,72" />
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <group android:scaleX="1.08" android:scaleY="1.08" android:pivotX="54" android:pivotY="54">
+    <!-- 头梁：深色描边 + 白色主线 -->
+    <path android:pathData="M33,52 a21,21 0 0 1 42,0"
+        android:strokeColor="#FF3F2F70" android:strokeWidth="8" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M33,52 a21,21 0 0 1 42,0"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <!-- 左右耳罩 -->
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.6"
+        android:pathData="M32,50 H34 A3.5,3.5 0 0 1 37.5,53.5 V59.5 A3.5,3.5 0 0 1 34,63 H32 A3.5,3.5 0 0 1 28.5,59.5 V53.5 A3.5,3.5 0 0 1 32,50 Z" />
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.6"
+        android:pathData="M74,50 H76 A3.5,3.5 0 0 1 79.5,53.5 V59.5 A3.5,3.5 0 0 1 76,63 H74 A3.5,3.5 0 0 1 70.5,59.5 V53.5 A3.5,3.5 0 0 1 74,50 Z" />
+    <!-- 三段均衡柱：更细(4.5) 更分散(间隙3.5) 更长 -->
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
+        android:pathData="M46,60 a2.25,2.25 0 0 1 2.25,2.25 v7.5 a2.25,2.25 0 0 1 -4.5,0 v-7.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
+        android:pathData="M54,52 a2.25,2.25 0 0 1 2.25,2.25 v15.5 a2.25,2.25 0 0 1 -4.5,0 v-15.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
+    <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF3F2F70" android:strokeWidth="1.2"
+        android:pathData="M62,57 a2.25,2.25 0 0 1 2.25,2.25 v10.5 a2.25,2.25 0 0 1 -4.5,0 v-10.5 a2.25,2.25 0 0 1 2.25,-2.25 Z" />
+  </group>
 </vector>

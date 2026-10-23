@@ -16,10 +16,10 @@ android {
 
     defaultConfig {
         applicationId = "com.fxxkmoondrop.secret"
-        minSdk = 26
+        minSdk = 32
         targetSdk = 36
-        versionCode = 340
-        versionName = "3.2.20"
+        versionCode = 350
+        versionName = "3.3.0"
 
         // DexKit 自带 4 个 ABI 的 libdexkit.so；x86/x86_64 只服务模拟器，
         // 剔除后单 APK 省约 0.8MB（模块只跑在真机上）。
@@ -123,6 +123,9 @@ dependencies {
     implementation("androidx.annotation:annotation-experimental:1.0.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.appcompat:appcompat-resources:1.7.0")
+    // 蓝牙详情页「耳机控制」：自己当 SliceProvider，交给系统官方 SliceView 渲染
+    implementation("androidx.slice:slice-core:1.0.0")
+    implementation("androidx.slice:slice-builders:1.0.0")
     implementation("androidx.arch.core:core-runtime:2.2.0")
     implementation("androidx.cardview:cardview:1.0.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

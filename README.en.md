@@ -1,6 +1,6 @@
-# FxxkMoondrop
+# MoonEar
 
-![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&labelColor=555555)
+![Android](https://img.shields.io/badge/Android-12L%2B-3DDC84?style=flat-square&labelColor=555555)
 ![Xposed](https://img.shields.io/badge/Xposed-API_102-E64A19?style=flat-square&labelColor=555555)
 ![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)

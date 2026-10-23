@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 官方 M3 Filled Button：样式决定高度 40dp / 圆角 20dp / 14sp / inset 0，并自带涟漪与状态层 -->
+<com.google.android.material.button.MaterialButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Material3.Button"
+    android:layout_width="wrap_content"
+    android:layout_height="40dp"
+    android:minWidth="88dp" />

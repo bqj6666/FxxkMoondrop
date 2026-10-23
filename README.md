@@ -1,6 +1,6 @@
-# FxxkMoondrop
+# MoonEar
 
-![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&labelColor=555555)
+![Android](https://img.shields.io/badge/Android-12L%2B-3DDC84?style=flat-square&labelColor=555555)
 ![Xposed](https://img.shields.io/badge/Xposed-API_102-E64A19?style=flat-square&labelColor=555555)
 ![Target](https://img.shields.io/badge/Target-gms_%7C_settings-007EC6?style=flat-square&labelColor=555555)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&labelColor=555555)
@@ -11,7 +11,7 @@
 
 > [![最新正式版](https://img.shields.io/github/v/release/bqj6666/FxxkMoondrop?style=flat-square&labelColor=555555&color=2ea44f&label=%E6%9C%80%E6%96%B0%E6%AD%A3%E5%BC%8F%E7%89%88)](https://github.com/bqj6666/FxxkMoondrop/releases/latest) ｜ [更新日志](CHANGELOG.md)
 
-Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
+**MoonEar**（前身 FxxkMoondrop，仓库名沿用）：Moondrop 蓝牙耳机助手。耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议直连**耳机读取状态、控制降噪。项目本体是一个 **LSPosed / Xposed 模块**。
 
 > **AI vibe coding声明**：本项目应用代码**部分使用 AI 辅助生成**，代码已经开发者人工审查与实机验证，但仍可能存在逻辑错误、安全缺陷或兼容性问题。**请仔细核对代码后再使用**，使用风险自负。
 >
@@ -34,8 +34,9 @@ Moondrop 蓝牙耳机助手：耳机连接时自动弹出 **Fast Pair 卡片**�
 - **9ECA 私有协议客户端**：音源切换 / EQ / MIC / SN（复用同一 GATT 连接，与 GAIA 并存）
 - **设备通知**：耳机电量与降噪控制合并为**一条**常驻通知（只显示左右耳，不含充电盒）；档位按钮带大图标、当前档位实心高亮，颜色随系统动态取色；按钮按设备**实际支持的能力**生成
 - **快捷设置磁贴**：下拉快捷面板的「降噪」磁贴，一次点击循环切换档位；档位不硬编码，与通知栏 / 主界面 / 官方面板共用同一份能力判据；耳机未连接时置灰，点它打开应用
-- **均衡器**：概览页入口（仅在耳机提供 9ECA 私有服务时出现）—— 预设可切换（下发失败自动回滚高亮），参量均衡只读（32 段频响曲线 + 非零增益频点）
+- **均衡器（3.3.0 重写）**：概览页入口，走经典蓝牙 SPP（`0A 05` 读 / `0A 06` 写）—— 5 段参数均衡可读可写（频点 / 增益 / Q / 预增益），带频响预览、自动预增益、"应用"后自动回读校验；预设从耳机读取并可直接切换；段数由回包长度反推，布局不符时自动转只读，不写坏其他型号
 - **弹窗时机**：等耳机就绪或连接后立即弹出、延迟 0 / 1 / 2 / 5 秒、锁屏不弹、横屏不弹（后两项默认关）
+- **调试模式（3.3.0 新增）**：设置 → 诊断里的开关。关闭时隐藏「服务探测（GATT）」「EQ 通道（SPP）」等排查入口；打开后额外出现「调试日志」，可直接查看应用内日志与相关 logcat（含 SPP 收发帧），方便定位问题
 - **无 Root 模式**：未检测到 Root 时自动回落为**仅通过通知栏与 App 主界面控制降噪**（GAIA BLE 直连本就不需要 Root）；所有 Root 依赖项静默停用，不报错、不弹窗
 - **M3 界面**：主页（英雄卡 + 状态面板 + 降噪三按钮）、设置页（外观 / 功能 / 自定义映射 / 后台 / 诊断，随系统深浅色 + Material You 动态取色）、关于页，全部使用 Material 3 组件
 - **权限检测**（整页二级界面）：6 项实时检查，按**必要权限**（蓝牙 / 通知 / GAIA 直连）与**可选权限**（电池白名单 / Root / FastPairHook 模块）分组呈现，缺失一键跳转修复；结论只看必要项，可选项缺失不算「权限没配好」

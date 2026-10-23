@@ -109,6 +109,86 @@ class M3Ui {
             }
         }
 
+        /**
+         * 带返回键的大标题页（独立 Activity 用）。
+         *
+         * 与 [largeHeaderPage] 的区别：标题栏里**内置返回键**，并自己处理状态栏内边距，
+         * 这样返回键属于标题栏、随栏一起收缩，不会再出现「悬浮在页面上不跟滚动、压到卡片」
+         * 的问题（那是把返回键挂到容器上导致的）。标题左移 56dp，收缩后落在返回键右侧。
+         */
+        @JvmStatic
+        fun largeHeaderPageWithBack(act: Activity, pal: ThemeUtil.Palette, title: String,
+                                    onBack: Runnable?): LargeHeaderPage {
+            val sbh = act.resources.getIdentifier("status_bar_height", "dimen", "android")
+                    .let { if (it > 0) act.resources.getDimensionPixelSize(it) else 0 }
+            val expandedPx = dp(act, 112) + sbh
+            val collapsedPx = dp(act, HEADER_COLLAPSED_DP) + sbh
+
+            val bar = android.widget.FrameLayout(act)
+            bar.setBackgroundColor(pal.surface)
+            bar.setPadding(0, sbh, 0, 0)
+
+            val barTitle = TextView(act)
+            barTitle.text = title
+            barTitle.textSize = 32f
+            barTitle.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            barTitle.setTextColor(pal.onSurface)
+            // 展开态标题左对齐内容（16dp）；收缩成顶栏时才让出 56dp（返回键 48 + 8）给返回键
+            // 展开态是**大标题**：字号 32sp、位于返回键下方；滚动后收成与返回键同行的小标题
+            bar.addView(barTitle, android.widget.FrameLayout.LayoutParams(-1, -2,
+                    Gravity.TOP or Gravity.START).also {
+                it.leftMargin = dp(act, 16)
+                it.topMargin = dp(act, 56)
+                it.rightMargin = dp(act, 16)
+            })
+
+            val back = backButton(act, pal, onBack)
+            // 返回键与标题**同一行**：展开时一起下移到标题那一行，收缩时一起上移（只改位置，不改标题字号）
+            val backLp = android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
+                    Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 56) }
+            bar.addView(back, backLp)
+
+            val sv = android.widget.ScrollView(act)
+            sv.id = R.id.m3_page_scroll
+            sv.setBackgroundColor(pal.surface)
+            sv.setPadding(0, expandedPx, 0, 0)
+            sv.clipToPadding = false
+
+            val container = android.widget.FrameLayout(act)
+            container.setBackgroundColor(pal.surface)
+            container.addView(sv, android.widget.FrameLayout.LayoutParams(-1, -1))
+            container.addView(bar, android.widget.FrameLayout.LayoutParams(-1, expandedPx).also { it.gravity = Gravity.TOP })
+
+            fun apply(t: Float) {
+                val h = (expandedPx + (collapsedPx - expandedPx) * t).toInt()
+                bar.layoutParams = bar.layoutParams.also { it.height = h }
+                // 32sp → 22sp：放大感来自这一段字号收缩
+                barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 32f - 10f * t)
+                // 返回键：56dp → 10dp（固定 48dp 高，中心 = top+24）
+                val backTm = dp(act, (56 - 46 * t).toInt())
+                // 标题：字号从 32sp 收到 22sp，行高跟着变，所以 top 要单独补偿，
+                // 才能让「文字中心」始终对齐「按钮中心」（否则收缩后文字会高于箭头）
+                val titleTm = dp(act, (56 - 38 * t).toInt())
+                val lp = barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams
+                if (lp != null) {
+                    if (lp.topMargin != titleTm || lp.leftMargin != dp(act, 56)) {
+                        lp.topMargin = titleTm; lp.leftMargin = dp(act, 56); barTitle.layoutParams = lp
+                    }
+                }
+                if (backLp.topMargin != backTm) { backLp.topMargin = backTm; back.layoutParams = backLp }
+            }
+            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
+                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
+                apply((sy.toFloat() / span).coerceIn(0f, 1f))
+            }
+            apply(0f)
+            sv.post {
+                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
+                apply((sv.scrollY.toFloat() / span).coerceIn(0f, 1f))
+            }
+            return LargeHeaderPage(container, sv, CollapseHeader(android.widget.LinearLayout(act), barTitle, expandedPx, collapsedPx))
+        }
+
         /** alpha2.53: 用大标题页骨架替换普通 ScrollView（三页统一入口）。 */
         @JvmStatic
         fun largeHeaderPage(act: Activity, pal: ThemeUtil.Palette, title: String): LargeHeaderPage {
@@ -254,6 +334,30 @@ class M3Ui {
             b.layoutParams = LinearLayout.LayoutParams(dp(c, 48), dp(c, 48))
             if (onBack != null) b.setOnClickListener { onBack.run() }
             return b
+        }
+
+
+        /**
+         * 简洁返回键：48dp 容器 + 居中箭头 + 圆形涟漪（半径 24dp 正好铺满触摸区）。
+         * 不用 Material 图标按钮：它的 inset/padding/背景形状会让按压轮廓偏移，
+         * 这个自绘版本位置与轮廓都完全可控。
+         */
+        @JvmStatic
+        fun backButton(act: Activity, pal: ThemeUtil.Palette, onBack: Runnable?): View {
+            val box = android.widget.FrameLayout(act)
+            val mask = android.graphics.drawable.GradientDrawable()
+            mask.shape = android.graphics.drawable.GradientDrawable.OVAL
+            mask.setColor(0xFFFFFFFF.toInt())
+            val rippleColor = android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x2B000000)
+            box.background = android.graphics.drawable.RippleDrawable(rippleColor, null, mask)
+            val iv = android.widget.ImageView(act)
+            iv.setImageResource(R.drawable.abc_ic_ab_back_material)
+            iv.imageTintList = android.content.res.ColorStateList.valueOf(pal.onSurface)
+            iv.isClickable = false
+            box.addView(iv, android.widget.FrameLayout.LayoutParams(dp(act, 24), dp(act, 24),
+                    Gravity.CENTER))
+            if (onBack != null) box.setOnClickListener { onBack.run() }
+            return box
         }
 
         /** 行尾 chevron（12dp 矢量，M3 navigation 指示） */
@@ -895,6 +999,43 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             return b
         }
 
+
+        /**
+         * 按压缩放形变（形状插值）：M3 Expressive 的按钮按下会缩小圆角，但 material 1.14
+         * **没有** Widget.Material3Expressive.IconButton 这类样式给图标按钮用（编译验证不存在），
+         * 所以这里用官方 MaterialShapeDrawable 自己做同语义的插值：按下 → 圆角变小，松手 → 复原。
+         * 只动 shapeAppearanceModel，不改尺寸/背景/状态层，点击行为不受影响（触摸监听返回 false）。
+         */
+        @JvmStatic
+        fun attachPressMorph(c: Context, v: View, idleDp: Float, pressedDp: Float) {
+            val btn = v as? MaterialButton ?: return
+            val density = c.resources.displayMetrics.density
+            var cur = idleDp * density
+            var anim: android.animation.ValueAnimator? = null
+            fun animateTo(target: Float) {
+                anim?.cancel()
+                val from = cur
+                anim = android.animation.ValueAnimator.ofFloat(from, target).also { a ->
+                    a.duration = 120
+                    a.interpolator = android.view.animation.DecelerateInterpolator()
+                    a.addUpdateListener {
+                        cur = it.animatedValue as Float
+                        btn.shapeAppearanceModel = btn.shapeAppearanceModel.toBuilder()
+                                .setAllCornerSizes(cur).build()
+                    }
+                    a.start()
+                }
+            }
+            btn.setOnTouchListener { _, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> animateTo(pressedDp * density)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> animateTo(idleDp * density)
+                }
+                false
+            }
+        }
+
         /**
          * 官方 M3 Icon Button（toggle 用法）+ 居中自绘图标。
          *
@@ -908,6 +1049,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                        icon: android.graphics.drawable.Drawable?,
                        sizeDp: Int = 56, iconDp: Int = 28): android.widget.FrameLayout {
             val holder = android.widget.FrameLayout(c)
+            // 用 Expressive 图标按钮样式：按下有官方形状形变（普通 materialIconButtonStyle 在
+            // 这套主题下不带动画，用户反馈「降噪/增益按钮按下去没有圆角→方形形变」）
             val btn = MaterialButton(c, null, com.google.android.material.R.attr.materialIconButtonStyle)
             btn.text = ""
             btn.isCheckable = true
@@ -917,6 +1060,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             btn.insetBottom = 0
             btn.setPadding(0, 0, 0, 0)
             btn.tag = "it_btn"
+            // 圆形 → 按下收成 12dp 圆角（与 M3 Expressive 按钮的按压缩角语义一致）
+            attachPressMorph(c, btn, sizeDp / 2f, 12f)
             btn.backgroundTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(pal.primary, pal.container))
