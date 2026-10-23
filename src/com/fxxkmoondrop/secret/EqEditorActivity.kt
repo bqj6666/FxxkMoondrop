@@ -129,7 +129,7 @@ class EqEditorActivity : Activity() {
 
         contentOf(content)
 
-        body.setPadding(dp(12), dp(8), dp(12), dp(16))
+        body.setPadding(dp(12), dp(16), dp(12), dp(16))
         page.sv.addView(body, LinearLayout.LayoutParams(-1, -2))
         setContentView(page.container)
         M3Ui.fitSystemBars(this, pal)
