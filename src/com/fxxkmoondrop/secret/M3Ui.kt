@@ -164,16 +164,18 @@ class M3Ui {
                 bar.layoutParams = bar.layoutParams.also { it.height = h }
                 // 32sp → 22sp：放大感来自这一段字号收缩
                 barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 32f - 10f * t)
-                // 标题与返回键同步移动：展开时都在 56dp（大标题那一行），收起时都到 10dp（顶栏行）
-                val tm = dp(act, (56 - 46 * t).toInt())
+                // 返回键：56dp → 10dp（固定 48dp 高，中心 = top+24）
+                val backTm = dp(act, (56 - 46 * t).toInt())
+                // 标题：字号从 32sp 收到 22sp，行高跟着变，所以 top 要单独补偿，
+                // 才能让「文字中心」始终对齐「按钮中心」（否则收缩后文字会高于箭头）
+                val titleTm = dp(act, (56 - 38 * t).toInt())
                 val lp = barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams
                 if (lp != null) {
-                    // 展开态标题在返回键右侧（左 72dp）；收起后仍然 72dp，始终不与按钮重叠
-                    if (lp.topMargin != tm || lp.leftMargin != dp(act, 72)) {
-                        lp.topMargin = tm; lp.leftMargin = dp(act, 72); barTitle.layoutParams = lp
+                    if (lp.topMargin != titleTm || lp.leftMargin != dp(act, 72)) {
+                        lp.topMargin = titleTm; lp.leftMargin = dp(act, 72); barTitle.layoutParams = lp
                     }
                 }
-                if (backLp.topMargin != tm) { backLp.topMargin = tm; back.layoutParams = backLp }
+                if (backLp.topMargin != backTm) { backLp.topMargin = backTm; back.layoutParams = backLp }
             }
             sv.setOnScrollChangeListener { _, _, sy, _, _ ->
                 val span = (expandedPx - collapsedPx).coerceAtLeast(1)
