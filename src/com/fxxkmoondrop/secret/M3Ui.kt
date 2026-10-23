@@ -143,8 +143,10 @@ class M3Ui {
             })
 
             val back = arrowBack(act, pal, onBack)
-            bar.addView(back, android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
-                    Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 6) })
+            // 返回键与标题**同一行**：展开时一起下移到标题那一行，收缩时一起上移（只改位置，不改标题字号）
+            val backLp = android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
+                    Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 56) }
+            bar.addView(back, backLp)
 
             val sv = android.widget.ScrollView(act)
             sv.id = R.id.m3_page_scroll
@@ -162,15 +164,16 @@ class M3Ui {
                 bar.layoutParams = bar.layoutParams.also { it.height = h }
                 // 32sp → 22sp：放大感来自这一段字号收缩
                 barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 32f - 10f * t)
-                // 位置随滚动从「返回键下方」过渡到「与返回键同一行」，同时让出左边空间
+                // 标题与返回键同步移动：展开时都在 56dp（大标题那一行），收起时都到 10dp（顶栏行）
+                val tm = dp(act, (56 - 46 * t).toInt())
                 val lp = barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams
                 if (lp != null) {
-                    val tm = dp(act, (56 - 46 * t).toInt())
-                    val lm = dp(act, (16 + 56 * t).toInt())
-                    if (lp.topMargin != tm || lp.leftMargin != lm) {
-                        lp.topMargin = tm; lp.leftMargin = lm; barTitle.layoutParams = lp
+                    // 展开态标题在返回键右侧（左 72dp）；收起后仍然 72dp，始终不与按钮重叠
+                    if (lp.topMargin != tm || lp.leftMargin != dp(act, 72)) {
+                        lp.topMargin = tm; lp.leftMargin = dp(act, 72); barTitle.layoutParams = lp
                     }
                 }
+                if (backLp.topMargin != tm) { backLp.topMargin = tm; back.layoutParams = backLp }
             }
             sv.setOnScrollChangeListener { _, _, sy, _, _ ->
                 val span = (expandedPx - collapsedPx).coerceAtLeast(1)
