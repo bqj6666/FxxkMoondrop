@@ -121,7 +121,7 @@ class M3Ui {
                                     onBack: Runnable?): LargeHeaderPage {
             val sbh = act.resources.getIdentifier("status_bar_height", "dimen", "android")
                     .let { if (it > 0) act.resources.getDimensionPixelSize(it) else 0 }
-            val expandedPx = dp(act, HEADER_EXPANDED_DP) + sbh
+            val expandedPx = dp(act, 96) + sbh
             val collapsedPx = dp(act, HEADER_COLLAPSED_DP) + sbh
 
             val bar = android.widget.FrameLayout(act)
@@ -134,11 +134,11 @@ class M3Ui {
             barTitle.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             barTitle.setTextColor(pal.onSurface)
             // 展开态标题左对齐内容（16dp）；收缩成顶栏时才让出 56dp（返回键 48 + 8）给返回键
-            // 标题紧跟返回键下方 8dp（不再贴栏底，否则离返回键太远显得偏下）
+            // 标题与返回键**同一行**：左边距 72dp（返回键 48+8+16 间距），顶部 10dp 与按钮垂直居中
             bar.addView(barTitle, android.widget.FrameLayout.LayoutParams(-1, -2,
                     Gravity.TOP or Gravity.START).also {
-                it.leftMargin = dp(act, 16)
-                it.topMargin = dp(act, 56)   // 返回键 48 + 8
+                it.leftMargin = dp(act, 72)
+                it.topMargin = dp(act, 10)
                 it.rightMargin = dp(act, 16)
             })
 
@@ -162,13 +162,8 @@ class M3Ui {
                 bar.layoutParams = bar.layoutParams.also { it.height = h }
                 barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,
                         HEADER_EXPANDED_SP + (HEADER_COLLAPSED_SP - HEADER_EXPANDED_SP) * t)
-                // 左边距随收缩从 16dp 过渡到 56dp：展开时与内容对齐，收起后落在返回键右侧
-                val lm = dp(act, (16 + 40 * t).toInt())
-                (barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams)?.let {
-                    if (it.leftMargin != lm) { it.leftMargin = lm; barTitle.layoutParams = it }
-                }
-                // 收起时标题上移，与返回键在同一行（栏高 64dp，标题垂直居中）
-                val tm = dp(act, (56 - 44 * t).toInt())
+                // 标题始终与返回键同一行：位置不动，只随滚动收字号
+                val tm = dp(act, (10 + 4 * t).toInt())
                 (barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams)?.let {
                     if (it.topMargin != tm) { it.topMargin = tm; barTitle.layoutParams = it }
                 }
