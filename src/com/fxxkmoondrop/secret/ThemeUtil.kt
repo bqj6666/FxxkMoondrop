@@ -1,254 +1,126 @@
 package com.fxxkmoondrop.secret
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.os.Build
+import android.util.TypedValue
+import androidx.core.view.WindowCompat
 
-/**
- * alpha2.0: 官方 LSPosed 主题架构（VectorTheme 对位）——
- * 跟随系统/浅色/深色 主题模式 + 动态取色开关 + AMOLED 纯黑 + 种子颜色。
- * SP("cfg") 键：theme_mode(0系统/1浅/2深)、dynamic_color(bool,默认开)、amoled(bool)、seed(int)。
- *
- * alpha2.52: 色板按 Material 3 语义角色重排，修复「卡片被绑到强调色」的老问题：
- *  - card 改取中性 surfaceContainer。原先用 system_accent1_800，设备实测动态取色下
- *    卡片 = #49261E（棕）且占屏 67%，整页发棕 —— 这是"AMOLED 看起来奇怪"的真正来源。
- *  - AMOLED 改为真·纯黑：surface 与 card 同为 #000000，层级改由 1dp 描边(cardStroke)表达，
- *    不再是「黑底 + #0F0F0F 灰块」的混搭。
- *  - AMOLED 下强调容器(container)一并压暗，避免纯黑底上残留高饱和色块。
- *  - AMOLED 仅在深色主题生效，由 [amoledOn] 统一判定；浅色下不再是一个点了没反应的开关。
- */
 class ThemeUtil {
     companion object {
         private const val SP = "cfg"
+        // A module package context inside GMS/Settings cannot read the module's private cfg.
+        private fun isApp(c: Context) = c.packageName == XposedEntry.PKG_APP &&
+            c.applicationInfo.uid == android.os.Process.myUid()
+        private fun prefs(c: Context) = c.getSharedPreferences(SP, Context.MODE_PRIVATE)
+        private fun systemDark(c: Context) =
+            (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-        /** 主题模式：0=跟随系统 1=浅色 2=深色 */
-        @JvmStatic
-        fun themeMode(c: Context): Int =
-                c.getSharedPreferences(SP, Context.MODE_PRIVATE).getInt("theme_mode", 0)
+        @JvmStatic fun themeMode(c: Context): Int = if (isApp(c)) prefs(c).getInt("theme_mode", 0) else 0
+        @JvmStatic fun dynColor(c: Context): Boolean = !isApp(c) || prefs(c).getBoolean("dynamic_color", true)
+        @JvmStatic fun amoled(c: Context): Boolean = isApp(c) && prefs(c).getBoolean("amoled", false)
+        @JvmStatic fun amoledOn(c: Context): Boolean = amoled(c) && isDark(c)
+        @JvmStatic fun seed(c: Context): Int = if (isApp(c)) prefs(c).getInt("seed", 0).coerceIn(SEEDS.indices) else 0
+        @JvmStatic fun seedColor(c: Context): Int = SEEDS[seed(c)]
+        @JvmField val SEEDS = ThemeScheme.seeds
+        @JvmStatic fun seedName(c: Context, index: Int): String = Lang.t(c,
+            arrayOf("粉色", "紫色", "蓝色", "绿色", "橙色")[index],
+            arrayOf("Pink", "Purple", "Blue", "Green", "Orange")[index])
 
-        /** 动态取色（跟随壁纸），默认开 */
-        @JvmStatic
-        fun dynColor(c: Context): Boolean =
-                c.getSharedPreferences(SP, Context.MODE_PRIVATE).getBoolean("dynamic_color", true)
+        private fun selection(c: Context, systemSurface: Boolean = false): ThemeScheme.Selection {
+            // Notifications belong to System UI, not the app's overridden configuration.
+            val dark = if (systemSurface) systemDark(c.applicationContext) else systemDark(c)
+            return ThemeScheme.select(themeMode(c), dark, dynColor(c), Build.VERSION.SDK_INT,
+                seed(c), amoled(c), systemSurface)
+        }
+        @JvmStatic fun isDark(c: Context): Boolean = selection(c).dark
 
-        /** AMOLED 纯黑开关（仅深色主题下生效） */
-        @JvmStatic
-        fun amoled(c: Context): Boolean =
-                c.getSharedPreferences(SP, Context.MODE_PRIVATE).getBoolean("amoled", false)
+        private fun wallpaperColor(c: Context, name: String): Int? {
+            if (Build.VERSION.SDK_INT < 31) return null
+            val id = c.resources.getIdentifier(name, "color", "android")
+            return if (id == 0) null else try { c.getColor(id) } catch (_: Resources.NotFoundException) { null }
+        }
 
-        /** AMOLED 是否真的生效：开着 且 当前为深色。UI 与色板统一用这个判定 */
-        @JvmStatic
-        fun amoledOn(c: Context): Boolean = amoled(c) && isDark(c)
+        /** Only app Activities call this. Never change an injected Settings/GMS context. */
+        @JvmStatic fun attach(c: Context): Context {
+            val config = Configuration(c.resources.configuration)
+            config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                if (isDark(c)) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+            return c.createConfigurationContext(config)
+        }
 
-        /** 种子颜色索引（动态色关闭时生效），默认 0=官方 LSPosed 粉 #f48fb1 */
-        @JvmStatic
-        fun seed(c: Context): Int =
-                Math.max(0, Math.min(SEEDS.size - 1,
-                        c.getSharedPreferences(SP, Context.MODE_PRIVATE).getInt("seed", 0)))
-
-        /** 官方种子色表（首项 = LSPosed Manager colors.xml 里的 #f48fb1） */
-        @JvmField
-        val SEEDS = intArrayOf(
-                0xFFF48FB1.toInt(), 0xFF6750A4.toInt(), 0xFF4FC3F7.toInt(),
-                0xFF81C784.toInt(), 0xFFFFB74D.toInt())
-        @JvmField
-        val SEED_NAMES = arrayOf("粉色", "紫色", "蓝色", "绿色", "橙色")
-
-        @JvmStatic
-        fun seedColor(c: Context): Int = SEEDS[seed(c)]
-
-        /** 深色判定：主题模式优先，跟随系统时读系统 uiMode */
-        @JvmStatic
-        fun isDark(c: Context): Boolean {
-            return when (themeMode(c)) {
-                1 -> false
-                2 -> true
-                else -> (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                        Configuration.UI_MODE_NIGHT_YES
+        /** Module resources and a local theme only; never apply module R IDs to host resources. */
+        @JvmStatic fun moduleUiContext(host: Context): Context {
+            val base = host.createPackageContext(XposedEntry.PKG_APP, Context.CONTEXT_IGNORE_SECURITY)
+                .createConfigurationContext(Configuration(host.resources.configuration))
+            return android.view.ContextThemeWrapper(base, R.style.Theme_FxxkMoondrop).also {
+                applyTheme(it)
             }
         }
 
-        /**
-         * 按**应用自己的**亮暗偏好解析 @color 资源。
-         *
-         * ## 为什么不能直接 c.getColor()
-         *
-         * 本应用亮暗由 theme_mode 偏好决定（0 跟随系统 / 1 浅色 / 2 深色），
-         * 不是系统 uiMode。但资源限定符（values vs values-night）**只认系统 uiMode**。
-         * 两者不一致时（典型：手机深色、用户把 app 设成浅色）直接 getColor
-         * 会拿到 night 的值，界面串色。全项目没有
-         * AppCompatDelegate.setDefaultNightMode，不能指望系统同步。
-         *
-         * 这里按 dark 参数重写 Configuration.uiMode 再取色，保证「app 说了算」，
-         * 同时色值集中在 values / values-night 的 colors.xml，Kotlin 里不出现颜色字面量。
-         */
-        @JvmStatic
-        fun themedColor(c: Context, dark: Boolean, resId: Int): Int = try {
-            val cfg = android.content.res.Configuration(c.resources.configuration)
-            val mask = android.content.res.Configuration.UI_MODE_NIGHT_MASK
-            cfg.uiMode = (cfg.uiMode and mask.inv()) or
-                    (if (dark) android.content.res.Configuration.UI_MODE_NIGHT_YES
-                    else android.content.res.Configuration.UI_MODE_NIGHT_NO)
-            c.createConfigurationContext(cfg).getColor(resId)
-        } catch (_: Throwable) {
-            // 兜底必须是**不会抛**的：这层代码也会在别的进程里跑（蓝牙详情页注入，
-            // Context 是 Settings 的 Resources，解析不到本应用的 @color id → 直接抛
-            // Resources$NotFoundException，于是整个注入面板构建失败、只剩一行标题）。
-            // 返回 0 无所谓：调用点都是 `dyn(系统动态色, themedColor(...))`，
-            // dyn 能取到系统色时这个兜底值根本不会被使用。
-            try {
-                c.getColor(resId)
-            } catch (_: Throwable) {
-                0
+        @JvmStatic fun applyTheme(context: Context) {
+            val s = selection(context)
+            val styles = if (s.dark) intArrayOf(
+                R.style.ThemeOverlay_FxxkMoondrop_Seed0_Dark, R.style.ThemeOverlay_FxxkMoondrop_Seed1_Dark,
+                R.style.ThemeOverlay_FxxkMoondrop_Seed2_Dark, R.style.ThemeOverlay_FxxkMoondrop_Seed3_Dark,
+                R.style.ThemeOverlay_FxxkMoondrop_Seed4_Dark
+            ) else intArrayOf(
+                R.style.ThemeOverlay_FxxkMoondrop_Seed0_Light, R.style.ThemeOverlay_FxxkMoondrop_Seed1_Light,
+                R.style.ThemeOverlay_FxxkMoondrop_Seed2_Light, R.style.ThemeOverlay_FxxkMoondrop_Seed3_Light,
+                R.style.ThemeOverlay_FxxkMoondrop_Seed4_Light
+            )
+            context.theme.applyStyle(styles[s.seed], true)
+            if (s.wallpaper && ThemeScheme.wallpaperResources(s.dark).values.all { wallpaperColor(context, it) != null }) {
+                context.theme.applyStyle(if (s.dark) R.style.ThemeOverlay_FxxkMoondrop_Wallpaper_Dark
+                    else R.style.ThemeOverlay_FxxkMoondrop_Wallpaper_Light, true)
+            }
+            if (s.amoled) context.theme.applyStyle(R.style.ThemeOverlay_FxxkMoondrop_Amoled, true)
+        }
+
+        @JvmStatic fun systemBars(activity: Activity, pal: Palette) {
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                isAppearanceLightStatusBars = !pal.dark
+                isAppearanceLightNavigationBars = !pal.dark
             }
         }
 
-        /** Android 12+ 系统莫奈动态色（动态色开启时）；关闭或低版本回退 fallback */
-        @JvmStatic
-        fun dyn(c: Context, resName: String, fallback: Int): Int {
-            if (dynColor(c) && Build.VERSION.SDK_INT >= 31) {
-                try {
-                    val id = c.resources.getIdentifier(resName, "color", "android")
-                    if (id != 0) return c.resources.getColor(id, c.theme)
-                } catch (_: Exception) { }
+        private fun roles(c: Context, s: ThemeScheme.Selection, systemSurface: Boolean): Map<String, Int> {
+            val roles = ThemeScheme.resolve(s) { wallpaperColor(c, it) }
+            if (isApp(c) || systemSurface) return roles
+            // Read host attributes by host resource name, never module R IDs or host-private cfg.
+            // Hosts without Material attributes use the same system-wallpaper/tonal fallback.
+            return roles.mapValues { (name, fallback) ->
+                val id = c.resources.getIdentifier(name, "attr", c.packageName)
+                val value = TypedValue()
+                if (id != 0 && c.theme.resolveAttribute(id, value, true) &&
+                    value.type in TypedValue.TYPE_FIRST_COLOR_INT..TypedValue.TYPE_LAST_COLOR_INT) value.data
+                else fallback
             }
-            return fallback
-        }
-
-        /** 与白色/黑色按比例混合（官方种子调色近似） */
-        private fun mix(color: Int, t: Float, towardWhite: Boolean): Int {
-            val r = (color ushr 16) and 0xFF
-            val g = (color ushr 8) and 0xFF
-            val b = color and 0xFF
-            val k = if (towardWhite) t else (1 - t)
-            val R = Math.round(r * k + (if (towardWhite) 255 * (1 - k) else 0f))
-            val G = Math.round(g * k + (if (towardWhite) 255 * (1 - k) else 0f))
-            val B = Math.round(b * k + (if (towardWhite) 255 * (1 - k) else 0f))
-            return 0xFF000000.toInt() or (R shl 16) or (G shl 8) or B
         }
     }
 
-    /**
-     * 一套与 Material 3 语义角色对齐的色板（深浅／动态／种子／AMOLED 全支持）。
-     *
-     * 角色对照：primary=primary、container=secondaryContainer（指示器/图标底/chip）、
-     * surface=surface、card=surfaceContainer。
-     */
-    class Palette(c: Context) {
-        @JvmField val dark: Boolean
-        @JvmField val amoledOn: Boolean
-        @JvmField val primary: Int
-        @JvmField val onPrimary: Int
-        @JvmField val container: Int
-        @JvmField val onContainer: Int
-        @JvmField val surface: Int
-        @JvmField val card: Int
-        /** 卡片描边色；0 表示不描边（仅 AMOLED 下启用，用于区分同为纯黑的层级） */
-        @JvmField val cardStroke: Int
-        @JvmField val onSurface: Int
-        @JvmField val onVariant: Int
-        @JvmField val outline: Int
-        /** 卡片间/行间分隔线色（AMOLED 下与描边同源） */
-        @JvmField val divider: Int
-        /** M3 surfaceContainerHighest：开关关闭态轨道、未选中容器 */
-        @JvmField val surfaceContainerHighest: Int
-        @JvmField val green: Int
-        @JvmField val red: Int
-
-        init {
-            dark = isDark(c)
-            val on = amoled(c) && dark
-            amoledOn = on
-
-            val prim: Int
-            val onPrim: Int
-            var cont: Int
-            var onCont: Int
-            val surf: Int
-            val cardC: Int
-
-            if (dynColor(c)) {
-                prim = dyn(c, "system_accent1_400", themedColor(c, dark, R.color.m3_primary))
-                // 浅色下 primary 是深色，文字必须用白；深色下 primary 是浅色，文字用深色
-                onPrim = dyn(c, "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary))
-                cont = dyn(c, if (dark) "system_accent1_800" else "system_accent1_50", themedColor(c, dark, R.color.m3_primary_container))
-                onCont = dyn(c, if (dark) "system_accent1_50" else "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary_container))
-                // 页面底色：深色取 neutral1_900，浅色取 neutral1_10。
-                // ⚠️ 两个 key 必须按 dark 分支 —— system_neutral1_900 **恒为深色**，
-                //    浅色模式下也用它，整页会变黑而文字仍是深色，糊成一团。
-                //    （3.3.1 引入过这个回归，别再把 if (dark) 去掉。）
-                // 页面底色 / 卡片 = 一对**官方 M3 角色**，全部取自动态 neutral 调色板：
-                //   页面底 = surfaceContainer（tone 94，框架里最接近的是 neutral1_50）
-                //   卡片   = surface       （tone 98，neutral1_10）
-                // 这样「浅底 + 更亮卡片」的层级完全由 tone 差（4 档）表达，
-                // 不再往底色里手掺黑（那会把壁纸中性色污染成假灰，也不符合规范）。
-                // 深色：页面底 neutral1_900(tone10)、卡片 neutral1_800(tone20)，卡片同样更亮。
-                // ⚠️ neutral1_0 = 白、neutral1_1000 = 黑（框架命名是反的，实测确认）。
-                surf = if (on) android.graphics.Color.BLACK
-                else dyn(c, if (dark) "system_neutral1_900" else "system_neutral1_50",
-                        themedColor(c, dark, R.color.m3_surface))
-                // 卡片走中性 surfaceContainer。绝不使用强调色，否则整页被染成强调色相。
-                cardC = if (on) c.getColor(R.color.m3_amoled_card)
-                else dyn(c, if (dark) "system_neutral1_800" else "system_neutral1_10",
-                        themedColor(c, dark, R.color.m3_surface_container))
-                onSurface = dyn(c, if (dark) "system_neutral1_100" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
-            } else {
-                // 种子色生成（官方 LSPosed seed 近似调色）
-                val seed = seedColor(c)
-                prim = if (dark) mix(seed, 0.55f, false) else seed
-                onPrim = if (dark) mix(seed, 0.55f, true) else themedColor(c, dark, R.color.m3_on_primary)
-                cont = if (dark) mix(seed, 0.60f, false) else mix(seed, 0.72f, true)
-                onCont = if (dark) mix(seed, 0.60f, true) else mix(seed, 0.55f, false)
-                surf = if (on) android.graphics.Color.BLACK else themedColor(c, dark, R.color.m3_surface)
-                cardC = if (on) c.getColor(R.color.m3_amoled_card) else themedColor(c, dark, R.color.m3_surface_container)
-                onSurface = themedColor(c, dark, R.color.m3_on_surface)
-            }
-
-            // 次级文字 / 描边也全部走动态中性调色板（M3 onSurfaceVariant=tone30、outline=tone50、
-            // outlineVariant=tone80；深色反向取亮几档）。原先这三格是写死的紫调字面量，
-            // 动态取色下整页是壁纸色、只有描边还是基线紫，层级看着发脏。
-            onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
-                    themedColor(c, dark, R.color.m3_on_surface_variant))
-            outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
-                    themedColor(c, dark, R.color.m3_outline))
-            green = themedColor(c, dark, R.color.m3_green)
-            red = themedColor(c, dark, R.color.m3_red)
-
-            if (on) {
-                // alpha2.52: 纯黑底上不放强调色容器，改用中性抬高色，
-                // 避免纯黑页面上残留暖／彩色块（旧实现 = 强调色 x0.55，仍是暖棕）
-                cont = c.getColor(R.color.m3_amoled_container)
-                onCont = onSurface
-            }
-            // 3.3.1: 卡片改为 M3 **Outlined** 规范（= org.lsposed.manager 的做法）。
-            //
-            // 依据 material-1.14.0.aar 实测：
-            //   Widget.Material3.CardView.Outlined
-            //     strokeWidth = m3_comp_outlined_card_outline_width = **1dp**
-            //   描边色用 M3 的 outlineVariant（低对比，不是 outline）。
-            //
-            // 上一次（alpha2.52）把描边整个去掉，用户反馈"卡片选项还是一样丑"——
-            // 纯靠填充色差分层在浅色下几乎看不见（#FFFFFF 卡片 vs #F3EDF7 底）。
-            // 现在按 M3 规范补回细描边，与 LSPosed 设置页观感一致。
-            //
-            // AMOLED 纯黑下同样保留：卡片 #101010 与纯黑背景几乎同色，
-            // 没有描边就彻底分不出层级。
-            cardStroke = dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
-                    themedColor(c, dark, R.color.m3_outline_variant))
-            // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
-            divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())
-            // 注：Android 的 tonal palette 只提供 tone 0/10/50/100/200…/1000，没有 90。
-            // 原先写 system_neutral1_90 会 getIdentifier 失败 → 永远走 fallback，
-            // 等于浅色下这格从未跟随壁纸。改用最接近的有效 tone 100。
-            surfaceContainerHighest = if (on) c.getColor(R.color.m3_amoled_surface_container_highest)
-            else dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_100", themedColor(c, dark, R.color.m3_surface_container_highest))
-
-            primary = prim
-            onPrimary = onPrim
-            container = cont
-            onContainer = onCont
-            surface = surf
-            card = cardC
-        }
+    /** One scheme for hand-colored Views; the numeric/resource overlay tests keep XML in lockstep. */
+    class Palette(c: Context, systemSurface: Boolean = false) {
+        private val selection = selection(c, systemSurface)
+        private val roles = roles(c, selection, systemSurface)
+        @JvmField val dark = selection.dark
+        @JvmField val amoledOn = selection.amoled
+        @JvmField val primary = roles.getValue("colorPrimary")
+        @JvmField val onPrimary = roles.getValue("colorOnPrimary")
+        @JvmField val container = roles.getValue("colorSecondaryContainer")
+        @JvmField val onContainer = roles.getValue("colorOnSecondaryContainer")
+        @JvmField val surface = roles.getValue("colorSurface")
+        @JvmField val card = roles.getValue("colorSurfaceContainer")
+        @JvmField val cardStroke = roles.getValue("colorOutlineVariant")
+        @JvmField val onSurface = roles.getValue("colorOnSurface")
+        @JvmField val onVariant = roles.getValue("colorOnSurfaceVariant")
+        @JvmField val outline = roles.getValue("colorOutline")
+        @JvmField val divider = roles.getValue("colorOutlineVariant")
+        @JvmField val surfaceContainerHighest = roles.getValue("colorSurfaceContainerHighest")
+        @JvmField val green = ThemeScheme.success(dark)
+        @JvmField val red = roles.getValue("colorError")
+        @JvmField val warning = roles.getValue("colorTertiary")
     }
 }

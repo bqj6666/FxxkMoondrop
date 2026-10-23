@@ -203,7 +203,14 @@ class SettingsFragment : Fragment() {
         seedLabel.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         seedLabel.setTextColor(pal.onSurface)
         seedLabel.setPadding(0, 0, 0, 0)
-        seedRow!!.addView(seedLabel, LinearLayout.LayoutParams(0, -2, 1f))
+        seedLabel.maxWidth = dp(120)
+        seedRow!!.addView(seedLabel, LinearLayout.LayoutParams(-2, -2))
+        // Keep 48dp targets reachable at large font/display sizes without changing the dots.
+        val seedOptions = LinearLayout(requireContext())
+        val seedScroll = android.widget.HorizontalScrollView(requireContext())
+        seedScroll.isHorizontalScrollBarEnabled = false
+        seedScroll.addView(seedOptions)
+        seedRow!!.addView(seedScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
         val curSeed = ThemeUtil.seed(requireContext())
         for (si in ThemeUtil.SEEDS.indices) {
             val seedCol = ThemeUtil.SEEDS[si]
@@ -213,15 +220,21 @@ class SettingsFragment : Fragment() {
             dg.setColor(seedCol)
             if (si == curSeed) dg.setStroke(dp(3), pal.onSurface)
             dot.background = dg
-            val dlp = LinearLayout.LayoutParams(dp(26), dp(26))
-            dlp.marginStart = dp(6)
-            dot.setOnClickListener {
+            dot.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            val target = FrameLayout(requireContext())
+            target.contentDescription = Lang.t("种子颜色", "Seed color") + ": " + ThemeUtil.seedName(requireContext(), si)
+            target.isSelected = si == curSeed
+            target.isFocusable = true
+            target.addView(dot, FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
+            val dlp = LinearLayout.LayoutParams(dp(48), dp(48))
+            target.setOnClickListener {
                 // 选种子色 = 官方互斥：自动关闭动态取色，储存并即时重建
                 getSP().edit().putInt("seed", si).putBoolean("dynamic_color", false).commit()
                 scheduleRebuild(0L)
             }
-            seedRow!!.addView(dot, dlp)
+            seedOptions.addView(target, dlp)
         }
+        seedScroll.post { seedScroll.scrollTo(seedOptions.getChildAt(curSeed).left, 0) }
         if (!ThemeUtil.dynColor(requireContext())) {
             appear.addView(spacer(dp(12)))
             // 动画必须作用在**卡片容器**上：MaterialCardView 按形状裁剪子视图，
