@@ -753,26 +753,17 @@ class FastPairHookEntry {
             for (m in 0..3) {
                 val holder = decor.findViewWithTag<android.view.View>("fxxk_mode_btn_" + m) ?: continue
                 val bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg") ?: holder
-                val mb = bgV as? com.google.android.material.button.MaterialButton
-                if (mb != null) {
-                    val mp = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(mb.context) } catch (_: Throwable) { null }
-                    if (mp != null) {
-                        val on = m == mode
-                        mb.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                                if (on) mp.primary else mp.container)
-                        mb.iconTint = android.content.res.ColorStateList.valueOf(
-                                if (on) mp.onPrimary else mp.onContainer)
-                        // M3 Expressive：toggle 图标按钮「选中 = 圆角方形（12dp），未选中 = 圆形」，
-                        // 按压时再往 12dp 收；形变的 idle 值要跟着选中态变，否则选中后按下去会被拉回圆
-                        val d = mb.resources.displayMetrics.density
-                        val idle = if (on) 12f else 24f
-                        mb.shapeAppearanceModel = mb.shapeAppearanceModel.toBuilder()
-                                .setAllCornerSizes(idle * d).build()
-                        com.fxxkmoondrop.secret.M3Ui.attachPressMorph(mb.context, mb, idle, 12f)
-                    }
-                } else {
-                    bgV.background = if (m == mode) buildModeHighlightBg(act) else buildCircleRipple(act)
+                val mp = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(act) } catch (_: Throwable) { null }
+                val on = m == mode
+                val fill = when {
+                    mp == null -> if (on) 0x66FFFFFF else 0x29FFFFFF
+                    on -> mp.primary
+                    else -> mp.container
                 }
+                val dd = bgV.resources.displayMetrics.density
+                val radius = if (on) 12f else 24f
+                bgV.background = modeShapeBg(dd, fill, on, radius)
+                holder.isSelected = on
                 // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
                 try {
                     bgV.alpha = 0.4f
@@ -825,6 +816,43 @@ class FastPairHookEntry {
     }
 
     /** alpha1.20: 高亮圆底：亮色半透明填充 + 白色描边（深色弹窗上醒目） */
+    /** 当前选中态对应的「静止圆角半径」（dp）：选中=12（圆角方形），未选中=24（圆形） */
+    @Volatile private var sModeIdleRadius = 12f
+
+    /** 形状背景：selected -> 12dp 圆角方形，否则圆形；带圆形涟漪 */
+    private fun modeShapeBg(density: Float, color: Int, selected: Boolean,
+                            radiusDp: Float): android.graphics.drawable.Drawable {
+        val g = android.graphics.drawable.GradientDrawable()
+        if (selected) {
+            g.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            g.cornerRadius = radiusDp * density
+        } else {
+            g.shape = android.graphics.drawable.GradientDrawable.OVAL
+        }
+        g.setColor(color)
+        val mask = android.graphics.drawable.GradientDrawable()
+        mask.shape = android.graphics.drawable.GradientDrawable.OVAL
+        mask.setColor(0xFFFFFFFF.toInt())
+        return android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF), g, mask)
+    }
+
+    /** 按压时把自绘背景的圆角从 current 动画到 target（M3 的按压缩角语义） */
+    private fun animateModeShape(bgV: android.view.View?, density: Float, targetDp: Float) {
+        val rp = bgV?.background as? android.graphics.drawable.RippleDrawable ?: return
+        val g = try { rp.getDrawable(0) as? android.graphics.drawable.GradientDrawable } catch (_: Throwable) { null } ?: return
+        val from = 24f  // 近似：圆的半径
+        val anim = android.animation.ValueAnimator.ofFloat(from, targetDp)
+        anim.duration = 120
+        anim.interpolator = android.view.animation.DecelerateInterpolator()
+        anim.addUpdateListener {
+            val v = it.animatedValue as Float
+            g.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            g.cornerRadius = v * density
+        }
+        anim.start()
+    }
+
     private fun buildModeHighlightBg(act: android.app.Activity): android.graphics.drawable.Drawable {
         try {
             val d = act.resources.displayMetrics.density
@@ -1105,36 +1133,40 @@ class FastPairHookEntry {
         val item = android.widget.LinearLayout(act)
         item.orientation = android.widget.LinearLayout.VERTICAL
         item.gravity = android.view.Gravity.CENTER_HORIZONTAL
-        // 官方 M3 图标按钮：MaterialButton + 自绘图标，按压沿用 App 内同一套形状形变
-        // （原来是自绘圆底 + 0.85 缩放，与 App 内、蓝牙详情面板都不是一套，用户反馈「样式和动画不一致」）
         val holder = android.widget.FrameLayout(act)
         holder.tag = "fxxk_mode_btn_" + mode
+        // 自绘背景 + 居中图标：形状（圆 / 圆角方形）由我们自己控制。
+        // 不用 MaterialButton —— 它每次状态变化都会重设 shapeAppearance，把选中态的圆角方形盖回圆形。
         val iconPx = (prof.modeItemIconPx * d).toInt()
         val themed = sModCtx?.let {
             android.view.ContextThemeWrapper(it, com.fxxkmoondrop.secret.R.style.Theme_FxxkMoondrop)
         }
         val bctx: android.content.Context = themed ?: act
         val pal = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(bctx) } catch (_: Throwable) { null }
-        val btn = com.google.android.material.button.MaterialButton(bctx, null,
-                com.google.android.material.R.attr.materialIconButtonStyle)
-        btn.tag = "fxxk_mode_bg"
-        btn.text = ""
-        btn.icon = buildModeIcon(act, mode, iconPx)
-        btn.iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
-        btn.iconPadding = 0
-        btn.iconSize = iconPx
-        btn.setPadding(0, 0, 0, 0)
-        btn.insetLeft = 0; btn.insetRight = 0; btn.insetTop = 0; btn.insetBottom = 0
-        if (pal != null) {
-            btn.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.container)
-            btn.iconTint = android.content.res.ColorStateList.valueOf(pal.onContainer)
-            val sizeDp = prof.modeItemBtnPx.toFloat()
-            com.fxxkmoondrop.secret.M3Ui.attachPressMorph(bctx, btn, sizeDp / 2f, 12f)
-        }
-        holder.addView(btn, android.widget.FrameLayout.LayoutParams(
+        val bg = android.view.View(act)
+        bg.tag = "fxxk_mode_bg"
+        bg.background = modeShapeBg(bg.resources.displayMetrics.density,
+                if (pal != null) pal.container else 0x29FFFFFF, false, 24f)
+        holder.addView(bg, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-        btn.setOnClickListener {
+        val iv = ImageView(act)
+        iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
+        iv.isClickable = false
+        holder.addView(iv, android.widget.FrameLayout.LayoutParams(iconPx, iconPx,
+                android.view.Gravity.CENTER))
+        holder.setOnTouchListener { v, e ->
+            val d0 = v.resources.displayMetrics.density
+            val bgV = holder.findViewWithTag<android.view.View>("fxxk_mode_bg")
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> animateModeShape(bgV, d0, 12f)
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL ->
+                    animateModeShape(bgV, d0, if (holder.isSelected) 12f else 24f)
+            }
+            false
+        }
+        holder.setOnClickListener {
             Log.d(TAG, "[FastPairHook] mode clicked: " + mode)
             // alpha1.21: 点击立即乐观高亮（应用回发 MODE_STATE 仍会校准）
             sLastMode = mode
