@@ -773,7 +773,15 @@ class SettingsFragment : Fragment() {
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), ServiceProbeActivity::class.java))
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon, rowProbe))
+        // EQ 通道（经典蓝牙 SPP）：读/切预设、读/写曲线
+        val rowEq = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_anc_on,
+                Lang.t("EQ 通道（SPP）", "EQ over SPP"),
+                Lang.t("读写耳机均衡器：预设切换与曲线读写",
+                        "Read/write the earbud equalizer: presets and curve"),
+                M3Ui.chevron(requireContext(), pal.onVariant)) {
+            startActivity(Intent(requireContext(), EqSppActivity::class.java))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon, rowProbe, rowEq))
         box.addView(spacer(dp(10)))
         box.addView(makeSubLabel(Lang.t("模拟测试", "Simulation Test")))
         val simBox = LinearLayout(requireContext())
