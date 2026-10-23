@@ -1,8 +1,8 @@
-# FxxkMoondrop
+# MoonEar
 
-Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）：耳机连接时自动弹出 **Fast Pair 卡片**，并通过 **GAIA BLE 协议**直连耳机，读取左右耳电量、控制降噪。
+**MoonEar**（前身 FxxkMoondrop）：Moondrop 蓝牙耳机助手（LSPosed / Xposed 模块）。耳机连接时自动弹出 **Fast Pair 卡片**，通过 **GAIA BLE 协议**直连耳机读取电量、控制降噪；**3.3.0 起支持 5 段参数均衡（经典蓝牙 SPP 读写曲线与预设）**，并新增调试模式（调试日志 / 服务探测）。最低系统要求 **Android 12L**。
 
-> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.2.10**（versionCode 330） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+> 作者：[bqj6666](https://github.com/bqj6666) ｜ 版本：**3.3.0**（versionCode 350） ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
 
 > **本仓库是 LSPosed 模块索引 / 发布页，不含源码。** 完整源码、构建方式、Issue 与最新版本请前往源码仓库：
 >
