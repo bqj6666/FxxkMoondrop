@@ -361,6 +361,11 @@ class EqEditorActivity : Activity() {
 
     private fun paint() { profile?.let { curveView.setProfile(it) } }
 
+    /**
+     * 二级弹窗：编辑单段的频点 / Q。
+     * 用官方 M3 组件——MaterialAlertDialogBuilder（M3 圆角容器 + 文字按钮）
+     * + TextInputLayout（OutlinedBox，带单位后缀），不要再退回系统 AlertDialog。
+     */
     private fun editBand(i: Int) {
         val b = profile?.bands?.getOrNull(i) ?: return
         if (!editable) {
@@ -369,25 +374,44 @@ class EqEditorActivity : Activity() {
         }
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(20), dp(4), dp(20), 0)
-        val f = EditText(this)
-        f.inputType = InputType.TYPE_CLASS_NUMBER
-        f.hint = Lang.t("频点 (Hz)", "Frequency (Hz)")
-        f.setText(b.freq.toString())
-        val q = EditText(this)
-        q.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        q.hint = "Q"
-        q.setText(String.format("%.2f", b.q))
-        box.addView(f); box.addView(q)
-        AlertDialog.Builder(this)
+        box.setPadding(dp(24), dp(8), dp(24), dp(0))
+
+        val tilF = com.google.android.material.textfield.TextInputLayout(this, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle)
+        tilF.hint = Lang.t("频点", "Frequency")
+        tilF.suffixText = "Hz"
+        val etF = com.google.android.material.textfield.TextInputEditText(tilF.context)
+        etF.inputType = InputType.TYPE_CLASS_NUMBER
+        etF.setText(b.freq.toString())
+        tilF.addView(etF)
+        box.addView(tilF, LinearLayout.LayoutParams(-1, -2))
+
+        val tilQ = com.google.android.material.textfield.TextInputLayout(this, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle)
+        tilQ.hint = "Q"
+        val etQ = com.google.android.material.textfield.TextInputEditText(tilQ.context)
+        etQ.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        etQ.setText(String.format("%.2f", b.q))
+        tilQ.addView(etQ)
+        box.addView(tilQ, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(8) })
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle(Lang.t("第 ", "Band ") + (i + 1) + Lang.t(" 段", ""))
                 .setView(box)
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
                 .setPositiveButton(Lang.t("确定", "OK")) { _, _ ->
-                    f.text.toString().trim().toIntOrNull()?.let { if (it in 20..20000) b.freq = it }
-                    q.text.toString().trim().toFloatOrNull()?.let { if (it in 0.1f..12f) b.q = it }
+                    tilF.error = null
+                    tilQ.error = null
+                    val nf = etF.text.toString().trim().toIntOrNull()
+                    val nq = etQ.text.toString().trim().toFloatOrNull()
+                    if (nf == null || nf !in 20..20000) {
+                        tilF.error = Lang.t("请输入 20–20000", "20–20000")
+                    } else b.freq = nf
+                    if (nq == null || nq !in 0.1f..12f) {
+                        tilQ.error = Lang.t("请输入 0.1–12", "0.1–12")
+                    } else b.q = nq
                     renderBand(i); paint()
                 }
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
                 .show()
     }
 

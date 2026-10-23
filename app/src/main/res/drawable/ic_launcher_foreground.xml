@@ -1,12 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 前景：三段均衡器柱（几何、简洁、在 66dp 安全区内），符合 M3 图标风格 -->
+<!--
+  前景：耳机 + 均衡器。
+  语言沿用旧图标（三段竖条 = 均衡器），外加一条头梁弧把三柱“罩”起来，点明「耳机控制」。
+  全部落在 66dp 安全区内，单色层可整套重着色。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
+
+    <!-- 头梁：上半圆弧，圆端点（耳机轮廓） -->
+    <path
+        android:pathData="M34,54 a20,20 0 0 1 40,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 左右耳罩：两块圆角短块，压住头梁两端 -->
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M40,58 H41 V78 H40 A4,4 0 0 1 36,74 V62 A4,4 0 0 1 40,58 Z" />
+        android:pathData="M30,54 h8 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -4,4 h-8 a4,4 0 0 1 -4,-4 v-8 a4,4 0 0 1 4,-4 Z" />
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M49.5,42 h0.0 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 a4,4 0 0 1 -4,-4 v-36 a4,4 0 0 1 4,-4 Z" />
+        android:pathData="M70,54 h8 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -4,4 h-8 a4,4 0 0 1 -4,-4 v-8 a4,4 0 0 1 4,-4 Z" />
+
+    <!-- 三段均衡器柱（三柱高度差 = 调音），圆角竖条 -->
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M68,52 a4,4 0 0 1 4,4 v22 a4,4 0 0 1 -8,0 v-22 a4,4 0 0 1 4,-4 Z" />
+        android:pathData="M48,62 a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -8,0 v-6 a4,4 0 0 1 4,-4 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M56,56 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -8,0 v-12 a4,4 0 0 1 4,-4 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M64,60 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -8,0 v-8 a4,4 0 0 1 4,-4 Z" />
 </vector>

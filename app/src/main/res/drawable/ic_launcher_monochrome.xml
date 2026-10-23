@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 单色层：Android 13+ 主题图标会按系统配色重新着色 -->
+<!-- 单色层：形状与前景一致，系统会按主题色重着色 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:pathData="M34,54 a20,20 0 0 1 40,0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
     <path android:fillColor="#FF000000"
-        android:pathData="M49.5,42 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -8,0 v-36 a4,4 0 0 1 4,-4 Z" />
+        android:pathData="M30,54 h8 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -4,4 h-8 a4,4 0 0 1 -4,-4 v-8 a4,4 0 0 1 4,-4 Z" />
     <path android:fillColor="#FF000000"
-        android:pathData="M36,58 h8 v20 h-8 z M36,62 a4,4 0 0 1 4,-4 h0 a4,4 0 0 1 4,4 v0 h-8 z" />
+        android:pathData="M70,54 h8 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -4,4 h-8 a4,4 0 0 1 -4,-4 v-8 a4,4 0 0 1 4,-4 Z" />
     <path android:fillColor="#FF000000"
-        android:pathData="M64,52 h8 v30 h-8 z" />
+        android:pathData="M48,62 a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -8,0 v-6 a4,4 0 0 1 4,-4 Z" />
+    <path android:fillColor="#FF000000"
+        android:pathData="M56,56 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -8,0 v-12 a4,4 0 0 1 4,-4 Z" />
+    <path android:fillColor="#FF000000"
+        android:pathData="M64,60 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -8,0 v-8 a4,4 0 0 1 4,-4 Z" />
 </vector>
