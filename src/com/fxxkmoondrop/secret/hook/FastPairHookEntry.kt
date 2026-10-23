@@ -72,6 +72,14 @@ class FastPairHookEntry {
             Log.d(TAG, "[FastPairHook] HearableControlHook.install failed: " + t)
         }
 
+        // Fast Pair 半屏：注入自绘降噪面板（Slice 通道是 RemoteViews，做不出 Material 形变，
+        // 所以直接在 Fragment 的视图树里加一层真实 View）
+        try {
+            HalfSheetPanelHook.install(module, cl)
+        } catch (t: Throwable) {
+            Log.d(TAG, "[FastPairHook] installHalfSheetPanel failed: $t")
+        }
+
         // alpha1.14fix4: 拿模块自身 context（读取内置默认图标 assets）
         try {
             val app = HookHelper.callStaticMethod(
