@@ -382,8 +382,8 @@ class AboutFragment : Fragment() {
 
         header.addView(spacer(dp(8)))
         val tagline = TextView(requireContext())
-        tagline.text = Lang.t("Moondrop 蓝牙耳机助手 · GAIA 直连",
-                "Moondrop Bluetooth Earbud Assistant · GAIA Direct")
+        tagline.text = Lang.t("Moondrop 蓝牙耳机助手",
+                "Moondrop Bluetooth Earbud Assistant")
         tagline.textSize = 12f
         tagline.setTextColor(pal.onVariant)
         tagline.alpha = 0.85f
