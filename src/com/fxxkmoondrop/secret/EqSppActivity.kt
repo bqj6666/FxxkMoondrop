@@ -139,9 +139,10 @@ class EqSppActivity : Activity() {
      */
     private fun probe() {
         Thread {
+            // 只探 0A 组（均衡器子命令），不再乱扫 0x10/0x20/0x24/0x28/0x2C：
+            // 那些在别的型号上可能是**写**命令，诊断工具不该对未知设备发写操作。
             val cmds = mutableListOf<Pair<Int, IntArray>>()
-            for (c in 0x0A..0x0A) for (a in 0..9) cmds.add(c to intArrayOf(a))
-            for (c in intArrayOf(0x10, 0x20, 0x24, 0x28, 0x2C)) for (a in 0..5) cmds.add(c to intArrayOf(a))
+            for (a in 0..9) cmds.add(0x0A to intArrayOf(a))
             for ((c, a) in cmds) {
                 val r = MoondropSpp.raw(c, a[0])
                 if (r != null && r.size > 4) {
