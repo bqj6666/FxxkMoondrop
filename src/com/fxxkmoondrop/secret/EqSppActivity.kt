@@ -57,6 +57,7 @@ class EqSppActivity : Activity() {
         addBtn(row2, Lang.t("标准", "Standard")) { act { MoondropSpp.setPreset(1) } }
         addBtn(row2, Lang.t("监听", "Monitor")) { act { MoondropSpp.setPreset(2) } }
         addBtn(row2, Lang.t("预设4", "Preset 4")) { act { MoondropSpp.setPreset(3) } }
+        addBtn(row2, Lang.t("探测", "Probe")) { probe() }
         addBtn(row2, Lang.t("回写曲线", "Write curve")) {
             val c = lastCurve
             if (c == null) line("E", Lang.t("先读一次曲线", "Read a curve first"))
@@ -131,6 +132,27 @@ class EqSppActivity : Activity() {
                     } else line("W", Lang.t("读曲线无回包（该型号可能不支持）", "No curve reply (model may not support)"))
                 }
             }
+        }.start()
+    }
+
+    /**
+     * 协议探测：不猜型号，直接逐条试候选命令，把**有回包**的列出来。
+     * 不同水月雨型号的子命令表可能不同，这一步用来找出「读曲线」到底是哪条。
+     */
+    private fun probe() {
+        Thread {
+            val cmds = mutableListOf<Pair<Int, IntArray>>()
+            for (c in 0x0A..0x0A) for (a in 0..9) cmds.add(c to intArrayOf(a))
+            for (c in intArrayOf(0x10, 0x20, 0x24, 0x28, 0x2C)) for (a in 0..5) cmds.add(c to intArrayOf(a))
+            for ((c, a) in cmds) {
+                val r = MoondropSpp.raw(c, a[0])
+                if (r != null && r.size > 4) {
+                    val hex = r.joinToString("") { String.format("%02x", it) }
+                    ui.post { line("OK", String.format("cmd %02x %02x -> ", c, a[0]) + hex) }
+                }
+                Thread.sleep(120)
+            }
+            ui.post { line("I", Lang.t("探测结束", "Probe done")) }
         }.start()
     }
 

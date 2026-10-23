@@ -59,20 +59,20 @@ object MoondropSpp {
     }
 
     /** 组帧：FF 04 len(u16be) + payload */
-    private fun frame(payload: ByteArray): ByteArray {
-        val n = (payload.size - 4).coerceAtLeast(0)
+    private fun frame(payload: ByteArray, dataLen: Int = payload.size - 4): ByteArray {
+        val n = dataLen.coerceAtLeast(0)
         val head = byteArrayOf(0xFF.toByte(), 0x04, ((n shr 8) and 0xFF).toByte(), (n and 0xFF).toByte())
         return head + payload
     }
 
     /** 发一条命令并等待回包（返回原始字节，超时返回 null） */
-    fun request(payload: ByteArray, timeoutMs: Int = 1500): ByteArray? {
+    fun request(payload: ByteArray, timeoutMs: Int = 1500, dataLen: Int = payload.size - 4): ByteArray? {
         val o = outs ?: return null
         val i = ins ?: return null
         return try {
             synchronized(this) {
                 lastReply = null
-                o.write(frame(payload)); o.flush()
+                o.write(frame(payload, dataLen)); o.flush()
                 val deadline = System.currentTimeMillis() + timeoutMs
                 val buf = ByteArray(256)
                 while (System.currentTimeMillis() < deadline) {
@@ -103,8 +103,55 @@ object MoondropSpp {
     fun setPreset(index: Int): ByteArray? =
         request(byteArrayOf(0x00, 0x1D, 0x0A, 0x03, index.toByte()))
 
-    /** 读当前 EQ 曲线（39 字节参数或其查询回包） */
-    fun readCurve(): ByteArray? = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x0A.toByte()))
+    /**
+     * 读当前 EQ 曲线 —— 实测命令是 **0A 05**（探测得出，不是猜的）。
+     * 回包：FF 04 <len> 00 1D 0B 05 00 04 <len 字节曲线数据>
+     */
+    fun readCurve(): ByteArray? {
+        val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x05)) ?: return null
+        return extractData(r)
+    }
+
+    /**
+     * 从回包里取业务数据：跳过 FF 04 <len:2> 00 1D <cmd> 以及可选的 2 字节子参数。
+     * 规则按实测回包的通用形态推导（长度字段即数据长度），不做型号假设。
+     */
+    private fun extractData(raw: ByteArray): ByteArray? {
+        if (raw.size < 8) return null
+        // 找 00 1D 同步头
+        var i = 0
+        while (i + 6 < raw.size && !(raw[i] == 0.toByte() && raw[i + 1] == 0x1D.toByte())) i++
+        if (i + 6 > raw.size) return null
+        val lenField = ((raw[2].toInt() and 0xFF) shl 8) or (raw[3].toInt() and 0xFF)
+        // 形态 A：00 1D cmd 00 04 + data
+        val hasSub = raw[i + 4] == 0.toByte() && raw[i + 5] == 0x04.toByte()
+        val start = if (hasSub) i + 6 else i + 3
+        if (start >= raw.size) return null
+        val n = if (lenField in 1..(raw.size - start)) lenField else raw.size - start
+        return raw.copyOfRange(start, start + n)
+    }
+
+    /** 预设列表：0A 01 回包 → 数据区首字节是档位数，其后是各档 id */
+    fun readPresetList(): IntArray? {
+        val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x01)) ?: return null
+        val d = extractData(r) ?: return null
+        if (d.size < 2) return null
+        val count = d[0].toInt() and 0xFF
+        val ids = d.copyOfRange(1, Math.min(d.size, 1 + count))
+        return IntArray(ids.size) { ids[it].toInt() and 0xFF }
+    }
+
+    /** 当前预设：0A 02 回包数据区 */
+    fun readPresetRaw(): Int {
+        val d = readPresetData() ?: return -1
+        if (d.isEmpty()) return -1
+        return d[0].toInt() and 0xFF
+    }
+
+    fun readPresetData(): ByteArray? {
+        val r = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x02)) ?: return null
+        return extractData(r)
+    }
 
     /**
      * 写 EQ 曲线：把参数原样下发。
@@ -113,9 +160,10 @@ object MoondropSpp {
      * 一律以「读回来多少就写回多少」为准，保证同一套协议的各型号都能用。
      */
     fun writeCurve(params: ByteArray): ByteArray? {
-        if (params.size < 8) return null          // 太短肯定不是有效参数
-        val payload = byteArrayOf(0x00, 0x1D, 0x0A, 0x06) + params
-        return request(payload, 2500)
+        if (params.size < 8) return null
+        // 实测写帧：FF 04 <len> 00 1D 0A 06 00 04 <data>，len = data 长度
+        val payload = byteArrayOf(0x00, 0x1D, 0x0A, 0x06, 0x00, 0x04) + params
+        return request(payload, 2500, params.size)
     }
 
     /** 任意 00 1D 命令（供上层做能力探测，不写死具体型号） */
