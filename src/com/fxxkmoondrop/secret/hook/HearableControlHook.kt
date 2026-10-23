@@ -224,7 +224,72 @@ object HearableControlHook {
      * 在 GMS 进程加载完成后安装。调用方：`FastPairHookEntry.onGmsLoaded`。
      * 全程吞异常 —— 官方类名/结构随版本变动时只降级、不崩宿主。
      */
+    /**
+     * 在 GMS 进程里替换空切片：GMS 的 hearable_control 对第三方耳机返回 null，
+     * 我们把它换成自己构建的 Slice（内容仍是水月雨 才给），
+     * Settings 侧拿到的就是「来自被信任 provider 的内容」。
+     */
+    /** 已经挂过 hook 的 SliceProvider 子类（避免重复挂） */
+    private val sliceHookedClasses = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<Class<*>, Boolean>())
+
+    /**
+     * 关键点：GMS 的 provider **自己覆盖了 onBindSlice 且不调用 super**，
+     * 所以挂基类 `SliceProvider.onBindSlice` 一次都不会命中（实测：installed 但零 hit）。
+     *
+     * 改为在 `ContentProvider.attachInfo` 上挂一刀：任何 provider 实例初始化时，
+     * 只要它是 SliceProvider 的子类，就当场反射 hook 它**自己类**里的 onBindSlice。
+     */
+    private fun hookEmptySlice(xm: XposedModule) {
+        runCatching {
+            val cpCls = Class.forName("android.content.ContentProvider")
+            val targets = cpCls.declaredMethods.filter { it.name == "attachInfo" }
+            if (targets.isEmpty()) throw NoSuchMethodException("attachInfo not found")
+            for (m in targets) runCatching {
+                xm.hook(m).intercept { chain ->
+                    val res = chain.proceed()
+                    val self = chain.thisObject
+                    if (self != null) attachSliceHookFor(xm, self.javaClass)
+                    res
+                }
+            }
+            Log.i(TAG, "hookEmptySlice: attachInfo hooked on " + targets.size + " overload(s)")
+        }.onFailure { Log.d(TAG, "hookEmptySlice 失败: " + unwrap(it)) }
+    }
+
+    /** 若是 SliceProvider 子类，则 hook 它自己的 onBindSlice（只挂一次） */
+    private fun attachSliceHookFor(xm: XposedModule, cls: Class<*>) {
+        try {
+            if (!sliceHookedClasses.add(cls)) return
+            val spCls = runCatching { Class.forName("android.app.slice.SliceProvider") }.getOrNull() ?: return
+            if (!spCls.isAssignableFrom(cls)) return
+            val methods = cls.declaredMethods.filter { it.name == "onBindSlice" }
+            if (methods.isEmpty()) return
+            for (m in methods) runCatching {
+                xm.hook(m).intercept { chain ->
+                    val res = chain.proceed()
+                    val uri = chain.args.getOrNull(0) as? android.net.Uri
+                    val itemsList = try {
+                        res?.javaClass?.getMethod("getItems")?.invoke(res) as? List<*>
+                    } catch (_: Throwable) { null }
+                    val hasContent = res != null && !itemsList.isNullOrEmpty()
+                    Log.i(TAG, "onBindSlice hit: cls=" + cls.simpleName + " path=" + uri?.path +
+                            " res=" + (res != null) + " hasContent=" + hasContent)
+                    if (!hasContent && uri != null && uri.path?.contains("hearable_control") == true) {
+                        val ctx = chain.thisObject as? android.content.Context
+                        com.fxxkmoondrop.secret.HearableSliceProvider.buildFor(ctx, uri) ?: res
+                    } else res
+                }
+                Log.i(TAG, "slice hook -> " + cls.name + "#" + m.name)
+            }.onFailure { Log.d(TAG, "hook subclass onBindSlice 失败: " + it) }
+        } catch (_: Throwable) { }
+    }
+
     fun install(xm: XposedModule, cl: ClassLoader) {
+        // 必须放在最前面：后面的类定位/枚举任何一步提前 return 或抛异常，
+        // 都会让切片 hook 永远装不上（之前就踩了这个）。
+        Log.i(TAG, "install begin")
+        runCatching { hookEmptySlice(xm) }
         if (!isMainGmsProcess()) {
             // 官方 FastPair 代码只跑在主进程；其余 gms 子进程里激活注定失败，
             // 却会白烧 20 次重试并可能重复写官方存储。

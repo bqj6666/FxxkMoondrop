@@ -56,7 +56,7 @@ class AboutFragment : Fragment() {
     private fun noteCard(lead: String, body: String, pal: ThemeUtil.Palette): View {
         val box = LinearLayout(requireContext())
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(18), dp(16), dp(18), dp(16))
+        box.setPadding(dp(16), dp(16), dp(16), dp(16))
         val t1 = TextView(requireContext())
         t1.text = lead
         t1.textSize = 16f
@@ -165,14 +165,14 @@ class AboutFragment : Fragment() {
                         "No release notes for this build.\n\nThe repository has no official release " +
                                 "matching this version \u2014 pre-release builds are the usual case. " +
                                 "See CHANGELOG.md on GitHub for the full history.")
-                t.textSize = 13f
+                t.textSize = 14f
                 t.setTextColor(pal.onVariant)
                 t.setLineSpacing(dp(2).toFloat(), 1.25f)
                 content.addView(t, LinearLayout.LayoutParams(-1, -2))
             } else {
                 val t = TextView(ctx)
                 t.text = prettyNotes(notes)
-                t.textSize = 13f
+                t.textSize = 14f
                 t.setTextColor(pal.onVariant)
                 t.setLineSpacing(dp(2).toFloat(), 1.25f)
                 content.addView(t, LinearLayout.LayoutParams(-1, -2))
@@ -278,7 +278,7 @@ class AboutFragment : Fragment() {
                 tv.text = if (text.isNullOrBlank())
                     Lang.t("这一版没有提供更新说明。", "This release provides no notes.")
                 else prettyNotes(text)
-                tv.textSize = 13f
+                tv.textSize = 14f
                 tv.setTextColor(pal.onVariant)
                 tv.setLineSpacing(dp(2).toFloat(), 1.25f)
                 notesBox.addView(tv, LinearLayout.LayoutParams(-1, -2))
@@ -348,7 +348,7 @@ class AboutFragment : Fragment() {
         val header = LinearLayout(requireContext())
         header.orientation = LinearLayout.VERTICAL
         header.gravity = Gravity.CENTER_HORIZONTAL
-        header.setPadding(dp(24), dp(28), dp(24), dp(26))
+        header.setPadding(dp(24), dp(24), dp(24), dp(24))
 
         val iconWrap = LinearLayout(requireContext())
         iconWrap.gravity = Gravity.CENTER
@@ -419,7 +419,8 @@ class AboutFragment : Fragment() {
                 Lang.t("作者", "Author"), "bqj6666", null, null))
         projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_group,
                 Lang.t("协助者", "Contributors"),
-                "Deepseek · Qwen · ChatGPT · Kimi", null, null))
+                Lang.t("各开源 AI 模型（DeepSeek · Qwen · Kimi · Llama 等）",
+                        "Open-source AI models (DeepSeek, Qwen, Kimi, Llama and more)"), null, null))
         box.addView(M3Ui.groupCard(act, pal, *projRows.toTypedArray()),
                 LinearLayout.LayoutParams(-1, -2))
 
@@ -433,52 +434,6 @@ class AboutFragment : Fragment() {
                                 "GNU GPL v3.0 · modification and redistribution allowed"),
                         M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl + "/blob/main/LICENSE") }),
                 LinearLayout.LayoutParams(-1, -2))
-
-        // ── 说明 ──
-        box.addView(spacer(dp(24)))
-        box.addView(M3Ui.sectionTitle(act, pal, Lang.t("说明", "Notes")))
-        // alpha2.53: 按当前实际能力重写说明（原来只有一条，且落后于功能）
-        val notes = arrayOf(
-                arrayOf(
-                        Lang.t("耳机连接时自动弹出 FastPair 卡片", "Auto popup FastPair card when earbuds connect"),
-                        Lang.t("显示名称 / 电量 / MAC；卡片里的降噪按钮直连耳机下发命令，" +
-                                "与软件内按钮行为一一对应。",
-                                "Name / battery / MAC; the noise-control buttons in the card send commands straight to the earbuds, one-to-one with the in-app buttons.")),
-                arrayOf(
-                        Lang.t("直连协议：GAIA BLE", "Direct link: GAIA BLE"),
-                        Lang.t("读取与设置电量、降噪（关闭 / 降噪 / 透传 / 抗风）、空间音频与追踪模式、" +
-                                "增益、指示灯。地址全动态发现，零硬编码。",
-                                "Reads and sets battery, noise control (off / ANC / transparency / wind), spatial audio and tracking mode, gain and LED. Addresses are discovered dynamically with zero hardcoding.")),
-                arrayOf(
-                        Lang.t("系统界面注入（需 LSPosed）", "System UI injection (requires LSPosed)"),
-                        Lang.t("在 Google 快速配对弹窗与「设置 → 蓝牙 → 设备详情」注入控制面板，" +
-                                "样式与软件内一致，并随连接状态自动启用或禁用。",
-                                "A control panel is injected into the Google Fast Pair popup and Settings → Bluetooth → device details. It matches the in-app styling and enables or disables itself with the connection state.")),
-                arrayOf(
-                        Lang.t("自定义映射", "Custom mapping"),
-                        Lang.t("可逐档指定发给耳机的设备码，并自定义空间音频追踪标签。" +
-                                "未手动修改的档位跟随型号档案，可一键重置。",
-                                "Pick the device code each level sends, and rename the spatial-audio tracking labels. Untouched levels follow the device profile; everything resets in one tap.")),
-                arrayOf(
-                        Lang.t("外观与语言", "Appearance and language"),
-                        Lang.t("跟随系统 / 浅色 / 深色、动态取色、AMOLED 纯黑、种子颜色，" +
-                                "以及跟随系统 / 中文 / English 三档语言。",
-                                "Follow system / light / dark, dynamic color, AMOLED pure black, seed colors, and follow-system / Chinese / English.")),
-                arrayOf(
-                        Lang.t("隐私", "Privacy"),
-                        Lang.t("不联网上传任何数据。「日志抓取」只在手动导出时打包设备信息与运行日志，" +
-                                "导出前会展示隐私声明。",
-                                "Nothing is uploaded. \"Log capture\" only packages device info and runtime logs when you export manually, and shows a privacy notice first.")),
-                arrayOf(
-                        Lang.t("兼容性", "Compatibility"),
-                        Lang.t("系统界面注入需 Root / LSPosed；蓝牙与通知权限用于设备发现与状态提示。" +
-                                "实际可用的控制项由型号档案决定。",
-                                "System UI injection needs Root / LSPosed; Bluetooth and notification permissions cover discovery and status. Which controls exist is decided by the device profile."))
-        )
-        for (n in notes) {
-            box.addView(noteCard(n[0], n[1], pal), LinearLayout.LayoutParams(-1, -2))
-            box.addView(spacer(dp(12)))
-        }
 
         sv.addView(box)
         root.addView(page.container, LinearLayout.LayoutParams(-1, 0, 1f))

@@ -8,6 +8,10 @@ import android.widget.LinearLayout
 object DeviceDetailsPanel {
     const val KEY = "fxxk_moondrop_device_panel"
 
+    /** 是否显示自绘的降噪档位行（设置里可选：自绘面板 / 官方面板） */
+    @Volatile
+    var showAncRow: Boolean = true
+
     private val nameByRoot = java.util.IdentityHashMap<View, String>()
     /** 最近一次刷新用到的状态；面板换了实例时用它兜底自刷。 */
     @Volatile private var latestState: ControlPanel.State? = null
@@ -46,7 +50,36 @@ object DeviceDetailsPanel {
             override fun setGain(level: Int) = safeCommand(Command.SetGain(level))
             override fun setLed(state: Int) = safeCommand(Command.SetLed(state))
         }
+        // 自绘的降噪档位行（样式与概览页一致：官方 Icon Button、56dp、选中形变、动态取色）。
+        // 用 try 包住：任何异常都不能再让整个面板构建失败（上次就是这样只剩一行标题）。
+        try {
+            if (showAncRow) root.addView(buildAncRow(ctx, pal, safeCommand),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT))
+        } catch (t: Throwable) {
+            android.util.Log.w("FxxkMoondropPanel", "anc row build fail", t)
+        }
+
+        // 增益三档也用我们自己的行（与概览页完全一致）；
+        // ControlPanel 里那排旧样式的增益按钮随后隐藏，避免两排并存。
+        try {
+            if (showAncRow) root.addView(buildGainRow(ctx, pal, safeCommand),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT))
+        } catch (t: Throwable) {
+            android.util.Log.w("FxxkMoondropPanel", "gain row build fail", t)
+        }
+
         val dcCard = ControlPanel.buildDcCard(ctx, pal, callbacks, cardBg = bg, windRow = windRow)
+        // 直接**移除** ControlPanel 自带的旧增益行：只设 GONE 会在 refreshDcCard 里被重新设回 VISIBLE
+        try {
+            // 只有「自绘面板」模式才移除官方那排旧样式增益按钮；
+            // 选「官方面板」时保留它（那是官方面板的用法）
+            if (showAncRow) {
+                val old = dcCard.findViewWithTag<View>("dc_gain_row")
+                (old?.parent as? android.view.ViewGroup)?.removeView(old)
+            }
+        } catch (_: Throwable) { }
         root.addView(dcCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val st = ControlPanel.State(
@@ -57,6 +90,89 @@ object DeviceDetailsPanel {
         )
         refresh(root, st)
         return root
+    }
+
+    /** 降噪 / 关闭 / 透传 / 抗风：官方 Icon Button 样式，与概览页同一套 */
+    private fun buildAncRow(ctx: android.content.Context, pal: ThemeUtil.Palette,
+                            onCommand: (Command) -> Unit): LinearLayout {
+        val appCtx = themedAppCtx(ctx)
+        val d = ctx.resources.displayMetrics.density
+        val row = LinearLayout(appCtx)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = android.view.Gravity.CENTER
+        row.tag = "fxxk_anc_row"
+        // 与卡片内容对齐：左右 4dp、上下 8dp（原来贴边，看着"太靠上"）
+        row.setPadding((4 * d).toInt(), (8 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+        val names = AncProfileLib.modeNamesFull(appCtx)
+        // 只保留 降噪/关闭/透传；抗风由下方开关负责（官方逻辑：只在降噪档才显示那个开关）
+        for (m in intArrayOf(1, 0, 2)) {
+            val col = LinearLayout(appCtx)
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = android.view.Gravity.CENTER
+            val holder = M3Ui.iconToggle(appCtx, pal,
+                    androidx.core.content.ContextCompat.getDrawable(appCtx, modeIconRes(m)),
+                    48, 26)
+            holder.tag = "fxxk_anc_" + m
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener { onCommand(Command.SetAncMode(m)) }
+            col.addView(holder, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()))
+            val lbl = android.widget.TextView(appCtx)
+            lbl.text = names.getOrNull(m) ?: ""
+            lbl.textSize = 12f
+            lbl.gravity = android.view.Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(pal.onContainer)
+            lbl.tag = "fxxk_anc_label_" + m
+            col.addView(lbl, LinearLayout.LayoutParams(-2, -2))
+            row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        return row
+    }
+
+    /** 与概览页同款：增益三档（低/中/高），官方 Icon Button */
+    private fun buildGainRow(ctx: android.content.Context, pal: ThemeUtil.Palette,
+                             onCommand: (Command) -> Unit): LinearLayout {
+        val appCtx = themedAppCtx(ctx)
+        val d = ctx.resources.displayMetrics.density
+        val row = LinearLayout(appCtx)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = android.view.Gravity.CENTER
+        row.tag = "fxxk_gain_row"
+        row.setPadding((4 * d).toInt(), (8 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+        val labels = DeviceControlBridge.gainLabels()
+        for (g in 0 until DeviceControlBridge.gainCount()) {
+            val col = LinearLayout(appCtx)
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = android.view.Gravity.CENTER
+            val holder = M3Ui.iconToggle(appCtx, pal,
+                    DcIcons.build(appCtx, 1, g, (26 * d).toInt(), pal.onContainer), 48, 26)
+            holder.tag = "fxxk_gain_" + g
+            holder.findViewWithTag<View>("it_btn")?.setOnClickListener { onCommand(Command.SetGain(g)) }
+            col.addView(holder, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()))
+            val lbl = android.widget.TextView(appCtx)
+            lbl.text = labels.getOrNull(g) ?: ""
+            lbl.textSize = 12f
+            lbl.gravity = android.view.Gravity.CENTER
+            lbl.isSingleLine = true
+            lbl.setTextColor(pal.onContainer)
+            lbl.tag = "fxxk_gain_label_" + g
+            col.addView(lbl, LinearLayout.LayoutParams(-2, -2))
+            row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        return row
+    }
+
+    /** Material 组件要求「我们 APK 的资源 + M3 主题」，缺一不可 */
+    private fun themedAppCtx(ctx: android.content.Context): android.content.Context = try {
+        val base = ctx.createPackageContext("com.fxxkmoondrop.secret",
+                android.content.Context.CONTEXT_IGNORE_SECURITY)
+        android.view.ContextThemeWrapper(base, R.style.Theme_FxxkMoondrop)
+    } catch (_: Throwable) { ctx }
+
+    private fun modeIconRes(mode: Int): Int = when (mode) {
+        0 -> R.drawable.ic_anc_off
+        2 -> R.drawable.ic_anc_passthrough
+        3 -> R.drawable.ic_air
+        else -> R.drawable.ic_anc_on
     }
 
     /** 面板挂到窗口时用最近一次已知状态自刷：新挂上去的实例不会停在默认（全显）状态。 */
@@ -89,9 +205,54 @@ object DeviceDetailsPanel {
         if (windRow != null) {
             ControlPanel.refreshWindRow(windRow, state, ThemeUtil.Palette(root.context))
         }
+        // 自绘降噪行：按设置显示/隐藏，按当前档位高亮
+        val ancRow = root.findViewWithTag<LinearLayout>("fxxk_anc_row")
+        if (ancRow != null) {
+            ancRow.visibility = if (showAncRow) View.VISIBLE else View.GONE
+            for (m in intArrayOf(0, 1, 2, 3)) {
+                val h = root.findViewWithTag<View>("fxxk_anc_" + m) ?: continue
+                val b = h.findViewWithTag<View>("it_btn")
+                        as? com.google.android.material.button.MaterialButton
+                val on = state.ancMode == m
+                b?.isChecked = on
+                b?.isEnabled = enabled
+                // 自绘图标不随状态变色，这里手动 tint：选中 onPrimary / 未选 onContainer
+                (h.findViewWithTag<View>("it_img") as? android.widget.ImageView)?.let { iv ->
+                    iv.imageTintList = android.content.res.ColorStateList.valueOf(
+                            if (on) ThemeUtil.Palette(root.context).onPrimary
+                            else ThemeUtil.Palette(root.context).onContainer)
+                    iv.alpha = if (enabled) 1f else 0.38f
+                }
+                root.findViewWithTag<View>("fxxk_anc_label_" + m)?.alpha =
+                        if (enabled) 1f else 0.38f
+            }
+        }
+        // 增益行：按型号能力显示、按当前档位高亮
+        val gainRow = root.findViewWithTag<LinearLayout>("fxxk_gain_row")
+        if (gainRow != null) {
+            gainRow.visibility = if (profile.hasGain) View.VISIBLE else View.GONE
+            for (g in 0 until DeviceControlBridge.gainCount()) {
+                val h = root.findViewWithTag<View>("fxxk_gain_" + g) ?: continue
+                val b = h.findViewWithTag<View>("it_btn")
+                        as? com.google.android.material.button.MaterialButton
+                val on = state.gainLevel == g
+                b?.isChecked = on
+                b?.isEnabled = enabled
+                (h.findViewWithTag<View>("it_img") as? android.widget.ImageView)?.let { iv ->
+                    iv.imageTintList = android.content.res.ColorStateList.valueOf(
+                            if (on) ThemeUtil.Palette(root.context).onPrimary
+                            else ThemeUtil.Palette(root.context).onContainer)
+                    iv.alpha = if (enabled) 1f else 0.38f
+                }
+                root.findViewWithTag<View>("fxxk_gain_label_" + g)?.alpha =
+                        if (enabled) 1f else 0.38f
+            }
+        }
         val dcCard = root.findViewWithTag<LinearLayout>("fxxk_dc_card")
         if (dcCard != null) {
             ControlPanel.refreshDcCard(dcCard, state, profile)
+            // 自绘模式下压掉官方旧样式增益行（refreshDcCard 会把它设回 VISIBLE）
+            if (showAncRow) dcCard.findViewWithTag<View>("dc_gain_row")?.visibility = View.GONE
         }
     }
 

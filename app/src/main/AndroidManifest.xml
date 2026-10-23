@@ -70,6 +70,18 @@
              exported 必须为 true（否则系统绑不上），但权限限定为
              BIND_QUICK_SETTINGS_TILE：只有持有该权限的系统服务能绑定，
              第三方应用绑不了。不涉及 SYSTEM_ALERT_WINDOW 或悬浮窗。 -->
+        <activity
+            android:name=".ServiceProbeActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ConnectLogActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ManualConnectActivity"
+            android:exported="false" />
+
         <provider
             android:name=".HearableSliceProvider"
             android:authorities="com.fxxkmoondrop.secret.slices"

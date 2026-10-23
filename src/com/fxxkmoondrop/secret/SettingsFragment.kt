@@ -412,7 +412,20 @@ class SettingsFragment : Fragment() {
                 getSP().edit().putBoolean("feat_detail_panel", checked).commit()
             }
         }
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail))
+        // 详情页用哪种降噪面板：官方面板（Slice）还是我们自绘（与概览页同款按钮）。
+        // 默认自绘：UWU 这类 ROM 上官方切片拿不到内容，自绘才是可用的。
+        val styleSelfDraw = getSP().getBoolean("feat_detail_anc_selfdraw", true)
+        val rowPanelStyle = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("降噪面板样式", "Noise control panel style"),
+                Lang.t("自绘面板与概览页同款；官方面板依赖系统切片",
+                        "In-app panel matches the overview page; official panel relies on system slices"),
+                arrayOf(Lang.t("自绘降噪面板", "In-app panel"),
+                        Lang.t("系统官方面板", "Official panel")),
+                if (styleSelfDraw) 0 else 1) { mi ->
+            getSP().edit().putBoolean("feat_detail_anc_selfdraw", mi == 0).commit()
+            toast(Lang.t("重启蓝牙设置页后生效", "Takes effect after reopening Bluetooth settings"))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowOfficial, rowDetail, rowPanelStyle))
         box.addView(spacer(dp(14)))
 
         // ── 连接弹窗 ──
@@ -752,12 +765,33 @@ class SettingsFragment : Fragment() {
         // ── 诊断与测试：权限检查 / 日志抓取 / 弹窗图标 / 模拟测试，
         //    全是「排查与验证」用途，原来分散在「通用」与独立段，现在收拢一处 ──
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("诊断", "Diagnostics")))
-        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon))
+        // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
+        val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
+                Lang.t("服务探测（GATT）", "Service probe (GATT)"),
+                Lang.t("列出耳机的 GATT 服务，用于判断是否支持均衡器等私有协议",
+                        "Dump the earbud's GATT services to see if private protocols like the equalizer exist"),
+                M3Ui.chevron(requireContext(), pal.onVariant)) {
+            startActivity(Intent(requireContext(), ServiceProbeActivity::class.java))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowPerm, rowLog, rowIcon, rowProbe))
         box.addView(spacer(dp(10)))
         box.addView(makeSubLabel(Lang.t("模拟测试", "Simulation Test")))
         val simBox = LinearLayout(requireContext())
         simBox.orientation = LinearLayout.VERTICAL
         simBox.setPadding(dp(14), dp(12), dp(14), dp(12))
+        // 手动连接：从已配对设备里挑一个，主动尝试建立 GAIA 连接
+        // （自动发现失败时的兜底：例如设备名不在档案里、或广播丢了）
+        val rowManualConnect = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bluetooth,
+                Lang.t("手动连接设备", "Connect a device manually"),
+                Lang.t("从已配对设备中选择并尝试连接",
+                        "Pick a bonded device and try to connect"),
+                M3Ui.chevron(requireContext(), pal.onVariant)) {
+            startActivity(Intent(requireContext(), ManualConnectActivity::class.java))
+        }
+        box.addView(M3Ui.groupCard(requireActivity(), pal, rowManualConnect),
+                LinearLayout.LayoutParams(-1, -2))
+        box.addView(spacer(dp(12)))
+
         simConnBtn = makeM3Button(Lang.t("模拟连接耳机", "Simulate connecting the earbuds"), R.drawable.ic_bluetooth, pal.container, pal.onContainer) {
             // 模拟连接：GAIA 模拟态 + 左右耳模拟电量 + 默认降噪模式 + 弹窗（可重复点击）
             GaiaBleClient.setSimConnected(true)
@@ -953,6 +987,37 @@ class SettingsFragment : Fragment() {
 
     private fun spacer(h: Int): View = View(requireContext()).apply {
         layoutParams = LinearLayout.LayoutParams(1, h)
+    }
+
+    /** 已配对设备列表 -> 选中后尝试连接（GAIA 直连） */
+    private fun showManualConnectDialog() {
+        val ctx = requireContext()
+        val adapter = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter() } catch (_: Throwable) { null }
+        val bonded = try { adapter?.bondedDevices?.toList().orEmpty() } catch (_: Throwable) { emptyList() }
+        if (bonded.isEmpty()) {
+            toast(Lang.t("没有已配对的蓝牙设备", "No bonded Bluetooth devices"))
+            return
+        }
+        val names = bonded.map { d ->
+            val n = try { d.name } catch (_: Throwable) { null } ?: "?"
+            n + "\n" + d.address
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(ctx)
+                .setTitle(Lang.t("选择要连接的设备", "Choose a device"))
+                .setItems(names) { _, which ->
+                    val d = bonded[which]
+                    val addr = try { d.address } catch (_: Throwable) { null } ?: return@setItems
+                    toast(Lang.t("正在尝试连接：", "Connecting: ") + addr)
+                    try {
+                        ctx.startService(Intent(ctx, HeadsetDetectService::class.java)
+                                .setAction(HeadsetDetectService.ACTION_MANUAL_CONTROL))
+                    } catch (_: Throwable) { }
+                    val ok = try { GaiaBleClient.getInstance().connect(ctx, addr) } catch (_: Throwable) { false }
+                    toast(if (ok) Lang.t("已发起连接", "Connection started")
+                    else Lang.t("连接发起失败（检查蓝牙权限/开关）", "Failed to start (check Bluetooth permission)"))
+                }
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .show()
     }
 
     private fun makeM3Button(text: String, iconRes: Int, bgColor: Int, textColor: Int,
