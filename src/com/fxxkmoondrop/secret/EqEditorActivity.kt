@@ -344,10 +344,17 @@ class EqEditorActivity : Activity() {
     private fun doWrite() {
         val p = profile ?: return
         if (!editable) { setStatus(Lang.t("当前为只读模式", "Read-only mode"), true); return }
+        val target = addr
+        if (target == null) { setStatus(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device"), true); return }
         val raw = MoondropEq.encode(p)
         writeBtn.isEnabled = false
         setStatus(Lang.t("正在写入…", "Writing…"))
         Thread {
+            // 读完就会断开（不长期占链路），所以写之前要自己把链路建起来
+            if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
+                ui.post { if (alive) { writeBtn.isEnabled = editable; setStatus(Lang.t("写入前建链失败", "Connect failed before write"), true) } }
+                return@Thread
+            }
             val ok = MoondropSpp.writeCurve(raw)
             ui.post {
                 if (!alive) return@post
@@ -362,7 +369,12 @@ class EqEditorActivity : Activity() {
     }
 
     private fun setPreset(idx: Int) {
+        val target = addr ?: run { setStatus(Lang.t("没有已配对的水月雨设备", "No bonded Moondrop device"), true); return }
         Thread {
+            if (!MoondropSpp.isConnected() && !MoondropSpp.connect(target)) {
+                ui.post { if (alive) setStatus(Lang.t("切换预设前建链失败", "Connect failed"), true) }
+                return@Thread
+            }
             val r = MoondropSpp.setPreset(idx)
             ui.post {
                 if (!alive) return@post
