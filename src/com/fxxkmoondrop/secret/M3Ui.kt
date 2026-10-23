@@ -143,6 +143,12 @@ class M3Ui {
             })
 
             val back = arrowBack(act, pal, onBack)
+            // arrowBack 用的是 materialIconButtonStyle，自带 4dp inset：直接塞进 48dp 位置时
+            // 背景/涟漪会被内缩，看起来就是「按压缩放轮廓偏了」。这里把 inset 归零让背景铺满 48dp。
+            (back as? MaterialButton)?.apply {
+                insetLeft = 0; insetRight = 0; insetTop = 0; insetBottom = 0
+                setPadding(0, 0, 0, 0)
+            }
             // 返回键与标题**同一行**：展开时一起下移到标题那一行，收缩时一起上移（只改位置，不改标题字号）
             val backLp = android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
                     Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 56) }
