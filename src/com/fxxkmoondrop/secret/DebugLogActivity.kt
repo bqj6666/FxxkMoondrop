@@ -41,39 +41,27 @@ class DebugLogActivity : Activity() {
         }
         pal = ThemeUtil.Palette(this)
 
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(pal.surface)
-        val sbh = resources.getIdentifier("status_bar_height", "dimen", "android")
-                .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
-        root.setPadding(dp(12), sbh + dp(8), dp(12), dp(16))
-
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-        header.addView(M3Ui.arrowBack(this, pal) { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        val title = TextView(this)
-        title.text = Lang.t("调试日志", "Debug log")
-        title.textSize = 20f
-        title.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        title.setTextColor(pal.onSurface)
-        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f).also { it.marginStart = dp(8) })
-        root.addView(header, LinearLayout.LayoutParams(-1, -2))
+        // 与均衡器等二级页统一：官方大标题 + 内置返回键
+        val page = M3Ui.largeHeaderPageWithBack(this, pal, Lang.t("调试日志", "Debug log")) { finish() }
 
         val ops = LinearLayout(this)
         ops.orientation = LinearLayout.HORIZONTAL
         ops.setPadding(dp(4), dp(4), dp(4), dp(4))
         ops.addView(btn(Lang.t("刷新", "Refresh")) { load() }, LinearLayout.LayoutParams(0, dp(40), 1f))
         ops.addView(btn(Lang.t("复制全部", "Copy all")) { copyAll() }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        root.addView(ops, LinearLayout.LayoutParams(-1, -2))
 
         box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(12), dp(8), dp(12), dp(8))
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(12), dp(8), dp(12), dp(16))
+        content.addView(ops, LinearLayout.LayoutParams(-1, -2))
         sv = ScrollView(this)
         sv.addView(box, LinearLayout.LayoutParams(-1, -2))
-        root.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        content.addView(sv, LinearLayout.LayoutParams(-1, 0, 1f))
+        page.sv.addView(content, LinearLayout.LayoutParams(-1, -2))
+        setContentView(page.container)
         M3Ui.fitSystemBars(this, pal)
 
         alive = true
