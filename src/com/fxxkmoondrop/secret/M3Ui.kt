@@ -458,16 +458,19 @@ class M3Ui {
             // 浮层已有 0.5f scrim 与背景分离，原先的强调色描边在纯黑下过于抢眼。
             card.setStrokeColor((accent and 0x00FFFFFF) or 0x1F000000)
             card.setStrokeWidth(Math.max(1, (1f * density).toInt()))
-            card.setCardElevation(16 * density)
+            // 弹窗卡片不用 elevation：这个窗体的 decor 不做圆角裁剪，阴影会被画成矩形，
+            // 圆角外侧露出两块直角灰块（真机放大可见，像"两个小尖角"）。
+            // 层次靠 0.5 scrim + 1dp 描边撑，M3 也允许无阴影的对话框。
+            card.setCardElevation(0f)
             val body = LinearLayout(c)
             body.orientation = LinearLayout.VERTICAL
             body.setPadding(dp(c, 24), dp(c, 22), dp(c, 24), dp(c, 24))
             card.addView(body, android.widget.FrameLayout.LayoutParams(-1, -2))
-            // 卡片撑满内容区，但外面套一层 8dp 容器：
-            // 卡片圆角 + 16dp elevation 的阴影需要一点外扩空间，直接贴到 window 边界时
-            // 阴影会被窗口裁掉，圆角外侧剩下两块黑色三角（真机复现过）。
+            // 卡片外面必须留出 ≥ 阴影半径的空间：卡片贴满窗口时，elevation 阴影被窗口裁掉，
+            // 底部两角会剩下直角状的暗块（看起来像"两个尖角"）。20dp 容器给足扩散空间，
+            // 卡片宽度仍在 M3 对话框的 280–560dp 区间内。
             val root = android.widget.FrameLayout(c)
-            val pad = dp(c, 8)
+            val pad = dp(c, 12)
             root.setPadding(pad, pad, pad, pad)
             root.addView(card, android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
