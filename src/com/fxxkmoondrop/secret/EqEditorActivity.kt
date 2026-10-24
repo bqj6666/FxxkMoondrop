@@ -46,6 +46,10 @@ class EqEditorActivity : Activity() {
     private lateinit var curveView: EqCurveView
     private lateinit var paramsBox: LinearLayout
     private lateinit var presetBox: LinearLayout
+    private lateinit var localBox: LinearLayout
+    private lateinit var undoBtn: TextView
+    /** 最后一次「读成功 / 写成功回读」的曲线快照：撤销就是回到这里 */
+    private var baseline: MoondropEq.Profile? = null
 
     private val infoV = ArrayList<TextView>()
     private val gainV = ArrayList<TextView>()
@@ -128,6 +132,7 @@ class EqEditorActivity : Activity() {
         content.addView(M3Ui.groupCard(this, pal, curveHolder), LinearLayout.LayoutParams(-1, -2))
 
         contentOf(content)
+        rebuildLocalPresets()
 
         body.setPadding(dp(12), dp(16), dp(12), dp(16))
         page.sv.addView(body, LinearLayout.LayoutParams(-1, -2))
@@ -149,12 +154,20 @@ class EqEditorActivity : Activity() {
         body.addView(paramsBox, LinearLayout.LayoutParams(-1, -2))
 
         // 应用：M3 Filled Button（40dp 高、20dp 圆角、14sp），位置在参数卡下方、预设上方
+        val actionRow = LinearLayout(this)
+        actionRow.orientation = LinearLayout.HORIZONTAL
+        actionRow.gravity = Gravity.CENTER
         applyBtn = m3Filled(Lang.t("应用", "Apply")) { doWrite() }
         applyBtn.isEnabled = false
         applyBtn.alpha = 0.38f
-        body.addView(applyBtn, LinearLayout.LayoutParams(-2, -2).also {
+        actionRow.addView(applyBtn, LinearLayout.LayoutParams(-2, -2))
+        // 撤销：只在「有未应用的改动」时可点，回到读进来（或上次写成功回读）的那条曲线
+        undoBtn = m3Text(Lang.t("撤销更改", "Revert")) { revertEdits() }
+        undoBtn.isEnabled = false
+        undoBtn.alpha = 0.38f
+        actionRow.addView(undoBtn, LinearLayout.LayoutParams(-2, -2).also { it.marginStart = dp(8) })
+        body.addView(actionRow, LinearLayout.LayoutParams(-1, -2).also {
             it.topMargin = dp(12); it.bottomMargin = dp(8)
-            it.gravity = Gravity.CENTER_HORIZONTAL
         })
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("预设", "Presets")))
@@ -165,6 +178,23 @@ class EqEditorActivity : Activity() {
         presetBox.setPadding(dp(20), dp(2), dp(20), dp(6))
         presetScroll.addView(presetBox, LinearLayout.LayoutParams(-2, -2))
         body.addView(presetScroll, LinearLayout.LayoutParams(-1, -2))
+
+        // 我的预设：App 本地命名库（不占耳机三个槽位），点一下即写入耳机
+        val mineHead = LinearLayout(this)
+        mineHead.orientation = LinearLayout.HORIZONTAL
+        mineHead.gravity = Gravity.CENTER_VERTICAL
+        mineHead.addView(M3Ui.sectionTitle(this, pal, Lang.t("我的预设", "My presets")),
+                LinearLayout.LayoutParams(0, -2, 1f))
+        mineHead.addView(m3Text(Lang.t("保存当前", "Save current")) { savePreset() })
+        body.addView(mineHead, LinearLayout.LayoutParams(-1, -2))
+
+        val localScroll = android.widget.HorizontalScrollView(this)
+        localScroll.isHorizontalScrollBarEnabled = false
+        localBox = LinearLayout(this)
+        localBox.orientation = LinearLayout.HORIZONTAL
+        localBox.setPadding(dp(20), dp(2), dp(20), dp(6))
+        localScroll.addView(localBox, LinearLayout.LayoutParams(-2, -2))
+        body.addView(localScroll, LinearLayout.LayoutParams(-1, -2))
 
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("操作", "Actions")))
         val ops = LinearLayout(this)
@@ -296,7 +326,7 @@ class EqEditorActivity : Activity() {
                 val pf = profile ?: return@addOnChangeListener
                 pf.bands.getOrNull(i) ?: return@addOnChangeListener
                 pf.bands[i].gainDb = Math.round(value * 10) / 10f
-                renderBand(i); paint()
+                renderBand(i); paint(); refreshUndo()
             }
             row.addView(sl, LinearLayout.LayoutParams(-1, -2))
             row.setOnClickListener { editBand(i) }
@@ -343,6 +373,7 @@ class EqEditorActivity : Activity() {
                     Lang.t("（防叠加削波）", " (anti-clipping)") +
                     Lang.t("　共 ", "　") + p.bands.size + Lang.t(" 段", " bands")
         }
+        refreshUndo()
     }
 
     private fun paint() { profile?.let { curveView.setProfile(it) } }
@@ -396,7 +427,7 @@ class EqEditorActivity : Activity() {
                     if (nq == null || nq !in 0.1f..12f) {
                         tilQ.error = Lang.t("请输入 0.1–12", "0.1–12")
                     } else b.q = nq
-                    renderBand(i); paint()
+                    renderBand(i); paint(); refreshUndo()
                 }
                 .show()
     }
@@ -552,6 +583,8 @@ class EqEditorActivity : Activity() {
                         showPlaceholder()
                     } else {
                         profile = pr
+                        // 读到的（或写入后回读到的）曲线 = 「未改动」基准，撤销回到这里
+                        baseline = pr.duplicate()
                         editable = ok
                         rebuildParams(pr)
                         showContent()
@@ -619,6 +652,146 @@ class EqEditorActivity : Activity() {
             }
             if (r != null) { Thread.sleep(300); doRead(null) }
         }.start()
+    }
+
+    // ───────────────────────── 本地预设（不占耳机槽位） ─────────────────────────
+
+    private fun rebuildLocalPresets() {
+        if (!::localBox.isInitialized) return
+        localBox.removeAllViews()
+        val items = try { EqPresetStore.list(this) } catch (_: Throwable) { emptyList() }
+        if (items.isEmpty()) {
+            val t = TextView(this)
+            t.text = Lang.t("还没有本地预设，调好曲线后点「保存当前」",
+                    "No local presets yet — tune the curve, then tap Save current")
+            t.textSize = 12f
+            t.setTextColor(pal.onVariant)
+            t.setPadding(dp(12), dp(8), dp(12), dp(8))
+            localBox.addView(t)
+            return
+        }
+        for (p in items) {
+            val chip = pill(p.name, false) { applyLocalPreset(p) }
+            chip.setOnLongClickListener { presetMenu(p); true }
+            localBox.addView(chip, LinearLayout.LayoutParams(-2, -2).also { it.marginEnd = dp(8) })
+        }
+    }
+
+    /** 一键应用：载入曲线后直接写进耳机（等同点「应用」）。 */
+    private fun applyLocalPreset(p: EqPresetStore.Preset) {
+        if (!editable) {
+            showError(Lang.t("这台设备的载荷未通过自洽校验，只能查看", "Read-only: layout not verified"))
+            return
+        }
+        val pr = EqPresetStore.toProfile(p)
+        profile = pr
+        rebuildParams(pr)
+        doWrite()
+    }
+
+    private fun presetMenu(p: EqPresetStore.Preset) {
+        val items = arrayOf(Lang.t("重命名", "Rename"), Lang.t("删除", "Delete"))
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(p.name)
+                .setItems(items) { _, which ->
+                    if (which == 0) renamePreset(p) else confirmDeletePreset(p)
+                }
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .show()
+    }
+
+    private fun savePreset() {
+        val pr = profile ?: return
+        if (!editable) {
+            showError(Lang.t("这台设备的载荷未通过自洽校验，只能查看", "Read-only: layout not verified"))
+            return
+        }
+        val cur = try { EqPresetStore.list(this) } catch (_: Throwable) { emptyList() }
+        if (cur.size >= EqPresetStore.MAX_COUNT) {
+            showError(Lang.t("本地预设已满（", "Preset limit reached (") + EqPresetStore.MAX_COUNT + Lang.t(" 个）", ")"))
+            return
+        }
+        val suggest = EqPresetStore.uniqueName(
+                Lang.t("我的预设", "My preset") + " " + (cur.size + 1), cur.map { it.name })
+        showNameDialog(Lang.t("保存为预设", "Save as preset"), suggest) { name ->
+            if (EqPresetStore.save(this, name, pr) == null) {
+                showError(Lang.t("保存失败：预设已满", "Save failed: preset limit"))
+            } else {
+                rebuildLocalPresets()
+            }
+        }
+    }
+
+    private fun renamePreset(p: EqPresetStore.Preset) {
+        showNameDialog(Lang.t("重命名预设", "Rename preset"), p.name) { name ->
+            EqPresetStore.rename(this, p.id, name)
+            rebuildLocalPresets()
+        }
+    }
+
+    private fun confirmDeletePreset(p: EqPresetStore.Preset) {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(Lang.t("删除预设", "Delete preset"))
+                .setMessage(p.name)
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .setPositiveButton(Lang.t("删除", "Delete")) { _, _ ->
+                    EqPresetStore.delete(this, p.id)
+                    rebuildLocalPresets()
+                }
+                .show()
+    }
+
+    /** 命名对话框：OutlinedBox + 单行输入，空名字直接不保存。 */
+    private fun showNameDialog(title: String, initial: String, onOk: (String) -> Unit) {
+        val til = com.google.android.material.textfield.TextInputLayout(this, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle)
+        til.hint = Lang.t("预设名字", "Preset name")
+        val et = com.google.android.material.textfield.TextInputEditText(til.context)
+        et.inputType = InputType.TYPE_CLASS_TEXT
+        et.setText(initial)
+        et.setSelection(et.text?.length ?: 0)
+        til.addView(et)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(24), dp(8), dp(24), dp(0))
+        box.addView(til, LinearLayout.LayoutParams(-1, -2))
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setView(box)
+                .setNegativeButton(Lang.t("取消", "Cancel"), null)
+                .setPositiveButton(Lang.t("保存", "Save")) { _, _ ->
+                    val name = et.text?.toString()?.trim().orEmpty()
+                    if (name.isNotBlank()) onOk(name)
+                }
+                .show()
+    }
+
+    // ───────────────────────── 撤销未应用的改动 ─────────────────────────
+
+    private fun revertEdits() {
+        val base = baseline?.duplicate() ?: return
+        profile = base
+        rebuildParams(base)
+    }
+
+    private fun sameAsBaseline(): Boolean {
+        val a = profile ?: return false
+        val b = baseline ?: return false
+        if (a.bands.size != b.bands.size) return false
+        if (Math.abs(a.preampDb - b.preampDb) > 0.05f) return false
+        for (i in a.bands.indices) {
+            if (a.bands[i].freq != b.bands[i].freq) return false
+            if (Math.abs(a.bands[i].gainDb - b.bands[i].gainDb) > 0.05f) return false
+            if (Math.abs(a.bands[i].q - b.bands[i].q) > 0.005f) return false
+        }
+        return true
+    }
+
+    private fun refreshUndo() {
+        if (!::undoBtn.isInitialized) return
+        val can = editable && baseline != null && !sameAsBaseline()
+        undoBtn.isEnabled = can
+        undoBtn.alpha = if (can) 1f else 0.38f
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
