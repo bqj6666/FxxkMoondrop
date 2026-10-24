@@ -689,15 +689,40 @@ class EqEditorActivity : Activity() {
         doWrite()
     }
 
+    /** 预设菜单：走 M3Ui 自绘弹窗（28dp 圆角 + 24dp 内边距 + 56dp 列表行），不用系统 setItems。 */
     private fun presetMenu(p: EqPresetStore.Preset) {
-        val items = arrayOf(Lang.t("重命名", "Rename"), Lang.t("删除", "Delete"))
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle(p.name)
-                .setItems(items) { _, which ->
-                    if (which == 0) renamePreset(p) else confirmDeletePreset(p)
-                }
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
-                .show()
+        val (dlg, body) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        body.addView(M3Ui.dialogTitle(this, p.name, pal.onSurface), LinearLayout.LayoutParams(-1, -2))
+        body.addView(menuRow(Lang.t("重命名", "Rename"), pal.onSurface) {
+            dlg.dismiss(); renamePreset(p)
+        }, LinearLayout.LayoutParams(-1, dp(56)).also { it.topMargin = dp(8) })
+        body.addView(menuRow(Lang.t("删除", "Delete"), pal.red) {
+            dlg.dismiss(); confirmDeletePreset(p)
+        }, LinearLayout.LayoutParams(-1, dp(56)))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(this, pal, Lang.t("取消", "Cancel")) { dlg.dismiss() })
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(8) })
+        dlg.show()
+    }
+
+    /** M3 弹窗菜单行：56dp 高、bodyLarge 16sp、整行可点（ripple 用系统 selectableItemBackground）。 */
+    private fun menuRow(text: String, color: Int, onClick: () -> Unit): TextView {
+        val t = TextView(this)
+        t.text = text
+        t.textSize = 16f
+        t.setTextColor(color)
+        t.gravity = Gravity.CENTER_VERTICAL
+        // 不额外缩进：M3 对话框里列表项文字必须与标题同一条左基线（body 已有 24dp 内边距）
+        t.setPadding(0, 0, 0, 0)
+        val tv = android.util.TypedValue()
+        if (theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) {
+            t.setBackgroundResource(tv.resourceId)
+        }
+        t.setOnClickListener { onClick() }
+        t.isClickable = true
+        return t
     }
 
     private fun savePreset() {
@@ -730,19 +755,36 @@ class EqEditorActivity : Activity() {
     }
 
     private fun confirmDeletePreset(p: EqPresetStore.Preset) {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle(Lang.t("删除预设", "Delete preset"))
-                .setMessage(p.name)
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
-                .setPositiveButton(Lang.t("删除", "Delete")) { _, _ ->
-                    EqPresetStore.delete(this, p.id)
-                    rebuildLocalPresets()
-                }
-                .show()
+        val (dlg, body) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        body.addView(M3Ui.dialogTitle(this, Lang.t("删除预设", "Delete preset"), pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        val msg = TextView(this)
+        msg.text = Lang.t("「", "「") + p.name + Lang.t(
+                "」会从本机删除，耳机里的曲线不受影响。",
+                "」will be removed from this device. The curve on the headset is unchanged.")
+        msg.textSize = 14f
+        msg.setTextColor(pal.onVariant)
+        msg.setLineSpacing(dp(2).toFloat(), 1.25f)
+        msg.setPadding(0, dp(12), 0, 0)
+        body.addView(msg, LinearLayout.LayoutParams(-1, -2))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(this, pal, Lang.t("取消", "Cancel")) { dlg.dismiss() })
+        actions.addView(M3Ui.textButton(this, pal, Lang.t("删除", "Delete")) {
+            dlg.dismiss()
+            EqPresetStore.delete(this, p.id)
+            rebuildLocalPresets()
+        })
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(8) })
+        dlg.show()
     }
 
     /** 命名对话框：OutlinedBox + 单行输入，空名字直接不保存。 */
+    /** 命名对话框：与预设菜单同一套 M3Ui 弹窗（标题 22sp、OutlinedBox 输入、右下文字按钮）。 */
     private fun showNameDialog(title: String, initial: String, onOk: (String) -> Unit) {
+        val (dlg, body) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        body.addView(M3Ui.dialogTitle(this, title, pal.onSurface), LinearLayout.LayoutParams(-1, -2))
         val til = com.google.android.material.textfield.TextInputLayout(this, null,
                 com.google.android.material.R.attr.textInputOutlinedStyle)
         til.hint = Lang.t("预设名字", "Preset name")
@@ -751,19 +793,22 @@ class EqEditorActivity : Activity() {
         et.setText(initial)
         et.setSelection(et.text?.length ?: 0)
         til.addView(et)
-        val box = LinearLayout(this)
-        box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(24), dp(8), dp(24), dp(0))
-        box.addView(til, LinearLayout.LayoutParams(-1, -2))
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle(title)
-                .setView(box)
-                .setNegativeButton(Lang.t("取消", "Cancel"), null)
-                .setPositiveButton(Lang.t("保存", "Save")) { _, _ ->
-                    val name = et.text?.toString()?.trim().orEmpty()
-                    if (name.isNotBlank()) onOk(name)
-                }
-                .show()
+        body.addView(til, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(16) })
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(this, pal, Lang.t("取消", "Cancel")) { dlg.dismiss() })
+        actions.addView(M3Ui.textButton(this, pal, Lang.t("保存", "Save")) {
+            val name = et.text?.toString()?.trim().orEmpty()
+            if (name.isBlank()) {
+                til.error = Lang.t("名字不能为空", "Name required")
+            } else {
+                dlg.dismiss()
+                onOk(name)
+            }
+        })
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(8) })
+        dlg.show()
     }
 
     // ───────────────────────── 撤销未应用的改动 ─────────────────────────
