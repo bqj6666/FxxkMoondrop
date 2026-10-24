@@ -463,7 +463,11 @@ class M3Ui {
             body.orientation = LinearLayout.VERTICAL
             body.setPadding(dp(c, 24), dp(c, 22), dp(c, 24), dp(c, 24))
             card.addView(body, android.widget.FrameLayout.LayoutParams(-1, -2))
-            dlg.setContentView(card)
+            // 卡片撑满 dialog window 宽度：M3 的对话框宽度由 window 决定，
+            // 之前 card 是 wrap_content，实际只有 0.72 屏宽，左右留白比规范宽一截。
+            dlg.setContentView(card, android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
             win?.setLayout((c.resources.displayMetrics.widthPixels * 0.84).toInt(), -2)
             return Pair(dlg, body)
         }
