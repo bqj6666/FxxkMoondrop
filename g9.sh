@@ -78,4 +78,17 @@ STATUS=$?
     org.gradle.launcher.GradleMain --stop >/dev/null 2>&1 || true
 pkill -f 'kotlin-daemon-embeddable' 2>/dev/null || true
 
+# ⚠️ GRADLE_USER_HOME 在 /dev（tmpfs）＝ 直接吃 RAM。构建多次后缓存能堆到 5 GB+，
+# 设备总内存 15 GB，堆起来会开始吃 swap 卡整机。收尾时回收可重建的部分：
+#   1. 旧 Gradle 版本缓存（当前 9.6.0，8.x 已无用）
+#   2. kotlin-daemon 日志
+#   3. 构建缓存超过 600 MB 就清掉（下次首次构建慢一点，好过堆满内存）
+rm -rf "$GUH"/caches/8.* 2>/dev/null || true
+rm -f "$TMPD"/kotlin-daemon.*.log 2>/dev/null || true
+BC="$GUH/caches/build-cache-1"
+if [ -d "$BC" ]; then
+    SZ=$(du -sm "$BC" 2>/dev/null | cut -f1)
+    [ -n "$SZ" ] && [ "$SZ" -gt 600 ] && rm -rf "$BC" 2>/dev/null || true
+fi
+
 exit $STATUS
