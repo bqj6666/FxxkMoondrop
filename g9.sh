@@ -35,6 +35,8 @@ export GRADLE_USER_HOME="$GUH"
 # 缓存：优先把磁盘上的 ~/.gradle/caches 用 bind mount 挂进 /dev。
 # 直接复制会把 3 GB+ 缓存搬进 tmpfs＝RAM，多轮构建足以把整机推进 swap。
 mkdir -p "$GUH"
+# 阿里云镜像 init 脚本（dl.google.com 不可达）；/dev 是 tmpfs，每次启动同步一份
+[ -f /root/.gradle/init.gradle ] && cp -f /root/.gradle/init.gradle "$GUH/init.gradle" 2>/dev/null || true
 if [ -d /root/.gradle/caches ] && ! mountpoint -q "$GUH/caches" 2>/dev/null; then
     mkdir -p "$GUH/caches" "$GUH/wrapper"
     mount --bind /root/.gradle/caches "$GUH/caches" 2>/dev/null || true
