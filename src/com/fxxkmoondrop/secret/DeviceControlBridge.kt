@@ -1,5 +1,7 @@
 package com.fxxkmoondrop.secret
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 
 /**
@@ -20,7 +22,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @Volatile private var spatialState = -1
     @Volatile private var headTracking = -1
-    @Volatile private var gainLevel = -1
+    @Volatile private var gainDeviceLevel = -1
     @Volatile private var ledState = -1
     @Volatile private var version = 0
     @Volatile private var stateListener: (() -> Unit)? = null
@@ -38,10 +40,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     private fun notifyStateChanged() { bumpVersion(); stateListener?.invoke(); CtrlBus.postDcChanged() }
 
     @JvmStatic
-    fun applyProfile(profile: AncProfileLib.DcProfile) {
-        // alpha2.37: 优先读取用户自定义增益映射
-        val ctx = try { GaiaBleClient.getInstance().getContext() } catch (_: Exception) { null }
-        val prefs = ctx?.getSharedPreferences("cfg", 0)
+    fun applyProfile(profile: AncProfileLib.DcProfile, prefs: SharedPreferences? = cfg()) {
         if (prefs != null) {
             // 增益映射
             val customGain = IntArray(profile.gainCount) { i ->
@@ -61,20 +60,20 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
             gainCount = profile.gainCount
             trackingLabels = profile.trackingLabels
         }
+        notifyStateChanged()
+    }
+
+    fun refreshProfile(ctx: Context) {
+        applyProfile(AncProfileLib.resolveDc(GaiaBleClient.getInstance().getConnectedDeviceName()),
+                ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE))
     }
 
     fun gainLabels(): List<String> = gainLabels
     fun gainCount(): Int = gainCount
     fun trackingLabels(): Array<String> = trackingLabels
 
-    private fun uiToDevGain(uiLevel: Int): Int {
-        return if (uiLevel in gainMap.indices) gainMap[uiLevel] else uiLevel
-    }
-
-    private fun devToUiGain(devLevel: Int): Int {
-        val idx = gainMap.indexOf(devLevel)
-        return if (idx >= 0) idx else devLevel
-    }
+    fun gainDeviceCode(uiLevel: Int): Int? =
+        gainMap.getOrNull(uiLevel)?.takeIf { uiLevel in 0 until gainCount && it in 0..9 }
 
     fun isSpatialOn(): Boolean = spatialState == 1
     /** 面板 / 官方行读到的档位：空间音频开着就不会读到「关闭」，除非用户手动关过。 */
@@ -82,7 +81,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
             spatialOn = spatialState == 1,
             gaiaTracking = headTracking,
             userClosedTracking = userClosedTrackingPref())
-    fun getGainLevel(): Int = gainLevel
+    fun getGainLevel(): Int = if (gainDeviceLevel >= 0) gainMap.indexOf(gainDeviceLevel) else -1
     fun getLedState(): Int = ledState
 
     override fun onSpatialResult(state: Int) {
@@ -102,7 +101,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     }
 
     override fun onGainResult(level: Int) {
-        gainLevel = devToUiGain(level)
+        gainDeviceLevel = level
         notifyStateChanged()
     }
 
@@ -195,10 +194,10 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
     @JvmStatic
     fun setGain(level: Int) {
         Log.d("DeviceControlBridge", "setGain uiLevel=" + level + " gainCount=" + gainCount + " gainMap=" + gainMap.contentToString())
-        if (level !in 0 until gainCount) return
-        gainLevel = level
+        val code = gainDeviceCode(level) ?: return
+        gainDeviceLevel = code
         bumpVersion()
-        GaiaBleClient.getInstance().setGain(uiToDevGain(level))
+        GaiaBleClient.getInstance().setGain(code)
         stateListener?.invoke()
     }
 
@@ -224,7 +223,7 @@ object DeviceControlBridge : GaiaBleClient.DeviceControlCallback {
 
     @JvmStatic
     fun reset() {
-        spatialState = -1; headTracking = -1; gainLevel = -1; ledState = -1
+        spatialState = -1; headTracking = -1; gainDeviceLevel = -1; ledState = -1
         stateListener?.invoke()
         CtrlBus.postDcChanged()
     }

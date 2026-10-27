@@ -2,7 +2,14 @@ package com.fxxkmoondrop.secret
 
 import android.content.Context
 import android.util.Log
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * 弹窗图标存储（3.0.5 起不再依赖 Root）。
@@ -67,7 +74,7 @@ object IconStore {
         val c = ctx ?: return false
         if (png.isEmpty() || png.size > MAX_BYTES) return false
         return try {
-            localFile(c).writeBytes(png)
+            replaceLocal(localFile(c), png)
             bump(c)
             Log.i(TAG, "icon saved locally: " + png.size + "B ver=" + version(c))
             writeGmsLegacyIfRooted(c, png)
@@ -75,6 +82,58 @@ object IconStore {
         } catch (t: Throwable) {
             Log.e(TAG, "save icon failed", t)
             false
+        }
+    }
+
+    fun readPng(ctx: Context, uri: Uri): ByteArray {
+        val bitmap = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                ?: throw IOException("Cannot decode the selected image")
+        try {
+            val longSide = maxOf(bitmap.width, bitmap.height)
+            return encodePng(longSide) { target ->
+                val scale = target.toFloat() / longSide
+                val scaled = if (target < longSide) Bitmap.createScaledBitmap(bitmap,
+                        maxOf(1, (bitmap.width * scale).toInt()), maxOf(1, (bitmap.height * scale).toInt()), true)
+                        else bitmap
+                try {
+                    ByteArrayOutputStream().use { out ->
+                        if (!scaled.compress(Bitmap.CompressFormat.PNG, 100, out)) throw IOException("PNG encoding failed")
+                        out.toByteArray()
+                    }
+                } finally {
+                    if (scaled !== bitmap) scaled.recycle()
+                }
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    internal fun encodePng(longSide: Int, encode: (Int) -> ByteArray): ByteArray {
+        require(longSide > 0)
+        var target = minOf(longSide, 512)
+        repeat(4) {
+            val png = encode(target)
+            if (png.isEmpty()) throw IOException("PNG encoding failed")
+            if (png.size <= MAX_BYTES) return png
+            target = (target * 0.75f).toInt()
+            if (target < 128) throw IOException("Image exceeds 1 MB")
+        }
+        throw IOException("Image exceeds 1 MB")
+    }
+
+    internal fun replaceLocal(file: File, png: ByteArray) {
+        require(png.isNotEmpty() && png.size <= MAX_BYTES)
+        val tmp = File.createTempFile("moondrop-icon-", ".png", file.parentFile)
+        try {
+            tmp.outputStream().use { out ->
+                out.write(png)
+                out.fd.sync()
+            }
+            // Same-directory atomic replacement keeps the old icon intact on any write failure.
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            tmp.delete()
         }
     }
 
@@ -104,13 +163,17 @@ object IconStore {
         Thread {
             try {
                 if (!RootShell.isAvailable()) return@Thread
-                val tmp = File(ctx.cacheDir, FILE_NAME)
-                tmp.outputStream().use { it.write(png) }
-                val cmd = "cp '" + tmp.absolutePath + "' " + GMS_LEGACY_PATH +
-                        " && chown $(stat -c %u:%g /data/user/0/com.google.android.gms) " + GMS_LEGACY_PATH +
-                        " && chmod 644 " + GMS_LEGACY_PATH + " && echo OK"
-                val out = RootShell.exec(cmd)
-                Log.i(TAG, "gms legacy write: " + (if (out != null && out.contains("OK")) "ok" else "skipped"))
+                val tmp = File.createTempFile("moondrop-legacy-", ".png", ctx.cacheDir)
+                try {
+                    tmp.outputStream().use { it.write(png) }
+                    val cmd = "cp '" + tmp.absolutePath + "' " + GMS_LEGACY_PATH +
+                            " && chown $(stat -c %u:%g /data/user/0/com.google.android.gms) " + GMS_LEGACY_PATH +
+                            " && chmod 644 " + GMS_LEGACY_PATH + " && echo OK"
+                    val out = RootShell.exec(cmd)
+                    Log.i(TAG, "gms legacy write: " + (if (out != null && out.contains("OK")) "ok" else "skipped"))
+                } finally {
+                    tmp.delete()
+                }
             } catch (t: Throwable) {
                 Log.w(TAG, "gms legacy write failed: $t")
             }

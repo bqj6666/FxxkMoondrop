@@ -184,7 +184,9 @@ class GaiaShutdownTest {
         override fun getApplicationContext(): Context = this
         override fun getFilesDir(): File = File("build/nonexistent-gaia-test-files")
         override fun getSharedPreferences(name: String?, mode: Int) = preferences
-        override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter?): Intent? {
+        override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter?,
+                                      broadcastPermission: String?, scheduler: android.os.Handler?): Intent? {
+            assertEquals(HookIpc.PERMISSION, broadcastPermission)
             this.receiver = receiver
             registrations++
             return null

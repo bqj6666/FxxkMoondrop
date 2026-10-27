@@ -4,8 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -28,10 +26,7 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStreamReader
+import androidx.lifecycle.LifecycleOwner
 
 /**
  * alpha1.35: 设置&关于 —— 整页二级界面（替代原 Dialog 浮窗）。
@@ -619,6 +614,12 @@ class SettingsFragment : Fragment() {
         val ancMapCur = ancMapDefaults.copyOf()
         val ancMapRows = ArrayList<View>()
         for (i in 0..3) {
+            // Unsupported profile slots are preserved, not offered as a custom hide action.
+            if (ancMapCur[i] < 0) {
+                ancMapRows.add(M3Ui.listRow(requireActivity(), pal, 0, ancMapNames[i],
+                        Lang.t("不支持", "Unsupported"), null, null))
+                continue
+            }
             val opts = Array(6) { it.toString() }
             lateinit var row: LinearLayout
             row = M3Ui.dropdownRow(requireActivity(), pal, ancMapNames[i],
@@ -677,6 +678,7 @@ class SettingsFragment : Fragment() {
                     Lang.t("发送的设备码（0-9），或隐藏", "Device code (0-9), or hide"),
                     opts, cur) { pick ->
                 getSP().edit().putInt("gain_map_" + i, if (pick == 0) -1 else pick - 1).commit()
+                DeviceControlBridge.refreshProfile(requireContext())
                 M3Ui.setDropdownValue(row, opts[pick])
             }
             gainMapRows.add(row)
@@ -692,7 +694,7 @@ class SettingsFragment : Fragment() {
         trackHint.setTextColor(pal.onVariant)
         trackHint.setPadding(dp(4), 0, dp(4), dp(6))
         box.addView(trackHint, LinearLayout.LayoutParams(-1, -2))
-        val trackLabels = DeviceControlBridge.trackingLabels()
+        val trackLabels = AncProfileLib.resolveDc(ancProfileDevice).trackingLabels
         val trackRows = ArrayList<View>()
         for (i in trackLabels.indices) {
             val et = EditText(requireContext())
@@ -721,6 +723,7 @@ class SettingsFragment : Fragment() {
                     } else {
                         getSP().edit().putString("track_label_" + labelIdx, v).commit()
                     }
+                    DeviceControlBridge.refreshProfile(requireContext())
                 }
             }
             et.setOnEditorActionListener { _, actionId, _ ->
@@ -741,6 +744,7 @@ class SettingsFragment : Fragment() {
                 Lang.t("恢复降噪、增益与追踪标签为型号档案默认值",
                         "Restore noise control, gain and tracking labels to the profile defaults"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
+            view?.clearFocus()
             val editor = getSP().edit()
             // 清除 ANC 映射
             for (i in 0..3) editor.remove("anc_map_" + i)
@@ -750,6 +754,7 @@ class SettingsFragment : Fragment() {
             // 清除追踪标签
             for (i in trackLabels.indices) editor.remove("track_label_" + i)
             editor.commit()
+            DeviceControlBridge.refreshProfile(requireContext())
             android.widget.Toast.makeText(requireContext(), Lang.t("已重置所有自定义映射", "All custom mappings reset"), android.widget.Toast.LENGTH_SHORT).show()
             // 刷新当前页面
             scheduleRebuild(0L)
@@ -1091,6 +1096,12 @@ class SettingsFragment : Fragment() {
         updateSimState()
     }
 
+    override fun onPause() {
+        // Commit the focused tracking label before leaving the settings view.
+        view?.clearFocus()
+        super.onPause()
+    }
+
     /** M3 文本按钮：统一走 M3Ui.textButton（去掉旧版 0x14000000 药丸底，对齐 LSPosed 纯文本按钮） */
     private fun makeMaterialTextButton(text: String, color: Int, l: View.OnClickListener): TextView {
         val b = M3Ui.textButton(requireContext(), pal, text, l)
@@ -1204,12 +1215,18 @@ class SettingsFragment : Fragment() {
                 LogCollector.privacyNotice(requireContext()),
                 Lang.t("同意并抓取", "Agree and capture")) {
             toast(Lang.t("⏳ 正在收集日志…", "⏳ Collecting logs…"))
+            val appContext = requireContext().applicationContext
+            val owner = viewLifecycleOwner
             Thread {
-                val path = LogCollector.collect(requireContext())
-                requireActivity().runOnUiThread {
-                    showSimpleDialog(Lang.t("日志已保存", "Log saved"),
-                            Lang.t("已打包为 ZIP（含 6 条分类日志：系统/应用/蓝牙/环境/logcat/运行日志）。\n\n路径：\n", "Packaged as ZIP (6 log categories: system/app/bluetooth/env/logcat/run).\n\nPath:\n") + path +
-                                    Lang.t("\n\n您可自行将文件分享给开发者进行设备适配分析。", "\n\nYou can share it with the developer for device adaptation."))
+                try {
+                    val path = LogCollector.collect(appContext)
+                    postToView(owner) {
+                        showSimpleDialog(Lang.t("日志已保存", "Log saved"),
+                                Lang.t("已打包为 ZIP（含 6 条分类日志：系统/应用/蓝牙/环境/logcat/运行日志）。\n\n路径：\n", "Packaged as ZIP (6 log categories: system/app/bluetooth/env/logcat/run).\n\nPath:\n") + path +
+                                        Lang.t("\n\n您可自行将文件分享给开发者进行设备适配分析。", "\n\nYou can share it with the developer for device adaptation."))
+                    }
+                } catch (t: Exception) {
+                    postToView(owner) { toast(Lang.t("日志抓取失败: ", "Log capture failed: ") + t.message) }
                 }
             }.start()
         }
@@ -1221,61 +1238,27 @@ class SettingsFragment : Fragment() {
         toast(if (ok) "已恢复默认图标（下次连接生效）" else "恢复失败")
     }
 
+    private fun postToView(owner: LifecycleOwner, action: () -> Unit) {
+        rebuildHandler.post {
+            owner.lifecycle.runWhenResumed {
+                if (viewLifecycleOwnerLiveData.value === owner) action()
+            }
+        }
+    }
+
     private fun saveIconFromUri(uri: Uri) {
+        val appContext = context?.applicationContext ?: return
+        val owner = viewLifecycleOwnerLiveData.value ?: return
         Thread {
             try {
-                val input = requireContext().contentResolver.openInputStream(uri)
-                if (input == null) {
-                    requireActivity().runOnUiThread { toast("无法读取所选图片") }
-                    return@Thread
-                }
-                var bmp = BitmapFactory.decodeStream(input)
-                try { input.close() } catch (_: Exception) { }
-                if (bmp == null) {
-                    requireActivity().runOnUiThread { toast("图片解码失败") }
-                    return@Thread
-                }
-                val w = bmp.width
-                val h = bmp.height
-                var longSide = Math.max(w, h)
-                var target = if (longSide > 512) 512 else longSide
-                val out = File(requireContext().cacheDir, "moondrop_custom_icon.png")
-                var scaled = bmp
-                for (i in 0 until 4) {
-                    if (target < 128) break
-                    val sc = target / Math.max(longSide, 1).toFloat()
-                    if (sc < 1f) {
-                        val s2 = Bitmap.createScaledBitmap(bmp,
-                                Math.max(1, (w * sc).toInt()), Math.max(1, (h * sc).toInt()), true)
-                        if (s2 !== scaled && scaled !== bmp) scaled.recycle()
-                        scaled = s2
-                        longSide = Math.max(scaled.width, scaled.height)
-                    }
-                    val fos = FileOutputStream(out)
-                    scaled.compress(Bitmap.CompressFormat.PNG, 100, fos)
-                    fos.close()
-                    if (out.length() <= 1024 * 1024) break
-                    target = (target * 0.75f).toInt()
-                }
-                val size = out.length()
-                if (size > 1024 * 1024) {
-                    requireActivity().runOnUiThread { toast("图片超过 1 MB") }
-                    return@Thread
-                }
-                // 3.0.5: 写本应用 filesDir（无需 Root），GMS 侧 Hook 经 ContentProvider 读取；
-                // 有 Root 时 IconStore 内部额外写一份 GMS 老路径（纯增强，失败不影响）。
-                val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
-                requireActivity().runOnUiThread {
+                val png = IconStore.readPng(appContext, uri)
+                val ok = IconStore.save(appContext, png)
+                postToView(owner) {
                     toast(if (ok) "弹窗图标已更新（下次连接生效）" else "写入图标失败")
-                    // 选完立刻刷新本页：行右侧要从「默认」切到「已自定义 + 恢复默认」
                     if (ok) scheduleRebuild(250L)
                 }
-                if (scaled !== bmp && !scaled.isRecycled) scaled.recycle()
-                // bmp 已在上方判空（null 时 return@Thread），此处编译器已智能转换为非空，
-                // 原先的 `bmp != null &&` 恒真会产生警告，去掉后语义完全等价。
-                if (!bmp.isRecycled) bmp.recycle()
             } catch (t: Throwable) {
-                requireActivity().runOnUiThread { toast("图标处理失败: ${t.message}") }
+                postToView(owner) { toast("图标处理失败: ${t.message}") }
             }
         }.start()
     }

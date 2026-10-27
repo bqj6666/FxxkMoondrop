@@ -435,13 +435,30 @@ public final class BleSourceProtocol {
 
     /** 解析响应帧（frameType 必须为 RESPONSE）。帧头不合法返回 null。 */
     public static SrcResponse parseResponse(byte[] frame) {
-        if (frame == null || frame.length < HEADER_SIZE) return null;
+        if (!isFrame(frame, FRAME_RESPONSE)) return null;
         int msgId = u8(frame[3]);
         int seq = u8(frame[4]);
         int len = u8(frame[5]);
-        byte[] payload = frame.length >= HEADER_SIZE + len
-                ? Arrays.copyOfRange(frame, HEADER_SIZE, HEADER_SIZE + len) : new byte[0];
-        return parseResponsePayload(msgId, seq, payload);
+        byte[] payload = Arrays.copyOfRange(frame, HEADER_SIZE, HEADER_SIZE + len);
+        SrcResponse response = parseResponsePayload(msgId, seq, payload);
+        // Error replies may contain only a status; successful replies need their full model.
+        if (len > 0 && u8(payload[0]) != ST_OK) return response;
+        switch (response.kind) {
+            case R_STATUS: return response.status == null ? null : response;
+            case R_FW: return response.fw == null ? null : response;
+            case R_CAPABILITY: return response.capability == null ? null : response;
+            case R_VOLUME: return response.volume == null ? null : response;
+            case R_PRESET_INFO: return response.presetInfo == null ? null : response;
+            case R_PRESET_CHANGE: return response.presetChange == null ? null : response;
+            case R_PEQ_CONFIG: return response.peqConfig == null ? null : response;
+            case R_PEQ_PREGAIN: return response.peqPreGain == null ? null : response;
+            case R_PEQ_POINT: return response.peqPoint == null ? null : response;
+            case R_PEQ_COMMIT: return response.peqCommit == null ? null : response;
+            case R_MIC_GAIN: return response.micGain == null ? null : response;
+            case R_EARBUD_INFO: return response.earbudInfo == null ? null : response;
+            case R_SN_CHUNK: return response.snChunk == null ? null : response;
+            default: return response;
+        }
     }
 
     private static SrcResponse parseResponsePayload(int cmdId, int seq, byte[] p) {
@@ -583,12 +600,11 @@ public final class BleSourceProtocol {
 
     /** 解析通知帧。帧头非法返回 null。 */
     public static SrcNotification parseNotification(byte[] frame) {
-        if (frame == null || frame.length < HEADER_SIZE) return null;
+        if (!isFrame(frame, FRAME_NOTIFICATION)) return null;
         int notifId = u8(frame[3]);
         int seq = u8(frame[4]);
         int len = u8(frame[5]);
-        byte[] p = frame.length >= HEADER_SIZE + len
-                ? Arrays.copyOfRange(frame, HEADER_SIZE, HEADER_SIZE + len) : new byte[0];
+        byte[] p = Arrays.copyOfRange(frame, HEADER_SIZE, HEADER_SIZE + len);
         switch (notifId) {
             case NOTIF_AUDIO_SOURCE_CHANGED:
             case NOTIF_SWITCH_STATE_CHANGED:
@@ -617,10 +633,13 @@ public final class BleSourceProtocol {
         }
     }
 
-    /** 校验帧头（0xA5 / 0x01 / 期望帧类型）。 */
+    /** Validate the header and complete, bounded payload before accepting a frame. */
     public static boolean isFrame(byte[] frame, int expectedType) {
         if (frame == null || frame.length < HEADER_SIZE) return false;
-        return u8(frame[0]) == MAGIC && u8(frame[1]) == PROTOCOL_VERSION && u8(frame[2]) == expectedType;
+        int len = u8(frame[5]);
+        return u8(frame[0]) == MAGIC && u8(frame[1]) == PROTOCOL_VERSION
+                && u8(frame[2]) == expectedType && len <= MAX_PAYLOAD
+                && frame.length == HEADER_SIZE + len;
     }
 
     public static String statusName(int st) {

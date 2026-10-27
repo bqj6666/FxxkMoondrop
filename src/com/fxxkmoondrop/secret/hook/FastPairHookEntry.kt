@@ -18,6 +18,7 @@ import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
@@ -27,6 +28,7 @@ import com.fxxkmoondrop.secret.AncProfileLib
 import com.fxxkmoondrop.secret.M3Ui
 import com.fxxkmoondrop.secret.HookGuard
 import com.fxxkmoondrop.secret.HookHelper
+import com.fxxkmoondrop.secret.HookIpc
 import com.fxxkmoondrop.secret.BatteryStore
 import com.fxxkmoondrop.secret.GaiaBleClient
 import android.util.Log
@@ -251,7 +253,7 @@ class FastPairHookEntry {
                         val i = Intent(ACTION_FP_SHEET_CLOSED)
                         i.putExtra(EXTRA_DEVICE_NAME, sLastDeviceName)
                         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        ctx.sendBroadcast(i)
+                        HookIpc.sendToApp(ctx, i)
                         Log.d(TAG, "[FastPairHook] half sheet closed -> sim restore signal name=" + sLastDeviceName)
                     }
                     null
@@ -700,7 +702,7 @@ class FastPairHookEntry {
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 val ctx = sAppContext
                 if (ctx != null) {
-                    ctx.sendBroadcast(i)
+                    HookIpc.sendToApp(ctx, i)
                     Log.d(TAG, "[FastPairHook] CONNECTED broadcast sent, name=" + sLastDeviceName)
                 }
             } catch (t: Throwable) {
@@ -721,7 +723,7 @@ class FastPairHookEntry {
             }
             val i = Intent(ACTION_MODE_CHANGED)
             i.putExtra(EXTRA_MODE, mode)
-            ctx.sendBroadcast(i)
+            HookIpc.sendToApp(ctx, i)
             Log.d(TAG, "[FastPairHook] MODE_CHANGED sent, mode=" + mode)
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] MODE_CHANGED fail: " + t)
@@ -738,7 +740,7 @@ class FastPairHookEntry {
             }
             val i = Intent(ACTION_MODE_REQUEST)
             i.setPackage(PKG_APP)
-            ctx.sendBroadcast(i)
+            HookIpc.sendToApp(ctx, i)
             Log.d(TAG, "[FastPairHook] MODE_REQUEST sent")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] MODE_REQUEST fail: " + t)
@@ -1377,10 +1379,10 @@ class FastPairHookEntry {
     private val regReceivers =
             java.util.Collections.synchronizedList(ArrayList<Pair<Context, BroadcastReceiver>>())
 
-    private fun reg(ctx: Context, r: BroadcastReceiver, f: IntentFilter, flag: Int) {
-        // flag < 0 = 不带标志的旧式注册（API 33 以下），保持与原行为一致
-        if (flag >= 0) ctx.registerReceiver(r, f, flag)
-        else @Suppress("UnspecifiedRegisterReceiverFlag") ctx.registerReceiver(r, f)
+    private fun reg(ctx: Context, r: BroadcastReceiver, f: IntentFilter, flag: Int,
+                    senderPermission: String? = HookIpc.PERMISSION) {
+        if (Build.VERSION.SDK_INT >= 33) ctx.registerReceiver(r, f, senderPermission, null, flag)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") ctx.registerReceiver(r, f, senderPermission, null)
         regReceivers.add(ctx.applicationContext to r)
     }
 
@@ -1436,65 +1438,43 @@ class FastPairHookEntry {
         } catch (t: Throwable) {
             xlog("trigger receiver fail: " + t)
         }
-        // 蓝牙 ACL_CONNECTED 自动触发
+        // Forward protected ACL events to the app's PopupGate, even when monitoring is off.
         try {
-            val acl = IntentFilter("android.bluetooth.device.action.ACL_CONNECTED")
+            val acl = IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED)
+            acl.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             val btReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
-                    var name: String? = null
+                    var name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                    var address = intent.getStringExtra("android.bluetooth.device.extra.ADDRESS")
                     try {
                         @Suppress("DEPRECATION")
-                        val dev = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
+                        val dev = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                         if (dev != null) {
-                            name = HookHelper.callMethod(dev, "getName") as String?
+                            address = HookHelper.callMethod(dev, "getAddress") as String? ?: address
+                            name = HookHelper.callMethod(dev, "getName") as String? ?: name
                         }
                     } catch (t: Throwable) {
                         Log.d(TAG, "[FastPairHook] get bt name fail: " + t)
                     }
-                    // 【数据对接】设备名优先取蓝牙真实名称，未提供时回退 provider
-                    val dp = sDataProvider
-                    if (name.isNullOrEmpty() && dp != null) {
-                        name = dp.getDeviceName()
+                    if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+                        if (name.isNullOrEmpty()) name = sDataProvider?.getDeviceName()
+                        if (!DeviceMatcher.isMoondrop(name)) return
                     }
-                    if (name.isNullOrEmpty()) {
-                        Log.d(TAG, "[FastPairHook] ACL_CONNECTED skip: no device name")
-                        return
-                    }
-                    // ** alpha1.32: 事件通道——ACL 设备地址推送给应用（动态发现，零硬编码） **
+                    // A disconnect may have only an address; the app remembers its popup name.
                     try {
-                        @Suppress("DEPRECATION")
-                        val dev2 = intent.getParcelableExtra<BluetoothDevice>("android.bluetooth.device.extra.DEVICE")
-                        if (dev2 != null) {
-                            val devAddr = HookHelper.callMethod(dev2, "getAddress") as String?
-                            // alpha2.41.9: 只有水月雨系设备才推送地址——此前只校验 MAC 格式，
-                            // 任何蓝牙设备（键鼠/车机/其他耳机）连接都会把地址推给应用并写进
-                            // gaia_le_addr 持久缓存，导致 GAIA 直连永远连到错误设备。
-                            if (devAddr != null && devAddr.matches(Regex("([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"))) {
-                                if (DeviceMatcher.isMoondrop(name)) {
-                                    sendLeAddr(devAddr.uppercase())
-                                } else {
-                                    Log.d(TAG, "[FastPairHook] acl addr push skip (not Moondrop): "
-                                            + name + " " + devAddr)
-                                }
-                            }
+                        HookIpc.sendToApp(context, Intent(intent.action)
+                                .putExtra(BluetoothDevice.EXTRA_NAME, name)
+                                .putExtra("android.bluetooth.device.extra.ADDRESS", address))
+                        if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED
+                                && address != null && BluetoothAdapter.checkBluetoothAddress(address.uppercase())) {
+                            sendLeAddr(address.uppercase())
                         }
                     } catch (t: Throwable) {
-                        Log.d(TAG, "[FastPairHook] acl addr push fail: " + t)
+                        Log.d(TAG, "[FastPairHook] ACL forward fail: " + t)
                     }
-                    Log.d(TAG, "[FastPairHook] ACL_CONNECTED -> " + name
-                            + " (deferred " + ACL_POSTSHOW_DELAY_MS + "ms for GAIA)")
-                    val fpName = name
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        val since = System.currentTimeMillis() - sLastShowMs
-                        if (since < ACL_REPEAT_GUARD_MS) {
-                            Log.d(TAG, "[FastPairHook] ACL deferred skip (shown " + since + "ms ago)")
-                            return@postDelayed
-                        }
-                        postShow(context, cl, fpName)
-                    }, ACL_POSTSHOW_DELAY_MS)
                 }
             }
-            reg(ctx, btReceiver, acl, exportedFlag)
+            reg(ctx, btReceiver, acl, exportedFlag, senderPermission = null)
             xlog("bluetooth ACL receiver registered")
         } catch (t: Throwable) {
             xlog("bluetooth receiver fail: " + t)
@@ -1571,7 +1551,7 @@ class FastPairHookEntry {
                         val pong = Intent(ACTION_FASTPAIR_PONG)
                         pong.setPackage(PKG_APP)
                         pong.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                        context.sendBroadcast(pong)
+                        HookIpc.sendToApp(context, pong)
                         xlog("ping -> pong")
                     } catch (t: Throwable) {
                         xlog("pong fail: " + t)
@@ -1643,14 +1623,14 @@ class FastPairHookEntry {
 
     private fun acquireScanLock(): Boolean {
         return try {
-            val c = gmsContext() ?: return true
+            val c = gmsContext() ?: return false
             val f = File(c.filesDir, ".fxxk_le_scan_lock")
             if (f.exists() && System.currentTimeMillis() - f.lastModified() > 15000) {
                 f.delete()
             }
             f.createNewFile()
         } catch (_: Throwable) {
-            true
+            false
         }
     }
 
@@ -1661,7 +1641,14 @@ class FastPairHookEntry {
         } catch (_: Throwable) { }
     }
 
+    internal fun beginLeScan(acquire: () -> Boolean): Boolean {
+        if (sLeScanning || !acquire()) return false
+        sLeScanning = true
+        return true
+    }
+
     private fun handleLeScanRequest() {
+        var lockAcquired = false
         try {
             val now = System.currentTimeMillis()
             if (now - sLastScanReqMs < 30000) {
@@ -1674,17 +1661,12 @@ class FastPairHookEntry {
                 Log.d(TAG, "[FastPairHook] LE scan skip: adapter off")
                 return
             }
-            if (sLeScanning) return
-            sLeScanning = true
-            val sc = adapter.bluetoothLeScanner
-            if (sc == null) {
-                sLeScanning = false
-                return
-            }
-            if (!acquireScanLock()) {
+            val sc = adapter.bluetoothLeScanner ?: return
+            if (!beginLeScan(::acquireScanLock)) {
                 Log.d(TAG, "[FastPairHook] LE scan skip (locked by sibling process)")
                 return
             }
+            lockAcquired = true
             val st = ScanSettings.Builder()
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
             val cbRef = arrayOfNulls<ScanCallback>(1)
@@ -1745,8 +1727,10 @@ class FastPairHookEntry {
             Log.d(TAG, "[FastPairHook] LE scan started (GMS side)")
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] handleLeScanRequest fail: " + t)
-            sLeScanning = false
-            releaseScanLock()
+            if (lockAcquired) {
+                sLeScanning = false
+                releaseScanLock()
+            }
         }
     }
 
@@ -1755,8 +1739,7 @@ class FastPairHookEntry {
         return try {
             val app = HookHelper.callStaticMethod(
                     Class.forName("android.app.ActivityThread", true, cl), "currentApplication")
-            val ctx = (app as? Context)?.createPackageContext(
-                    "com.fxxkmoondrop.secret", Context.CONTEXT_IGNORE_SECURITY) ?: return true
+            val ctx = app as? Context ?: return true
             val cur = ctx.contentResolver.query(
                     android.net.Uri.parse("content://com.fxxkmoondrop.secret.prefs/" + key),
                     null, null, null, null) ?: return true
@@ -1787,7 +1770,7 @@ class FastPairHookEntry {
             val i = Intent(ACTION_LE_ADDR_FOUND)
             i.putExtra(EXTRA_LE_ADDR, addr)
             i.setPackage(PKG_APP)
-            ctx.sendBroadcast(i)
+            HookIpc.sendToApp(ctx, i)
             Log.d(TAG, "[FastPairHook] LE addr pushed: " + addr)
         } catch (t: Throwable) {
             Log.d(TAG, "[FastPairHook] sendLeAddr fail: " + t)
@@ -2140,10 +2123,6 @@ class FastPairHookEntry {
         /** 弹窗归属标记：自绘弹窗的 Intent 带此 extra=true，Google 原生卡片没有。
          *  渲染回调与 onResume 都靠它区分「是不是本模块拉起的弹窗」。 */
         const val EXTRA_OUR_SHEET = "fxxk_our_sheet"
-        /** alpha1.14fix2: ACL 自动弹窗延迟——等 GAIA 连接+电量就绪，ACL 仅作兜底 */
-        const val ACL_POSTSHOW_DELAY_MS = 2000L // alpha2.26.3: 2s 即弹（GAIA 后台并行连接）
-        /** 弹窗重复保护：距上次显示不足该时长则跳过兜底弹窗 */
-        const val ACL_REPEAT_GUARD_MS = 60000L
         /** alpha2.41.5: postShow 统一防重窗口——弹窗还开着或距上次显示 < 本值则不弹新窗。
          *  覆盖 GAIA 就绪后的二次触发(约 2-8s)与双地址交替连接，避免弹窗两次。 */
         const val POPUP_REPEAT_GUARD_MS = 12000L

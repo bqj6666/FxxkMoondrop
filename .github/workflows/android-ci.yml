@@ -79,9 +79,6 @@ jobs:
           echo "检查 apksigner:"
           ls -la "$ANDROID_HOME/build-tools/36.0.0/apksigner" && echo "apksigner OK"
 
-      - name: CI 环境适配（移除本机 ARM64 qemu aapt2 override）
-        run: sed -i '/aapt2FromMavenOverride/d' gradle.properties
-
       - name: 还原签名密钥（仓库 Secrets：KEYSTORE_B64 + FXXK_KEYPASS，未配置则跳过）
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}

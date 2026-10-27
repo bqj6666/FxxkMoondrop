@@ -10,12 +10,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -32,15 +29,11 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.os.SystemClock
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
-import java.io.InputStreamReader
 
 class OverviewFragment : Fragment() {
 
@@ -104,6 +97,14 @@ class OverviewFragment : Fragment() {
     private var ancIconCache: Array<android.graphics.drawable.Drawable?>? = null
     @Volatile private var moonProcState = Lang.t("未知", "Unknown")
     private val autoRefreshHandler = Handler(Looper.getMainLooper())
+    private val viewHandler = Handler(Looper.getMainLooper())
+
+    private fun postToView(action: () -> Unit) {
+        val owner = viewLifecycleOwnerLiveData.value ?: return
+        viewHandler.post {
+            if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) action()
+        }
+    }
 
     /** alpha1.36: HeadsetGate 异步补扫命中后推送 MAC（非阻塞链路闭环；onResume 注册 onStop 注销） */
     private val macUpdReceiver = object : BroadcastReceiver() {
@@ -606,24 +607,14 @@ class OverviewFragment : Fragment() {
         // alpha1.4: 注册后台服务状态广播（电量/降噪更新）
         try {
             val sf = IntentFilter("com.fxxkmoondrop.secret.STATE_UPDATED")
-            if (Build.VERSION.SDK_INT >= 33) {
-                requireContext().registerReceiver(stateReceiver, sf, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                @Suppress("DEPRECATION")
-                requireContext().registerReceiver(stateReceiver, sf)
-            }
+            HookIpc.registerInternal(requireContext(), stateReceiver, sf)
         } catch (_: Exception) { }
 
         // alpha1.20: 绑定广播上下文 + 响应 GMS 弹窗模式请求（高亮同步通道）
         AncBridge.bind(requireContext())
         try {
             val rf = IntentFilter(AncBridge.ACTION_FP_MODE_REQUEST)
-            if (Build.VERSION.SDK_INT >= 33) {
-                requireContext().registerReceiver(modeRequestReceiver, rf, Context.RECEIVER_EXPORTED)
-            } else {
-                @Suppress("DEPRECATION")
-                requireContext().registerReceiver(modeRequestReceiver, rf)
-            }
+            HookIpc.registerInternal(requireContext(), modeRequestReceiver, rf)
         } catch (_: Exception) { }
 
         refreshAnc()
@@ -689,11 +680,14 @@ class OverviewFragment : Fragment() {
         val ledRow = card.findViewWithTag<LinearLayout>("dc_led_row")
         spatialRow?.visibility = if (connected && profile.hasSpatial) View.VISIBLE else View.GONE
         trackingRow?.visibility = if (connected && profile.hasSpatial) View.VISIBLE else View.GONE
-        gainRow?.visibility = if (connected && profile.hasGain) View.VISIBLE else View.GONE
+        val hasGain = profile.hasGain && (0 until DeviceControlBridge.gainCount()).any {
+            DeviceControlBridge.gainDeviceCode(it) != null
+        }
+        gainRow?.visibility = if (connected && hasGain) View.VISIBLE else View.GONE
         ledRow?.visibility = if (connected && profile.hasLed) View.VISIBLE else View.GONE
 
         // alpha2.38.8: 未连接或无 DC 功能时隐藏整个卡片，避免空背景残留
-        val anyDcVisible = connected && (profile.hasSpatial || profile.hasGain || profile.hasLed)
+        val anyDcVisible = connected && (profile.hasSpatial || hasGain || profile.hasLed)
         card.visibility = if (anyDcVisible) View.VISIBLE else View.GONE
 
         val spSwitch = card.findViewWithTag<com.google.android.material.materialswitch.MaterialSwitch>("dc_spatial_switch")
@@ -735,6 +729,16 @@ class OverviewFragment : Fragment() {
                     if (parts.size != 2) continue
                     val feature = parts[0]
                     val idx = parts[1].toInt()
+                    val available = feature != "gain" || DeviceControlBridge.gainDeviceCode(idx) != null
+                    col.visibility = if (available) View.VISIBLE else View.GONE
+                    val label = when (feature) {
+                        "spatial" -> DeviceControlBridge.trackingLabels().getOrNull(idx)
+                        "gain" -> DeviceControlBridge.gainLabels().getOrNull(idx)
+                        else -> null
+                    }
+                    if (label != null) {
+                        for (n in 0 until col.childCount) (col.getChildAt(n) as? TextView)?.text = label
+                    }
                     val active = when (feature) {
                         "spatial" -> spatialOn && idx == sMode
                         "gain" -> idx == gLevel
@@ -743,7 +747,7 @@ class OverviewFragment : Fragment() {
                     }
                     val featType = when (feature) { "spatial" -> 0; "gain" -> 1; "led" -> 2; else -> 0 }
                     // 空间音频总开关关着时，追踪档位整组不可选
-                    val enabled = connected && !(feature == "spatial" && !spatialOn)
+                    val enabled = connected && available && !(feature == "spatial" && !spatialOn)
                     // 状态全部交给官方控件：isChecked 驱动容器色，isEnabled 走官方 disabled 视觉。
                     // 不再手绘 OVAL 圆底/描边，也不再自己压 alpha。
                     btn?.isChecked = active
@@ -892,26 +896,25 @@ class OverviewFragment : Fragment() {
     }
 
     private fun requestNeededPermissions() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            if (requireContext().checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
-                    != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), 1)
-            }
+        val missing = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN).filter {
+            requireContext().checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+        }.toMutableList()
+        if (Build.VERSION.SDK_INT >= 33 && requireContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (requireContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
-            }
-        }
+        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
     }
 
     /** 自动检查：仅在权限缺失时弹窗告知（启动时调用，子线程执行避免阻塞 UI） */
     private fun autoCheckPermissions() {
+        val appContext = requireContext().applicationContext
+        val owner = viewLifecycleOwner
         Thread {
-            val items = PermissionChecker.checkAll(requireContext())
-            requireActivity().runOnUiThread {
-                if (PermissionChecker.countMissing(items) > 0) {
+            val items = PermissionChecker.checkAll(appContext)
+            viewHandler.post {
+                if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                        PermissionChecker.countMissing(items) > 0) {
                     showPermissionDialog(items)
                 }
             }
@@ -1151,16 +1154,17 @@ class OverviewFragment : Fragment() {
         super.onResume()
         GaiaBleClient.getInstance().setCallback(gaiaUiCallback)
         try {
-            requireContext().registerReceiver(macUpdReceiver,
+            HookIpc.registerInternal(requireContext(), macUpdReceiver,
                     IntentFilter(HeadsetGate.ACTION_MAC_UPDATED))
         } catch (_: Exception) { }
         updateStatus()
         refreshAnc()
-        // alpha2.32: 回前台时刷新 DC 按钮状态（设备可能已连接）
+        // Apply edits even when the shared connection never disconnected.
+        DeviceControlBridge.refreshProfile(requireContext())
         refreshDcHighlight()
         // alpha2.33: DC 状态变化监听（空间/增益/LED 回包后刷新 UI）
         DeviceControlBridge.setStateListener {
-            activity?.runOnUiThread { refreshDcHighlight() }
+            postToView { refreshDcHighlight() }
         }
         // alpha2.26.2: 每次回到前台按最新设置应用抗风按钮可见性（设置页切换后返回即时生效）
         try {
@@ -1180,180 +1184,22 @@ class OverviewFragment : Fragment() {
             requireContext().unregisterReceiver(macUpdReceiver)
         } catch (_: Exception) { }
         autoRefreshHandler.removeCallbacks(autoRefreshRunnable)
+        viewHandler.removeCallbacksAndMessages(null)
+        codecQuerying = false
+        DeviceControlBridge.setStateListener(null)
     }
-
-    /** 3.0.5: 自定义图标存在性改为查本应用 filesDir（无需 Root，毫秒级）。 */
-    private fun iconCustomExists(): Boolean = IconStore.exists(requireContext().applicationContext)
-
-    private fun iconCustomExistsAsync(callback: (Boolean) -> Unit) {
-        callback(iconCustomExists())
-    }
-
-    // ── alpha1.14fix5: 弹窗图标选择 → Material experience 卡片（与权限弹窗同风格）──
-    /**
-     * 3.0.5: 相册选图改用 ActivityResultLauncher。
-     *
-     * 旧实现走 `requireActivity().startActivityForResult` + Fragment.onActivityResult，
-     * 实测（Android 15 / ColorOS）结果根本不回调到 Fragment —— 选中图片后什么都没发生，
-     * 也就是用户看到的「图标怎么改都没反应」。
-     */
-    private val iconPicker = registerForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri -> if (uri != null) saveIconFromUri(uri) }
-
-    private fun showIconDialog(custom: Boolean) {
-        val dlg = Dialog(requireContext())
-        val win = dlg.window
-        if (win != null) {
-            win.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0x00000000))
-            win.setDimAmount(0.5f)
-        }
-        val accent = primaryColor
-        val onSurf = onSurfaceColor
-        val onVariant = onVariantColor
-        val cardColor = cardSurfaceColor
-        val density = resources.displayMetrics.density
-
-        val card = MaterialCardView(requireContext())
-        card.setRadius(28 * density)
-        card.setCardBackgroundColor(cardColor)
-        card.setStrokeColor((accent and 0x00FFFFFF) or 0x33000000)
-        card.setStrokeWidth((1.5f * density).toInt())
-        card.setCardElevation(16 * density)
-        val cardBody = LinearLayout(requireContext())
-        cardBody.orientation = LinearLayout.VERTICAL
-        cardBody.setPadding(dp(24), dp(22), dp(24), dp(24))
-        card.addView(cardBody, android.widget.FrameLayout.LayoutParams(-1, -2))
-
-        val head = TextView(requireContext())
-        head.text = Lang.t("弹窗图标（当前：", "Popup icon (current: ") + (if (custom) Lang.t("已自定义", "Custom") else Lang.t("默认", "Default")) + ")"
-        head.textSize = 22f
-        head.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        head.setTextColor(accent)
-        head.gravity = Gravity.CENTER_HORIZONTAL
-        cardBody.addView(head, lp(false))
-        cardBody.addView(spacer(dp(10)))
-
-        val items = if (custom) arrayOf(Lang.t("从相册选择", "Choose from gallery"), Lang.t("恢复默认图标", "Restore default icon")) else arrayOf(Lang.t("从相册选择", "Choose from gallery"))
-        val subs = if (custom) arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"), Lang.t("恢复软件默认图标", "Restore the built-in default icon"))
-        else arrayOf(Lang.t("替换 Google 弹窗显示的耳机图标", "Replace the earbud icon in the Google popup"))
-        for (i in items.indices) {
-            val which = i
-            val row = LinearLayout(requireContext())
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(12), dp(12), dp(12), dp(12))
-            val rowBg = GradientDrawable()
-            rowBg.setColor(if (isDark()) 0x14FFFFFF else 0x0A000000)
-            rowBg.cornerRadius = dp(12).toFloat()   // M3 形状档 small=8 / medium=12，14 是散值
-            val rd = M3Ui.pressRipple(requireContext(), rowBg)
-            row.background = rd
-            val col = LinearLayout(requireContext())
-            col.orientation = LinearLayout.VERTICAL
-            val t1 = TextView(requireContext())
-            t1.text = items[i]
-            t1.textSize = 16f
-            t1.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            t1.setTextColor(onSurf)
-            col.addView(t1, LinearLayout.LayoutParams(-2, -2))
-            val t2 = TextView(requireContext())
-            t2.text = subs[i]
-            t2.textSize = 12f
-            t2.setTextColor(onVariant)
-            t2.alpha = 0.7f
-            col.addView(t2, LinearLayout.LayoutParams(-2, -2))
-            row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(M3Ui.chevron(requireActivity(), accent), LinearLayout.LayoutParams(-2, -2))
-            row.setOnClickListener {
-                dlg.dismiss()
-                if (which == 0) {
-                    try {
-                        iconPicker.launch("image/*")
-                    } catch (t: Throwable) {
-                        toast(Lang.t("无法打开选择器：", "Cannot open picker: ") + t.message)
-                    }
-                } else {
-                    resetCustomIcon()
-                }
-            }
-            cardBody.addView(row, lp(false))
-            cardBody.addView(spacer(dp(8)))
-        }
-
-        val btnRow = LinearLayout(requireContext())
-        btnRow.gravity = Gravity.END
-        btnRow.addView(makeMaterialTextButton(Lang.t("取消", "Cancel"), accent) { dlg.dismiss() })
-        cardBody.addView(btnRow, lp(false))
-
-        dlg.setContentView(card)
-        dlg.window?.setLayout((resources.displayMetrics.widthPixels * 0.85).toInt(), -2)
-        dlg.show()
-    }
-
-    private fun resetCustomIcon() {
-        // 3.0.5: 只删本应用内的图标文件（无需 Root）
-        val ok = IconStore.clear(requireContext().applicationContext)
-        toast(if (ok) Lang.t("已恢复默认图标（下次连接生效）", "Default icon restored (takes effect next connect)")
-        else Lang.t("恢复失败", "Restore failed"))
-    }
-
-    private fun saveIconFromUri(uri: Uri) {
-        Thread {
-            try {
-                val input = requireContext().contentResolver.openInputStream(uri)
-                if (input == null) {
-                    requireActivity().runOnUiThread { toast(Lang.t("无法读取所选图片", "Cannot read the selected image")) }
-                    return@Thread
-                }
-                val bmp = BitmapFactory.decodeStream(input)
-                try { input.close() } catch (_: Exception) { }
-                if (bmp == null) {
-                    requireActivity().runOnUiThread { toast(Lang.t("图片解码失败", "Image decode failed")) }
-                    return@Thread
-                }
-                val w = bmp.width
-                val h = bmp.height
-                val longSide = Math.max(w, h)
-                var target = if (longSide > 512) 512 else longSide
-                var scaled = bmp
-                val out = File(requireContext().cacheDir, "moondrop_custom_icon.png")
-                for (i in 0 until 4) {
-                    if (target < 128) break
-                    val sc = target / Math.max(longSide, 1).toFloat()
-                    if (sc < 1f) {
-                        val s2 = Bitmap.createScaledBitmap(bmp,
-                                Math.max(1, (w * sc).toInt()), Math.max(1, (h * sc).toInt()), true)
-                        if (s2 !== scaled && scaled !== bmp) scaled.recycle()
-                        scaled = s2
-                    }
-                    val fos = FileOutputStream(out)
-                    scaled.compress(Bitmap.CompressFormat.PNG, 100, fos)
-                    fos.close()
-                    if (out.length() <= 1024 * 1024) break
-                    target = (target * 0.75f).toInt()
-                }
-                val size = out.length()
-                if (size > 1024 * 1024) {
-                    requireActivity().runOnUiThread { toast(Lang.t("图片超过 1 MB", "Image exceeds 1 MB")) }
-                    return@Thread
-                }
-                // 3.0.5: 写本应用 filesDir（无需 Root），GMS 侧 Hook 经 ContentProvider 读取
-                val ok = IconStore.save(requireContext().applicationContext, out.readBytes())
-                requireActivity().runOnUiThread { toast(if (ok) Lang.t("弹窗图标已更新（下次连接生效）", "Popup icon updated (takes effect next connect)") else Lang.t("写入图标失败", "Write icon failed")) }
-                if (scaled !== bmp) scaled.recycle()
-                if (bmp != null && !bmp.isRecycled) bmp.recycle()
-            } catch (t: Throwable) {
-                requireActivity().runOnUiThread { toast(Lang.t("图标处理失败: ", "Icon process failed: ") + t.message) }
-            }
-        }.start()
-    }
-
-
 
     /** 3.0.4: 统一走 RootShell（su / kp 自适应）；失败返回 null。 */
     private fun runRoot(cmd: String): String? = RootShell.exec(cmd)
 
     override fun onDestroyView() {
+        viewHandler.removeCallbacksAndMessages(null)
+        autoRefreshHandler.removeCallbacks(autoRefreshRunnable)
+        refreshBtn?.removeCallbacks(hideRefreshBar)
+        refreshBtn = null
+        refreshSpin = null
+        dcControlCard = null
+        codecQuerying = false
         super.onDestroyView()
         DeviceControlBridge.setStateListener(null)
         try { requireContext().unregisterReceiver(ancModeReceiver) } catch (_: Exception) { }
@@ -1457,13 +1303,16 @@ class OverviewFragment : Fragment() {
         if (codecQuerying || now - lastCodecQueryMs < 5000L) return
         codecQuerying = true
         lastCodecQueryMs = now
+        val owner = viewLifecycleOwner
         Thread {
             val out = runRoot("dumpsys bluetooth_manager | grep -m1 'mCodecConfig:'")
             val name = Regex("codecName:([A-Za-z0-9 ]+)").find(out ?: "")?.groupValues?.get(1)?.trim()
-            activity?.runOnUiThread {
+            viewHandler.post {
                 codecQuerying = false
-                if (!name.isNullOrEmpty()) codecLabel = name
-                statusBadge?.text = badgeText()
+                if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    if (!name.isNullOrEmpty()) codecLabel = name
+                    statusBadge?.text = badgeText()
+                }
             }
         }.start()
     }
@@ -1819,34 +1668,28 @@ class OverviewFragment : Fragment() {
 
     private val gaiaUiCallback = object : GaiaBleClient.Callback {
         override fun onConnected(address: String) {
-            if (!isAdded) return
-            val act = activity ?: return
-            act.runOnUiThread {
-                if (!isAdded) return@runOnUiThread
+            postToView {
                 moonProcState = serviceState()
                 ancMode = AncBridge.getCurrentMode()
                 updateAncStatus()
                 updateBatteryStatus()
                 // alpha1.4: 延迟等 notification descriptor 写完后请求
-                Handler(Looper.getMainLooper()).postDelayed({
+                viewHandler.postDelayed({
                     AncBridge.fetchAncMode()
                     GaiaBleClient.getInstance().fetchBatteryLevels()
                     val g = GaiaBleClient.getInstance(); g.setDcBridge(DeviceControlBridge); DeviceControlBridge.applyProfile(AncProfileLib.resolveDc(g.getConnectedDeviceName())); DeviceControlBridge.fetchAll()
                     refreshDcHighlight()
                 }, 800)
                 // alpha2.31.1: 二次刷新等能力探测完成
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (isAdded) refreshDcHighlight()
+                viewHandler.postDelayed({
+                    refreshDcHighlight()
                 }, 2500)
             }
         }
 
         override fun onDisconnected(address: String) {
-            if (!isAdded) return
-            val act = activity ?: return
-            act.runOnUiThread {
-                if (!isAdded) return@runOnUiThread
-                DeviceNotif.cancelAll(act.applicationContext)
+            DeviceNotif.cancelAll(GaiaBleClient.getInstance().getContext())
+            postToView {
                 moonProcState = serviceState()
                 updateAncStatus()
                 updateBatteryStatus()
@@ -1855,25 +1698,19 @@ class OverviewFragment : Fragment() {
         }
 
         override fun onBatteryLevel(batteryId: Int, level: Int) {
-            if (!isAdded) return
-            val act = activity ?: return
-            act.runOnUiThread {
-                if (!isAdded) return@runOnUiThread
-                val addr = GaiaBleClient.getInstance().deviceAddress
-                if (addr != null) {
-                    BatteryStore.setGaiaLevel(addr, batteryId, level)
-                    PopupGate.flushPendingIfReady()
-                }
-                DeviceNotif.refreshBattery(act.applicationContext)
-                updateBatteryStatus()
+            // Shared updates must survive navigation, even if the view refresh is discarded.
+            val gaia = GaiaBleClient.getInstance()
+            val addr = gaia.deviceAddress
+            if (addr != null) {
+                BatteryStore.setGaiaLevel(addr, batteryId, level)
+                PopupGate.flushPendingIfReady()
             }
+            DeviceNotif.refreshBattery(gaia.getContext())
+            postToView { updateBatteryStatus() }
         }
 
         override fun onAncMode(mode: Int) {
-            if (!isAdded) return
-            val act = activity ?: return
-            act.runOnUiThread {
-                if (!isAdded) return@runOnUiThread
+            postToView {
                 ancMode = mode
                 updateAncStatus()
             }
