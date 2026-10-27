@@ -327,6 +327,7 @@ class OverviewFragment : Fragment() {
             btn.tag = "anc_btn"
             // 这四个按钮是内联建的不是 M3Ui.iconToggle，之前漏了按压形变（用户反馈「增益有、降噪没有」）
             M3Ui.attachPressMorph(requireContext(), btn, 28f, 12f)
+            btn.contentDescription = AncProfileLib.modeNamesFull(requireContext())[fm]
             // 未选中 = surfaceContainer 圆底 / 选中 = primary 底（M3 filled icon button toggle 的配色）
             btn.backgroundTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
@@ -342,6 +343,7 @@ class OverviewFragment : Fragment() {
             val icon = ImageView(requireContext())
             icon.tag = "fxxk_main_icon"
             icon.isClickable = false          // 触摸交给底下的按钮，图标只负责画
+            icon.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             icon.setImageDrawable(buildMainModeIcon(fm, dp(28), onContainerColor))
             holder.addView(icon, android.widget.FrameLayout.LayoutParams(
                     dp(28), dp(28), Gravity.CENTER))
@@ -413,6 +415,7 @@ class OverviewFragment : Fragment() {
         dcSpatialRow.addView(View(requireContext()), LinearLayout.LayoutParams(0, 1, 1f))
         val spatialSwitch = com.google.android.material.materialswitch.MaterialSwitch(requireContext())
         spatialSwitch.tag = "dc_spatial_switch"
+        spatialSwitch.contentDescription = sLabel.text
         M3Ui.standardSwitch(spatialSwitch, pal0)
         spatialSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!dcSwitchSyncing) {
@@ -444,6 +447,8 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 0, tm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_spatial_" + tm
+            holder.findViewWithTag<View>("it_btn")?.contentDescription =
+                Lang.t("追踪模式", "Tracking Mode") + ": " + DeviceControlBridge.trackingLabels()[tm]
             // 必须挂在 MaterialButton 上：按钮本身可点会吃掉事件，挂在 FrameLayout 上的
             // listener 永远不触发 —— 之前就是这个错，表现是「点了没反应、但按钮自己来回亮」。
             holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
@@ -486,6 +491,8 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 1, gm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_gain_" + gm
+            holder.findViewWithTag<View>("it_btn")?.contentDescription =
+                Lang.t("增益", "Gain") + ": " + DeviceControlBridge.gainLabels()[gm]
             holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setGain(gm)
                 refreshDcHighlight()
@@ -527,6 +534,8 @@ class OverviewFragment : Fragment() {
             val holder = M3Ui.iconToggle(requireContext(), pal0,
                     DcIcons.build(requireContext(), 2, lm, dp(24), onContainerColor), 48, 24)
             holder.tag = "dc_btn_led_" + lm
+            holder.findViewWithTag<View>("it_btn")?.contentDescription =
+                Lang.t("指示灯", "Indicator") + ": " + ledNames[lm]
             holder.findViewWithTag<View>("it_btn")?.setOnClickListener {
                 DeviceControlBridge.setLed(lm)
                 refreshDcHighlight()
@@ -620,34 +629,13 @@ class OverviewFragment : Fragment() {
         refreshAnc()
         // alpha2.31: 刷新设备控制高亮
         refreshDcHighlight()
-        dumpDynColors(if (isDark()) "DARK" else "LIGHT")
         requestNeededPermissions()
         updateStatus()
         return outer
     }
 
-    private fun dumpDynColors(tag: String) {
-        val names = arrayOf("system_accent1_400", "system_accent1_400_dark", "system_accent1_400_light",
-                "system_accent1_50", "system_accent1_100", "system_accent1_200", "system_accent1_700",
-                "system_accent1_800", "system_accent1_900",
-                "system_neutral1_0", "system_neutral1_10", "system_neutral1_50", "system_neutral1_100",
-                "system_neutral1_900", "system_neutral1_1000")
-        val sb = StringBuilder("DYN " + tag + ": ")
-        for (n in names) {
-            val id = resources.getIdentifier(n, "color", "android")
-            var v = 0
-            if (id != 0) {
-                try { v = resources.getColor(id, requireContext().theme) } catch (_: Exception) { }
-            }
-            sb.append(n).append("=").append(if (id != 0) ("#" + Integer.toHexString(v)) else "MISS").append(" ")
-        }
-        android.util.Log.d("MoondropMonet", sb.toString())
-    }
-
     /** alpha2.0: 主题架构官方化——模式/动态色/AMOLED/种子色全部走 ThemeUtil（SP 设置） */
     private fun isDark(): Boolean = ThemeUtil.isDark(requireContext())
-
-    private fun dyn(resName: String, fallback: Int): Int = ThemeUtil.dyn(requireContext(), resName, fallback)
 
     private fun lp(center: Boolean): LinearLayout.LayoutParams {
         val p = LinearLayout.LayoutParams(-1, -2)
@@ -1094,18 +1082,6 @@ class OverviewFragment : Fragment() {
             text = Lang.t("未运行", "Not running")
         }
         setHeroStatus(text)
-    }
-
-    /** alpha2.0 M3 英雄卡：状态 -> 官方图标（Material Icons）+ 纯文本，指示器色随状态 */
-    /** 官方 compositeOver：把半透明 src 叠在 dst 上（Compose compositeOverSurface 的 View 版） */
-    private fun mixOver(src: Int, dst: Int): Int {
-        val a = (src ushr 24) and 0xFF
-        if (a == 0) return dst
-        val inv = 255 - a
-        val r = (((src ushr 16) and 0xFF) * a + (((dst ushr 16) and 0xFF) * inv)) / 255
-        val g = (((src ushr 8) and 0xFF) * a + (((dst ushr 8) and 0xFF) * inv)) / 255
-        val b = ((src and 0xFF) * a + ((dst and 0xFF) * inv)) / 255
-        return 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
     }
 
     private fun setHeroStatus(text: String) {

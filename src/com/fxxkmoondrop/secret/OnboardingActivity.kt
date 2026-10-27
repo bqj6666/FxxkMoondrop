@@ -64,7 +64,12 @@ class OnboardingActivity : Activity() {
     /** 全应用唯一的偏好表（与设置页同源）。 */
     private fun sp() = getSharedPreferences("cfg", Context.MODE_PRIVATE)
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         pal = ThemeUtil.Palette(this)
@@ -114,6 +119,7 @@ class OnboardingActivity : Activity() {
             insets
         }
         setContentView(root)
+        ThemeUtil.systemBars(this, pal)
         syncChrome()
         Log.d(TAG, "onboarding shown")
     }

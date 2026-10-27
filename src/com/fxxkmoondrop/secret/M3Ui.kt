@@ -13,7 +13,6 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsetsController
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.material.appbar.MaterialToolbar
@@ -280,12 +279,7 @@ class M3Ui {
         fun fitSystemBars(act: Activity, pal: ThemeUtil.Palette) {
             act.window.statusBarColor = pal.surface
             act.window.navigationBarColor = pal.surface
-            if (Build.VERSION.SDK_INT >= 30) {
-                val c = act.window.insetsController
-                c?.setSystemBarsAppearance(
-                        if (pal.dark) 0 else WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)
-            }
+            ThemeUtil.systemBars(act, pal)
         }
 
         /** M3 Top App Bar：并行一级页标题栏（无返回箭头，与主页平行，官方样式） */
@@ -657,12 +651,14 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
         @JvmStatic
         fun standardSwitch(sw: com.google.android.material.materialswitch.MaterialSwitch,
                            pal: ThemeUtil.Palette) {
-            sw.setTrackTintList(ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(pal.primary, pal.surfaceContainerHighest)))
-            sw.setThumbTintList(ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(pal.onPrimary, pal.outline)))
+            val states = arrayOf(intArrayOf(-android.R.attr.state_enabled),
+                intArrayOf(android.R.attr.state_checked), intArrayOf())
+            sw.setTrackTintList(ColorStateList(states, intArrayOf(
+                androidx.core.graphics.ColorUtils.setAlphaComponent(pal.onSurface, 31),
+                pal.primary, pal.surfaceContainerHighest)))
+            sw.setThumbTintList(ColorStateList(states, intArrayOf(
+                androidx.core.graphics.ColorUtils.setAlphaComponent(pal.onSurface, 97),
+                pal.onPrimary, pal.outline)))
             // 拇指图标：✓ / ✗（StateListDrawable 按选中态切换）
             val c = sw.context
             val on = moduleDrawable(c, R.drawable.ic_check)
@@ -861,10 +857,9 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //     （baseline 才是 secondaryContainer）
             //   · 容器色 = surfaceContainerLow（比页面底亮一档，靠高程+色差区分）
             // 尺寸：菜单项 48dp、项内左右 12dp、前导图标 20dp、项间距 2dp
-            val dk = ThemeUtil.isDark(c)
-            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_10", pal.card)
-            val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_50", pal.container)
-            val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
+            val menuColor = pal.card
+            val selBg = pal.container
+            val selFg = pal.onContainer
             val menu = LinearLayout(c)
             menu.orientation = LinearLayout.VERTICAL
             menu.setPadding(dp(c, 4), dp(c, 2), dp(c, 4), dp(c, 2))
@@ -1083,6 +1078,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val iv = android.widget.ImageView(c)
             iv.tag = "it_img"
             iv.isClickable = false
+            iv.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             iv.setImageDrawable(icon)
             holder.addView(iv, android.widget.FrameLayout.LayoutParams(
                     dp(c, iconDp), dp(c, iconDp), Gravity.CENTER))
