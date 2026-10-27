@@ -32,7 +32,16 @@ export PATH
 GUH=/dev/gh2
 export GRADLE_USER_HOME="$GUH"
 
-# 缓存缺失时重建（首次约需数分钟）
+# 缓存：优先把磁盘上的 ~/.gradle/caches 用 bind mount 挂进 /dev。
+# 直接复制会把 3 GB+ 缓存搬进 tmpfs＝RAM，多轮构建足以把整机推进 swap。
+mkdir -p "$GUH"
+# 阿里云镜像 init 脚本（dl.google.com 不可达）；/dev 是 tmpfs，每次启动同步一份
+[ -f /root/.gradle/init.gradle ] && cp -f /root/.gradle/init.gradle "$GUH/init.gradle" 2>/dev/null || true
+if [ -d /root/.gradle/caches ] && ! mountpoint -q "$GUH/caches" 2>/dev/null; then
+    mkdir -p "$GUH/caches" "$GUH/wrapper"
+    mount --bind /root/.gradle/caches "$GUH/caches" 2>/dev/null || true
+    mount --bind /root/.gradle/wrapper "$GUH/wrapper" 2>/dev/null || true
+fi
 if [ ! -d "$GUH/caches" ] || [ ! -d "$GUH/wrapper" ]; then
     echo "[g9] 重建 $GUH ..."
     mkdir -p "$GUH/tmp"
@@ -49,6 +58,15 @@ fi
 
 TMPD=/dev/gtmp2
 mkdir -p "$TMPD"
+
+# aapt2：ARM64 上必须用 qemu 包装过的 9.4.1（仓库里的路径是固定约定，换机器时用 FM_AAPT2 覆盖）
+AAPT2="${FM_AAPT2:-/workspace/tools/aapt2-941/aapt2}"
+# 工作区迁移后（2026-10-27）旧路径可能不存在，兜底找当前工作区里的副本
+[ -x "$AAPT2" ] || AAPT2="/workspace/mounts/oldworkplace/fm/tools/aapt2-941/aapt2"
+[ -d "$AAPT2" ] && AAPT2="$AAPT2/aapt2"
+if [ -x "$AAPT2" ]; then
+    set -- "$@" "-Pandroid.aapt2FromMavenOverride=$AAPT2"
+fi
 
 LAUNCHER=$(find /root/.gradle/wrapper/dists -name 'gradle-launcher-9.6.0.jar' 2>/dev/null | head -1)
 [ -z "$LAUNCHER" ] && LAUNCHER=$(find "$GUH/wrapper" -name 'gradle-launcher-*.jar' 2>/dev/null | head -1)
@@ -80,5 +98,18 @@ STATUS=$?
 "$JAVA_HOME/bin/java" -Djava.io.tmpdir="$TMPD" -cp "$LAUNCHER" \
     org.gradle.launcher.GradleMain --stop >/dev/null 2>&1 || true
 pkill -f 'kotlin-daemon-embeddable' 2>/dev/null || true
+
+# ⚠️ GRADLE_USER_HOME 在 /dev（tmpfs）＝ 直接吃 RAM。构建多次后缓存能堆到 5 GB+，
+# 设备总内存 15 GB，堆起来会开始吃 swap 卡整机。收尾时回收可重建的部分：
+#   1. 旧 Gradle 版本缓存（当前 9.6.0，8.x 已无用）
+#   2. kotlin-daemon 日志
+#   3. 构建缓存超过 600 MB 就清掉（下次首次构建慢一点，好过堆满内存）
+rm -rf "$GUH"/caches/8.* 2>/dev/null || true
+rm -f "$TMPD"/kotlin-daemon.*.log 2>/dev/null || true
+BC="$GUH/caches/build-cache-1"
+if [ -d "$BC" ]; then
+    SZ=$(du -sm "$BC" 2>/dev/null | cut -f1)
+    [ -n "$SZ" ] && [ "$SZ" -gt 600 ] && rm -rf "$BC" 2>/dev/null || true
+fi
 
 exit $STATUS
