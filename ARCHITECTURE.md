@@ -62,6 +62,13 @@ FxxkMoondrop 是一个 **LSPosed/Xposed 模块 + 独立应用** 的双形态项�
 
 `PrefsProvider`（ContentProvider）提供跨进程 SharedPreferences 读写，App 和 GMS 进程共享配置。
 
+### 跨进程鉴权（3.3.1 起）
+
+从 GMS / Settings 一侧回到 App 的每一条调用（广播、`PrefsProvider`、Slice）都会经 `HookIpc` 校验
+**Binder 调用方 UID** 是否等于已安装的 GMS / Settings 包 UID，并配合自定义权限
+`com.fxxkmoondrop.secret.permission.HOOK_IPC` 与 `RECEIVER_NOT_EXPORTED` 注册。
+不再依赖"包名 / action 名"这类可以伪造的判断——第三方应用即便知道广播 action，也进不了 App 的配置面。
+
 ### 无 Root 模式
 
 控制耳机的能力（GAIA BLE 直连读电量、切降噪）走标准 `BluetoothGatt`，**不依赖 Root**。
@@ -306,6 +313,19 @@ HalfSheetActivity (GMS 原生)
   → 断连/新会话重置 → 超时自愈重发
 ```
 
+### 传输层串行化与会话生命周期（3.3.1 起）
+
+GATT 描述符写入、特征读取，以及 GAIA / SPP 写入统一排队：
+
+```
+请求 → GattOperationQueue（串行 + 归属 + 截止时间）→ 回调按请求归还结果
+      └─ 会话终止 / 超时 → 该请求失败并释放，不影响后续无关请求
+```
+
+- 同一时刻只有一条读/写在途，避免并发写描述符造成的状态错乱
+- GAIA / RFCOMM 会话带退役标记：陈旧回调不再更新状态或 UI
+- 分片长度、部分 / 畸形 / 迟到回复在 framer 层校验，非法帧直接丢弃
+
 ## 设计原则
 
 1. **零硬编码地址**：LE 地址全动态发现
@@ -313,3 +333,4 @@ HalfSheetActivity (GMS 原生)
 3. **坐标集中配置**：弹窗布局参数收敛到 PopupProfile
 4. **跨进程解耦**：App 与 GMS 通过广播通信
 5. **自愈闭环**：地址丢失 → 扫描 → 发现 → 连接 → 缓存 → 连接
+6. **链路串行化**：GATT / SPP 读写排队执行，回调带归属与截止时间；会话退役后旧回调失效

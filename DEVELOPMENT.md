@@ -86,15 +86,16 @@ FxxkMoondrop-repo/
 
 | 项 | 格式 | 当前值 |
 |---|---|---|
-| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.2.9` |
-| versionCode | 单调递增整数 | `329` |
+| versionName | `{主版本}.{次版本}[.{补丁}]`，如 `3.0.1`；`alpha.x.y` 是 3.0 之前的历史格式 | `3.3.1` |
+| versionCode | 单调递增整数 | `351` |
 
-发版时同步更新五处：
+发版时同步更新六处：
 1. `app/build.gradle.kts` — `versionCode` + `versionName`
 2. `CHANGELOG.md` — 顶部追加新条目
-3. `README.md` — 顶部版本号 + 版本历史列表
+3. `README.md` / `README.en.md` — 版本历史列表（顶部版本号由 release badge 自动显示，无需手改）
 4. `app/src/main/resources/META-INF/xposed/module.prop` — `version`（LSPosed 管理器展示用，须与 `versionName` 一致）
 5. `app/src/main/AndroidManifest.xml` — 文本 manifest 里的 `android:versionCode` / `android:versionName`（AGP 合并时会用 build.gradle.kts 的值覆盖，但仓库内不应残留旧版本号）
+6. `app/src/main/assets/CHANGELOG.md` — 复制一份 `CHANGELOG.md`（应用内「更新日志」在远端拿不到时用它兜底）
 
 提交信息格式：遵循 Conventional Commits，如 `fix(ui): …` / `build: …` / `release: 3.2.9 (329) — …`
 
