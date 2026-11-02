@@ -184,7 +184,7 @@ dependencies {
 
     // ── 3.2.13: HyperOS 观感轨（UiStyle.MIUIX）────────────────────────
     // 许可：Miuix 为 Apache-2.0（不同于 HyperEars 的 AGPL-3.0，可放心引入）。
-    // 兼容性已核：miuix-ui-android 0.9.2 自身 minSdk=23，本模块 minSdk 26 满足。
+    // 兼容性已核：miuix-ui-android 0.9.2 自身 minSdk=23，本模块 minSdk 32 满足。
     // 参考项目 OppoPods / HyperEars 用 minSdk 35，本模块不跟随。
     implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.ui:ui")

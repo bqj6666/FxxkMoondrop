@@ -58,7 +58,7 @@
 | 语言 | **Kotlin** |
 | 构建链 | Gradle 9.6.0（wrapper 固定）+ AGP 9.4.1 + Kotlin 2.4.10 |
 | UI | Material 3，`Theme.Material3Expressive.DayNight.NoActionBar`（M3 Expressive）+ 动态取色，三页 Fragment 架构 |
-| 最低系统 | **Android 8.0**（API 26）；targetSdk 36 |
+| 最低系统 | **Android 12L**（API 32）；targetSdk 36 |
 | 模块 | libxposed API 102（LSPosed ≥ 2.1.1，作用域 `com.google.android.gms;com.android.settings`） |
 | 包名 | `com.fxxkmoondrop.secret` |
 

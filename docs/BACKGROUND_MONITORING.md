@@ -125,7 +125,7 @@ A2DP/HEADSET broadcast ordering and real Activity/transport behavior are also un
    is absent. Repeat with Bluetooth off and with Bluetooth permission denied.
 2. Connect a headset while the service/process is absent and the app is backgrounded. Verify native
    ACL/profile broadcasts restore detection, GAIA battery updates, notifications and ANC controls.
-   Repeat without any Bluetooth-process hook, without battery exemption, and on API 26–30 as well
+   Repeat without any Bluetooth-process hook, without battery exemption, and on API 32 as well
    as newer Android. Where the OS rejects background starts, verify opening the app recovers it.
    Unrelated watches/keyboards must not start the detector via ACL events.
 3. Disconnect, let the service stop, then reconnect. Confirm the old watchdog does not revive an

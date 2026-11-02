@@ -55,7 +55,7 @@ Moondrop Bluetooth earbud assistant: automatically shows a **Fast Pair card** wh
 | Language | **Kotlin** |
 | Build chain | Gradle 9.6.0 (fixed wrapper) + AGP 9.4.1 + Kotlin 2.4.10 |
 | UI | Material 3, `Theme.Material3Expressive.DayNight.NoActionBar` (M3 Expressive) + dynamic color, three-page Fragment architecture |
-| Minimum system | **Android 8.0** (API 26); targetSdk 36 |
+| Minimum system | **Android 12L** (API 32); targetSdk 36 |
 | Module | libxposed API 102 (LSPosed ≥ 2.1.1, scope `com.google.android.gms;com.android.settings`) |
 | Package | `com.fxxkmoondrop.secret` |
 
