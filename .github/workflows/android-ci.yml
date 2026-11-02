@@ -173,5 +173,18 @@ jobs:
           files: |
             app/build/outputs/apk/release/*.apk
           prerelease: false
+
+      # ⚠️ mirror 工作流监听的是 `release: published`，而本工作流的 Release 是用
+      # GITHUB_TOKEN 创建的 —— GitHub 不会用 GITHUB_TOKEN 产生的事件去触发新的
+      # workflow run（防递归），所以镜像同步永远不会自动发生（3.3.0/3.3.1 都是
+      # 事后手工 dispatch 才补上的）。这里显式 dispatch，dispatch 事件不受该限制。
+      - name: 触发镜像仓同步（modules.lsposed）
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 15   # 等 Release 的 APK 资产上传完成，mirror 侧要 gh release download
+          gh workflow run sync-module-release.yml -f tag="${{ github.ref_name }}"
+          echo "已触发镜像同步：${{ github.ref_name }}"
           fail_on_unmatched_files: false
           generate_release_notes: false
