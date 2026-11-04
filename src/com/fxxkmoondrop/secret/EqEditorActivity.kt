@@ -67,7 +67,12 @@ class EqEditorActivity : Activity() {
     @Volatile private var alive = false
     private var addr: String? = null
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         pal = ThemeUtil.Palette(this)
 

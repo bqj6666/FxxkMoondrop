@@ -95,7 +95,7 @@ object DeviceDetailsPanel {
     /** 降噪 / 关闭 / 透传 / 抗风：官方 Icon Button 样式，与概览页同一套 */
     private fun buildAncRow(ctx: android.content.Context, pal: ThemeUtil.Palette,
                             onCommand: (Command) -> Unit): LinearLayout {
-        val appCtx = themedAppCtx(ctx)
+        val appCtx = ThemeUtil.moduleUiContext(ctx)
         val d = ctx.resources.displayMetrics.density
         val row = LinearLayout(appCtx)
         row.orientation = LinearLayout.HORIZONTAL
@@ -113,7 +113,10 @@ object DeviceDetailsPanel {
                     androidx.core.content.ContextCompat.getDrawable(appCtx, modeIconRes(m)),
                     48, 26)
             holder.tag = "fxxk_anc_" + m
-            holder.findViewWithTag<View>("it_btn")?.setOnClickListener { onCommand(Command.SetAncMode(m)) }
+            holder.findViewWithTag<View>("it_btn")?.apply {
+                contentDescription = names.getOrNull(m)
+                setOnClickListener { onCommand(Command.SetAncMode(m)) }
+            }
             col.addView(holder, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()))
             val lbl = android.widget.TextView(appCtx)
             lbl.text = names.getOrNull(m) ?: ""
@@ -131,7 +134,7 @@ object DeviceDetailsPanel {
     /** 与概览页同款：增益三档（低/中/高），官方 Icon Button */
     private fun buildGainRow(ctx: android.content.Context, pal: ThemeUtil.Palette,
                              onCommand: (Command) -> Unit): LinearLayout {
-        val appCtx = themedAppCtx(ctx)
+        val appCtx = ThemeUtil.moduleUiContext(ctx)
         val d = ctx.resources.displayMetrics.density
         val row = LinearLayout(appCtx)
         row.orientation = LinearLayout.HORIZONTAL
@@ -146,7 +149,10 @@ object DeviceDetailsPanel {
             val holder = M3Ui.iconToggle(appCtx, pal,
                     DcIcons.build(appCtx, 1, g, (26 * d).toInt(), pal.onContainer), 48, 26)
             holder.tag = "fxxk_gain_" + g
-            holder.findViewWithTag<View>("it_btn")?.setOnClickListener { onCommand(Command.SetGain(g)) }
+            holder.findViewWithTag<View>("it_btn")?.apply {
+                contentDescription = Lang.t(ctx, "增益", "Gain") + ": " + labels.getOrNull(g)
+                setOnClickListener { onCommand(Command.SetGain(g)) }
+            }
             col.addView(holder, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()))
             val lbl = android.widget.TextView(appCtx)
             lbl.text = labels.getOrNull(g) ?: ""
@@ -160,13 +166,6 @@ object DeviceDetailsPanel {
         }
         return row
     }
-
-    /** Material 组件要求「我们 APK 的资源 + M3 主题」，缺一不可 */
-    private fun themedAppCtx(ctx: android.content.Context): android.content.Context = try {
-        val base = ctx.createPackageContext("com.fxxkmoondrop.secret",
-                android.content.Context.CONTEXT_IGNORE_SECURITY)
-        android.view.ContextThemeWrapper(base, R.style.Theme_FxxkMoondrop)
-    } catch (_: Throwable) { ctx }
 
     private fun modeIconRes(mode: Int): Int = when (mode) {
         0 -> R.drawable.ic_anc_off

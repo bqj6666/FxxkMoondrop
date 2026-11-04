@@ -37,6 +37,7 @@ class AncBridge {
         private var currentMode = -1
         @Volatile
         private var currentModeVersion = 0 // 用于 UI 刷新
+        private val modeLock = Any()
 
         /** alpha1.20: 把当前模式广播给 GMS（弹窗按钮高亮用）；无 Context 时静默 */
         @JvmStatic
@@ -84,10 +85,21 @@ class AncBridge {
         /** 由 GaiaBleClient 回调调用，更新模式 */
         @JvmStatic
         fun notifyAncMode(mode: Int) {
-            if (mode >= 0 && mode < MODE_NAMES.size) {
-                currentMode = mode
-                currentModeVersion++
-                Log.d(TAG, "ANC mode updated: $mode (${MODE_NAMES[mode]})")
+            updateAncMode(mode)
+        }
+
+        private fun updateAncMode(mode: Int, expectedVersion: Int? = null): Pair<Int, Int>? {
+            // Rejected first commands must restore unknown state, not retain the optimistic mode.
+            if (mode >= -1 && mode < MODE_NAMES.size) {
+                val change = synchronized(modeLock) {
+                    if (expectedVersion != null && currentModeVersion != expectedVersion) return null
+                    val previous = currentMode
+                    currentMode = mode
+                    currentModeVersion++
+                    previous to currentModeVersion
+                }
+                // Never hold the state lock while notifying observers or entering the transport.
+                Log.d(TAG, "ANC mode updated: $mode (${MODE_NAMES.getOrNull(mode) ?: "unknown"})")
                 sendModeState() // alpha1.20: 通知 GMS 弹窗同步高亮
                 CtrlBus.postDcChanged() // alpha2.39: 推送跨进程状态给设备详情页
                 // 第 5 项：ANC 通知高亮跟随模式。
@@ -107,7 +119,9 @@ class AncBridge {
                 // 3.2.12: 磁贴也挂这里 —— 它与通知栏是同一份「当前档位」的两种呈现，
                 // 挂在同一个点上才不会出现「通知栏已变、磁贴还是旧档位」
                 AncTileService.refreshAll(sCtx)
+                return change
             }
+            return null
         }
 
         /** 设置 ANC 模式（UI：0=关闭 1=降噪 2=透传 3=抗风 4=自适应 5=直播）
@@ -117,7 +131,8 @@ class AncBridge {
         private var lastSentMode = -1
         private var lastSentAt = 0L
 
-        @JvmStatic
+        // The client rejects synchronously; serialize requests so rollback never captures another pending mode.
+        @JvmStatic @Synchronized
         fun setAncMode(mode: Int) {
             if (mode < 0 || mode > 5) return
             // 只挡「同一次事件的重入」：同档位 200ms 内重复调用直接丢弃。
@@ -133,8 +148,7 @@ class AncBridge {
             Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
-            val prevMode = currentMode
-            notifyAncMode(mode)
+            val (prevMode, optimisticVersion) = updateAncMode(mode) ?: return
             GaiaBleClient.getInstance().setAncMode(mode, object : GaiaBleClient.AncControlCallback {
                 override fun onAncModeResult(m: Int) {
                     notifyAncMode(m)
@@ -144,7 +158,7 @@ class AncBridge {
                     // alpha2.22: 发送被拒（能力未就绪/无ANC/不支持）时回滚乐观高亮，
                     // 让用户明确看到按钮没真正生效，避免"假高亮"误导
                     Log.w(TAG, "setAncMode error: $message -> rollback highlight")
-                    notifyAncMode(prevMode)
+                    updateAncMode(prevMode, expectedVersion = optimisticVersion)
                 }
             })
         }

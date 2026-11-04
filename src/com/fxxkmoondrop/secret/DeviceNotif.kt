@@ -32,7 +32,7 @@ import androidx.core.content.ContextCompat
  * **不重复重发**：同一份内容不重发通知。每次 notify 都会让系统重建视图，
  * 用户刚展开的通知会被打回折叠态 —— 这正是「通知自己折叠起来」的来源。
  *
- * 颜色全部走 M3 动态取色（[ThemeUtil.dyn]，与 App 内面板同一套 token）：
+ * 颜色全部走 M3 动态取色（[ThemeUtil.Palette]，与 App 内面板同一套 token）：
  * 选中档位 = primary 圆底 + onPrimary 图标；未选中 = container + onContainer。
  *
  * 只在 GAIA 就绪时发布 —— 未连上时没有可信数据；断开即撤下。
@@ -133,8 +133,9 @@ object DeviceNotif {
             // 内容没变就不重发：重发会让系统重建视图，把用户展开的通知打回折叠态。
             // 布局版本必须进签名：改了 RemoteViews 布局后，只要状态没变就不会重发，
             // 系统会一直用旧的视图 —— 之前「改了布局但通知毫无变化」就是踩了这个坑。
+            val pal = ThemeUtil.Palette(c, systemSurface = true)
             val sig = "v" + NOTIF_LAYOUT_V + "|" + title + "|" + line + "|" + mode + "|" +
-                    actions.joinToString(",")
+                    actions.joinToString(",") + "|${pal.primary}|${pal.container}|${pal.dark}"
             if (sig == lastSig) return
             lastSig = sig
 
@@ -155,9 +156,9 @@ object DeviceNotif {
             if (actions.isNotEmpty()) {
                 b.setStyle(NotificationCompat.DecoratedCustomViewStyle())
                     .setCustomContentView(
-                        buildContent(c, title, line, actions, names, mode, showHeader = false))
+                        buildContent(c, title, line, actions, names, mode, pal, showHeader = false))
                     .setCustomBigContentView(
-                        buildContent(c, title, line, actions, names, mode, showHeader = true))
+                        buildContent(c, title, line, actions, names, mode, pal, showHeader = true))
             }
 
             notify(c, ID, b.build())
@@ -173,6 +174,7 @@ object DeviceNotif {
         actions: List<Int>,
         names: Array<String>,
         mode: Int,
+        pal: ThemeUtil.Palette,
         showHeader: Boolean
     ): RemoteViews {
         val rv = RemoteViews(c.packageName, R.layout.notif_device)
@@ -197,24 +199,12 @@ object DeviceNotif {
             }
         }
 
-        // 颜色统一走 M3 动态取色（与 App 内面板同一套 token，见 ControlPanel.refreshDcCard）
-        val dark = ThemeUtil.isDark(c)
-        // 与 ThemeUtil.Palette 的 M3 角色取值保持一致：
-        //  - onContainer 此前 fallback 误写成 container 的值（深色下 onContainer==container，
-        //    按钮文字与底色同色，实为不可读）；onPrimary 也没按主题分支。
-        val primary = ThemeUtil.dyn(c, "system_accent1_400",
-            if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt())
-        val container = if (dark) ThemeUtil.dyn(c, "system_accent1_800", 0xFF4F378B.toInt())
-        else ThemeUtil.dyn(c, "system_accent1_50", 0xFFE8DEF8.toInt())
-        val onContainer = if (dark) ThemeUtil.dyn(c, "system_accent1_50", 0xFFEADDFF.toInt())
-        else ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-        val onPrimary = if (dark) ThemeUtil.dyn(c, "system_accent1_900", 0xFF21005D.toInt())
-        else 0xFFFFFFFF.toInt()
-        val fg = if (dark) ThemeUtil.dyn(c, "system_neutral1_0", 0xFFE6E0E9.toInt())
-        else ThemeUtil.dyn(c, "system_neutral1_900", 0xFF1C1B1F.toInt())
-
-        rv.setTextColor(R.id.notif_title, fg)
-        rv.setTextColor(R.id.notif_text, fg)
+        // Text sits on System UI's background, not on the colored icon container.
+        // Its notification TextAppearance follows System UI, even when app brightness is forced.
+        val primary = pal.primary
+        val container = pal.container
+        val onContainer = pal.onContainer
+        val onPrimary = pal.onPrimary
 
         // 没有按钮时整行收起，否则只留 padding 白占折叠视图的宝贵高度
         rv.setViewVisibility(R.id.notif_btns,
@@ -230,21 +220,32 @@ object DeviceNotif {
             val selected = m == mode
             val fgc = if (selected) onPrimary else onContainer
             rv.setTextViewText(SLOT_TEXT[i], names[m])
-            rv.setTextColor(SLOT_TEXT[i], fgc)
-            rv.setImageViewResource(SLOT_ICON[i], modeIcon(m))
-            // 图标本身是纯黑矢量，必须染色才在通知上可见
-            rv.setInt(SLOT_ICON[i], "setColorFilter", fgc)
-            // 形状先定：未选中 = 正圆，选中 = 圆角方形（与概览页 expressive 按钮的选中形态一致）
-            rv.setInt(SLOT_ICON[i], "setBackgroundResource",
-                    if (selected) R.drawable.notif_btn_square else R.drawable.notif_btn_circle)
-            // 再按动态取色染色（RemoteViews 的 ColorStateList 通道是 API 31+）
             if (Build.VERSION.SDK_INT >= 31) {
+                rv.setImageViewResource(SLOT_ICON[i], modeIcon(m))
+                rv.setInt(SLOT_ICON[i], "setColorFilter", fgc)
+                rv.setInt(SLOT_ICON[i], "setBackgroundResource",
+                    if (selected) R.drawable.notif_btn_square else R.drawable.notif_btn_circle)
                 rv.setColorStateList(SLOT_ICON[i], "setBackgroundTintList",
                     ColorStateList.valueOf(if (selected) primary else container))
             } else {
-                // API 30 及以下没有 ColorStateList 通道：退回旧的预着色圆底（形状无 morph）
-                rv.setInt(SLOT_ICON[i], "setBackgroundResource",
-                        if (selected) R.drawable.notif_btn_circle_on else R.drawable.notif_btn_circle)
+                // RemoteViews cannot tint backgrounds before API 31. Bake the same role pair
+                // into the 40dp icon instead of falling back to an unrelated fixed-color drawable.
+                val size = (40 * c.resources.displayMetrics.density).toInt()
+                val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bitmap)
+                val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                fill.color = if (selected) primary else container
+                val radius = size * if (selected) 0.3f else 0.5f
+                canvas.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), radius, radius, fill)
+                c.getDrawable(modeIcon(m))?.mutate()?.apply {
+                    setTint(fgc)
+                    val inset = size / 5
+                    setBounds(inset, inset, size - inset, size - inset)
+                    draw(canvas)
+                }
+                rv.setInt(SLOT_ICON[i], "setBackgroundResource", 0)
+                rv.setViewPadding(SLOT_ICON[i], 0, 0, 0, 0)
+                rv.setImageViewBitmap(SLOT_ICON[i], bitmap)
             }
             rv.setOnClickPendingIntent(SLOT[i], actionPi(c, m))
         }
@@ -260,7 +261,7 @@ object DeviceNotif {
     }
 
     /** RemoteViews 布局版本：改布局时 +1，强制重发一次通知 */
-    private const val NOTIF_LAYOUT_V = 3
+    private const val NOTIF_LAYOUT_V = 4
 
     private fun isReady(): Boolean {
         val g = GaiaBleClient.getInstance()

@@ -28,7 +28,12 @@ class ManualConnectActivity : Activity() {
     private var startedAt = 0L
     private var finished = false
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         pal = ThemeUtil.Palette(this)
         val root = LinearLayout(this)

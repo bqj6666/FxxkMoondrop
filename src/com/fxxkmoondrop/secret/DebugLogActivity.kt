@@ -29,7 +29,12 @@ class DebugLogActivity : Activity() {
     private lateinit var sv: ScrollView
     @Volatile private var alive = false
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         // 门禁：调试模式没开就不进这个页面
         val on = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("debug_mode", false)

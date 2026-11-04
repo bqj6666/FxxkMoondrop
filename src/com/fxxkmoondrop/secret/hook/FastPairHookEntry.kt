@@ -775,6 +775,8 @@ class FastPairHookEntry {
                 // 不经过资源 id、不经过 tintList —— 这两条路都会被系统状态刷新打回圆形。
                 bgV.background = shapeBg(act.resources.displayMetrics.density, fill, on)
                 holder.isSelected = on
+                if (mp != null) holder.findViewWithTag<ImageView>("fxxk_mode_icon")?.imageTintList =
+                        android.content.res.ColorStateList.valueOf(if (on) mp.onPrimary else mp.onContainer)
                 // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
                 try {
                     bgV.alpha = 0.4f
@@ -1146,14 +1148,12 @@ class FastPairHookEntry {
         item.gravity = android.view.Gravity.CENTER_HORIZONTAL
         val holder = android.widget.FrameLayout(act)
         holder.tag = "fxxk_mode_btn_" + mode
+        holder.contentDescription = label
+        holder.isFocusable = true
         // 自绘背景 + 居中图标：形状（圆 / 圆角方形）由我们自己控制。
         // 不用 MaterialButton —— 它每次状态变化都会重设 shapeAppearance，把选中态的圆角方形盖回圆形。
         val iconPx = (prof.modeItemIconPx * d).toInt()
-        val themed = sModCtx?.let {
-            android.view.ContextThemeWrapper(it, com.fxxkmoondrop.secret.R.style.Theme_FxxkMoondrop)
-        }
-        val bctx: android.content.Context = themed ?: act
-        val pal = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(bctx) } catch (_: Throwable) { null }
+        val pal = try { com.fxxkmoondrop.secret.ThemeUtil.Palette(act) } catch (_: Throwable) { null }
         val bg = android.view.View(act)
         bg.tag = "fxxk_mode_bg"
         // 初始态：圆形（未选中）。形状由 GradientDrawable 持有，任何状态刷新都改不动
@@ -1163,7 +1163,10 @@ class FastPairHookEntry {
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
         val iv = ImageView(act)
         iv.setImageDrawable(buildModeIcon(act, mode, iconPx))
+        iv.tag = "fxxk_mode_icon"
+        if (pal != null) iv.imageTintList = android.content.res.ColorStateList.valueOf(pal.onContainer)
         iv.isClickable = false
+        iv.importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
         holder.addView(iv, android.widget.FrameLayout.LayoutParams(iconPx, iconPx,
                 android.view.Gravity.CENTER))
         holder.setOnTouchListener { v, e ->
