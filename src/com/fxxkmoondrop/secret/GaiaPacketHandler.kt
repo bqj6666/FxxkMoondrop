@@ -83,9 +83,13 @@ class GaiaPacketHandler(
                 val switchConfig = command == GaiaConstants.CMD_AC_GET_SWITCH_CONF ||
                         command == GaiaConstants.CMD_AC_SET_SWITCH_CONF
                 if (payload.isEmpty()) return
-                // ⚠️ 不能要求 payload.size == 1：GA2 的 AC GET_MODE 实测回 4 字节（[2, 1, 0, 0]），
-                // 按单字节校验会把整包丢掉，ANC 状态永远读不到（3.3.1 回归，3.3.2 修复）。
-                if (!switchConfig && (payload[0].toInt() and 0xFF) !in 0..5) return
+                if (!switchConfig) {
+                    if ((payload[0].toInt() and 0xFF) !in 0..5) return
+                    // ANC_V2 的 GET_CURRENT_MODE 是单字节（保持原严格校验）；
+                    // 但 AudioCuration 路径实测有多字节回包：GA2 回 4 字节 [2, 1, 0, 0]，
+                    // 3.3.1 用「size != 1 就丢」把整包扔了，导致冷启动/重连读不到档位。
+                    if (feature == GaiaConstants.FEATURE_ANC_V2 && payload.size != 1) return
+                }
                 // A response to command 1 is not a MODE_CHANGE notification.
                 probe.handleAncProbeResponse(feature, command)
 
