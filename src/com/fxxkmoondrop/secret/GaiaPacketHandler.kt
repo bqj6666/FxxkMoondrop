@@ -82,8 +82,10 @@ class GaiaPacketHandler(
                             modeNotification)) {
                 val switchConfig = command == GaiaConstants.CMD_AC_GET_SWITCH_CONF ||
                         command == GaiaConstants.CMD_AC_SET_SWITCH_CONF
-                if (payload.isEmpty() || (!switchConfig &&
-                            (payload.size != 1 || (payload[0].toInt() and 0xFF) !in 0..5))) return
+                if (payload.isEmpty()) return
+                // ⚠️ 不能要求 payload.size == 1：GA2 的 AC GET_MODE 实测回 4 字节（[2, 1, 0, 0]），
+                // 按单字节校验会把整包丢掉，ANC 状态永远读不到（3.3.1 回归，3.3.2 修复）。
+                if (!switchConfig && (payload[0].toInt() and 0xFF) !in 0..5) return
                 // A response to command 1 is not a MODE_CHANGE notification.
                 probe.handleAncProbeResponse(feature, command)
 
