@@ -771,9 +771,9 @@ class FastPairHookEntry {
                     on -> mp.primary
                     else -> mp.container
                 }
-                // 形状直接用 GradientDrawable 画：选中=圆角方形，未选中=圆形。
-                // 不经过资源 id、不经过 tintList —— 这两条路都会被系统状态刷新打回圆形。
-                bgV.background = shapeBg(act.resources.displayMetrics.density, fill, on)
+                // 形状一律圆形（选中只换颜色）；「按下变方形」由 holder 的 OnTouchListener 负责。
+                // 之前是「选中=圆角方形」，与主界面按钮不一致（用户要求统一为：松开圆形、按住方形）。
+                bgV.background = shapeBg(act.resources.displayMetrics.density, fill, false)
                 holder.isSelected = on
                 // alpha2.26.3: 高亮切换淡入动画（避免生硬跳变）
                 try {
@@ -1167,12 +1167,22 @@ class FastPairHookEntry {
         holder.addView(iv, android.widget.FrameLayout.LayoutParams(iconPx, iconPx,
                 android.view.Gravity.CENTER))
         holder.setOnTouchListener { v, e ->
+            val bgV = v.findViewWithTag<android.view.View>("fxxk_mode_bg")
+            val bgd = bgV?.background as? android.graphics.drawable.GradientDrawable
+            val cur = bgd?.color?.defaultColor ?: 0x29FFFFFF
+            val dens = v.resources.displayMetrics.density
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN ->
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    // 按住 = 圆角方形（M3 Expressive 的按压形变）
+                    bgV?.background = shapeBg(dens, cur, true)
                     v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(90).start()
+                }
                 android.view.MotionEvent.ACTION_UP,
-                android.view.MotionEvent.ACTION_CANCEL ->
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    // 松开回到圆形，颜色不变
+                    bgV?.background = shapeBg(dens, cur, false)
                     v.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                }
             }
             false
         }
