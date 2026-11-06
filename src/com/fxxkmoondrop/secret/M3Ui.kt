@@ -1038,6 +1038,18 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     a.start()
                 }
             }
+            fun applyIdle() {
+                cur = idleDp * density
+                btn.shapeAppearanceModel = btn.shapeAppearanceModel.toBuilder()
+                        .setAllCornerSizes(cur).build()
+            }
+            // ⚠️ M3 Expressive 的 icon-button 样式自带 state 形状（选中时更方），
+            // isChecked 一变就会把我们设的圆角覆盖掉 —— 表现就是「刚连上耳机、自动高亮当前档位时
+            // 轮廓是方形」。所以状态变化后再钉回 idle 圆角（同步一次 + 下一帧一次，防内部重设）。
+            btn.addOnCheckedChangeListener { _, _ ->
+                applyIdle()
+                btn.post { applyIdle() }
+            }
             btn.setOnTouchListener { _, e ->
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> animateTo(pressedDp * density)
