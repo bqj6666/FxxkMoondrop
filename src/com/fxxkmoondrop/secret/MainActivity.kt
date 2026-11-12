@@ -53,7 +53,12 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
     private val containerId = 0x00F0F1
     private var navBar: com.google.android.material.bottomnavigation.BottomNavigationView? = null
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         AppLog.init(this) // alpha2.16: 运行日志（无 Root 可收集）
         installVisibilityTracking(application) // alpha2.41.9: 后台隐藏判定需要全局可见界面计数
@@ -76,6 +81,7 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
         // 否则页面里会出现两根导航栏。
         syncNavBarVisibility()
         setContentView(root)
+        ThemeUtil.systemBars(this, pal)
         // 状态栏/导航栏 insets：必须等 DecorView 创建后再设置（否则 getInsetsController NPE）
         if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)

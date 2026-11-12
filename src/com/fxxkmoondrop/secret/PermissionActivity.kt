@@ -36,7 +36,12 @@ class PermissionActivity : Activity() {
     private lateinit var progressRow: LinearLayout
     private var skipNextResume = true
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(ThemeUtil.attach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeUtil.applyTheme(this)
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         pal = ThemeUtil.Palette(this)
@@ -122,6 +127,7 @@ class PermissionActivity : Activity() {
         root.addView(spacer(dp(6)))
 
         setContentView(root)
+        ThemeUtil.systemBars(this, pal)
 
         window.statusBarColor = pal.surface
         window.navigationBarColor = pal.surface

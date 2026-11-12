@@ -149,6 +149,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:2.7.0")
     implementation("androidx.loader:loader:1.0.0")
     implementation("com.google.android.material:material:1.14.0")
+    // Explicit: View themes use the same utilities version already resolved by dormant Miuix.
+    implementation("com.materialkolor:material-color-utilities:5.0.1")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.savedstate:savedstate:1.2.1")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
