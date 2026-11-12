@@ -130,129 +130,19 @@ class SettingsFragment : Fragment() {
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
-        // ── 外观（对齐 org.lsposed.manager：每项独立卡片 + 12dp 卡间距）──
         val appear = LinearLayout(requireContext())
         appear.orientation = LinearLayout.VERTICAL
-        // 主题模式：跟随系统 / 浅色 / 深色（3 段 pill）
-        // alpha2.52: 统一走 M3 分段控件（高 40dp / 圆角 20dp / labelLarge 14sp）
-        // alpha2.53: 对齐 org.lsposed.manager —— 主题模式改为「行 + 当前值 + 下拉菜单」
-        val modeRow = M3Ui.dropdownRow(requireActivity(), pal,
-                Lang.t("主题", "Theme"), Lang.t("选择应用的主题模式", "Choose the app theme mode"),
-                arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
-                ThemeUtil.themeMode(requireContext())) { mi ->
-            getSP().edit().putInt("theme_mode", mi).commit()
-            scheduleRebuild(0L)
-        }
 
-        // 3.3.2: 调色标准 —— M3 语义角色用哪套算法生成
-        val stdRow = M3Ui.dropdownRow(requireActivity(), pal,
-                Lang.t("调色标准", "Color standard"),
-                Lang.t("M3 语义角色的取值算法；切换后立即生效",
-                        "How M3 color roles are derived; applies immediately"),
-                arrayOf(Lang.t("M3 标准 (HCT)", "M3 standard (HCT)"),
-                        Lang.t("系统动态 (Android 12)", "System dynamic (Android 12)"),
-                        Lang.t("经典 (旧版)", "Classic (legacy)")),
-                ColorStandard.current(requireContext()).ordinal) { i ->
-            ColorStandard.set(requireContext(), ColorStandard.entries[i])
-            scheduleRebuild(0L)
-        }
-
-        // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
-        // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
-        // 看到的界面与上一版完全一致，不会因为升级就换皮。
-        //
-        // ⛔ 3.2.13: Miuix 轨已停用（见 MiuixSurface.DISABLED）。
-        // 这块 UI 随之隐藏 —— 否则用户选了「HyperOS」界面却毫无变化，
-        // 属于「能点但没反应」的坏体验。停用期间不显示，恢复后自动回来。
-        if (!MiuixSurface.disabled) {
-        val styleRow = M3Ui.dropdownRow(requireActivity(), pal,
-                Lang.t("界面风格", "Interface style"),
-                Lang.t("选择控件观感；切换不影响上方亮暗设置", "Control appearance; independent of light/dark"),
-                arrayOf(Lang.t("Material You", "Material You"), Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)")),
-                UiStyle.entries.indexOf(UiStyle.current(requireContext()))) { si ->
-            UiStyle.set(requireContext(), UiStyle.entries[si])
-            // 3.2.13: scheduleRebuild(0L) -> applyStyleSwitch()。
-            //
-            // scheduleRebuild 内部是 act.recreate()，而 recreate() 之后
-            // MainActivity.onCreate 里 `if (savedInstanceState == null) showTab(curTab)`
-            // **不会执行**（savedInstanceState 非 null），showTab 不被调用，
-            // FragmentManager 依据保存的 state 恢复**旧主题的 Fragment** ——
-            // 于是 SP 已切到 Miuix，界面却还是 Material，必须手动切一次 tab 才生效。
-            //
-            // 用户实测反馈的「要来回切换一下页面才会生效」就是这个。
-            // applyStyleSwitch() 直接 showTab(curTab)，按当前 SP 重新分派，立即生效。
-            (activity as? MainActivity)?.applyStyleSwitch()
-        }
-        appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
-        }
-
-        // 动态取色 / AMOLED 开关（裸行；卡片由下面的 groupCard 统一添加）
-        val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
-                Lang.t("跟随壁纸调色，关闭时使用种子颜色", "Follow the wallpaper; use the seed color when off"), makeThemeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
-        // alpha2.52: 副标题只说明开关作用，不反映当前状态（状态由开关自身表达）
-        val swAmoled = makeSwitchRow(Lang.t("AMOLED 纯黑", "AMOLED pure black"),
-                Lang.t("深色模式下背景使用纯黑", "Pure black background in dark mode"),
-                makeThemeSwitch("amoled", false, "AMOLED"))
-        // 3.3.1: 主题 / 动态取色 / AMOLED 归入**同一张卡片**。
-        // 对齐 LSPosed 实测结构：一组一张卡 + 组内行间细分隔线。
-
-        // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
-        seedRow = LinearLayout(requireContext())
-        seedRow!!.orientation = LinearLayout.HORIZONTAL
-        seedRow!!.gravity = Gravity.CENTER_VERTICAL
-        // 与其它行一致的度量：水平 16dp 内边距 + 56dp 最小高度。
-        // 原实现没有任何内边距，标签顶到卡片左边缘、5 个色点溢出卡片右边缘，
-        // 表现为「卡片与内容错位」。
-        seedRow!!.setPadding(dp(16), dp(12), dp(16), dp(12))
-        seedRow!!.minimumHeight = dp(56)
-        val seedLabel = TextView(requireContext())
-        seedLabel.text = Lang.t("种子颜色", "Seed color")
-        seedLabel.textSize = 14f
-        seedLabel.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        seedLabel.setTextColor(pal.onSurface)
-        seedLabel.setPadding(0, 0, 0, 0)
-        seedRow!!.addView(seedLabel, LinearLayout.LayoutParams(0, -2, 1f))
-        val curSeed = ThemeUtil.seed(requireContext())
-        for (si in ThemeUtil.SEEDS.indices) {
-            val seedCol = ThemeUtil.SEEDS[si]
-            val dot = View(requireContext())
-            val dg = GradientDrawable()
-            dg.shape = GradientDrawable.OVAL
-            dg.setColor(seedCol)
-            if (si == curSeed) dg.setStroke(dp(3), pal.onSurface)
-            dot.background = dg
-            val dlp = LinearLayout.LayoutParams(dp(26), dp(26))
-            dlp.marginStart = dp(6)
-            dot.setOnClickListener {
-                // 选种子色 = 官方互斥：自动关闭动态取色，储存并即时重建
-                getSP().edit().putInt("seed", si).putBoolean("dynamic_color", false).commit()
-                scheduleRebuild(0L)
-            }
-            seedRow!!.addView(dot, dlp)
-        }
-        if (!ThemeUtil.dynColor(requireContext())) {
-            appear.addView(spacer(dp(12)))
-            // 动画必须作用在**卡片容器**上：MaterialCardView 按形状裁剪子视图，
-            // 对卡片内部的行走 translationY 会被裁掉，表现为卡片与内容错位。
-            val seedCard = wrapCard(seedRow!!)
-            appear.addView(seedCard, LinearLayout.LayoutParams(-1, -2))
-            // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
-            seedCard.alpha = 0f
-            seedCard.translationY = dp(8).toFloat()
-            // alpha2.54: 必须捕获局部引用 —— onDestroyView 会把 seedRow 置空，
-            // 延迟回调里再解引用（seedRow!!）会抛 KotlinNullPointerException。
-            // 视图已分离时跳过动画即可，不影响正确性。
-            val seedAnim = seedCard
-            if (seedAnim != null) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    if (seedAnim.parent != null) {
-                        seedAnim.animate().alpha(1f).translationY(0f)
-                                .setDuration(Motion.MEDIUM1)
-                                .setInterpolator(Motion.enter()).start()
-                    }
-                }, 120)
-            }
-        }
+        // 3.3.2: 外观项收束成一个入口 —— 主题 / 强调色 / 调色规范 / 调色板风格 / 界面缩放
+        // 全部搬进「主题设置」二级页（对齐 LSPosed 的结构），设置页只留一行。
+        val themeEntry = M3Ui.navRow(requireActivity(), pal,
+                R.drawable.ic_settings,
+                Lang.t("主题设置", "Theme settings"),
+                Lang.t("主题 / 强调色 / 调色规范 / 调色板风格 / 界面缩放",
+                        "Theme, accent, color spec, palette style and UI scale"),
+                Runnable {
+                    startActivity(android.content.Intent(requireContext(), ThemeSettingsActivity::class.java))
+                })
 
         // 语言：区域设置与主题同类 → 与 主题 / 动态取色 / AMOLED 放进**同一张卡**（同一分组）。
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
@@ -263,7 +153,7 @@ class SettingsFragment : Fragment() {
         }
         appear.addView(spacer(dp(12)))
         appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, modeRow, stdRow, swDyn, swAmoled, langRow),
+            M3Ui.groupCard(requireActivity(), pal, themeEntry, langRow),
             LinearLayout.LayoutParams(-1, -2),
         )
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))

@@ -53,6 +53,22 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
     private val containerId = 0x00F0F1
     private var navBar: com.google.android.material.bottomnavigation.BottomNavigationView? = null
 
+    /** 主题设置里的「界面缩放」：改 densityDpi 实现整体缩放（dp 全部跟着走）。 */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val scale = try {
+            newBase.getSharedPreferences("cfg", MODE_PRIVATE).getFloat("ui_scale", 1f)
+        } catch (_: Throwable) {
+            1f
+        }
+        if (scale.isFinite() && scale != 1f && scale in 0.5f..2f) {
+            val conf = android.content.res.Configuration(newBase.resources.configuration)
+            conf.densityDpi = (conf.densityDpi * scale).toInt().coerceIn(96, 640)
+            super.attachBaseContext(newBase.createConfigurationContext(conf))
+        } else {
+            super.attachBaseContext(newBase)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLog.init(this) // alpha2.16: 运行日志（无 Root 可收集）
@@ -104,8 +120,24 @@ class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
         try { KeepAlive.requestWhitelistOnce(this) } catch (_: Throwable) { }
     }
 
+    /** 从「主题设置」回来时若缩放改过，重建一次让新比例生效。 */
+    private var appliedScale = -1f
+
     override fun onResume() {
         super.onResume()
+        // 从「主题设置」回来时若缩放改过，重建一次让新 density 生效
+        val cur = try {
+            getSharedPreferences("cfg", MODE_PRIVATE).getFloat("ui_scale", 1f)
+        } catch (_: Throwable) {
+            1f
+        }
+        if (appliedScale < 0f) {
+            appliedScale = cur
+        } else if (cur != appliedScale) {
+            appliedScale = cur
+            recreate()
+            return
+        }
         recoverMonitoring()
     }
 
