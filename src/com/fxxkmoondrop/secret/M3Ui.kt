@@ -1198,7 +1198,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             // top 用 24dp = 16dp(原 marginTop) + 8dp(原 paddingTop)：本标签背景透明，
             // 用 padding 表达 margin 效果一致，且不用改各处 addView 调用。
             t.setTextColor(pal.primary)
-            t.setPadding(dp(act, 16), dp(act, 24), dp(act, 16), dp(act, 8))
+            // 3.3.2: 分组标题与卡片的呼吸感。
+            //   左 24dp：与卡片内第一列文字同一条基准线（原来 16dp 比卡片内容更靠左，看着"挂"在卡片外）；
+            //   上 20dp / 下 10dp：原来下边只有 8dp，标题底部会贴住卡片顶边，
+            //   深色下圆角一压就像被卡片吞掉了半行字。
+            t.setPadding(dp(act, 24), dp(act, 20), dp(act, 24), dp(act, 10))
             return t
         }
 

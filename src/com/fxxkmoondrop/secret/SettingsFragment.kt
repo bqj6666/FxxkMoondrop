@@ -144,6 +144,19 @@ class SettingsFragment : Fragment() {
             scheduleRebuild(0L)
         }
 
+        // 3.3.2: 调色标准 —— M3 语义角色用哪套算法生成
+        val stdRow = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("调色标准", "Color standard"),
+                Lang.t("M3 语义角色的取值算法；切换后立即生效",
+                        "How M3 color roles are derived; applies immediately"),
+                arrayOf(Lang.t("M3 标准 (HCT)", "M3 standard (HCT)"),
+                        Lang.t("系统动态 (Android 12)", "System dynamic (Android 12)"),
+                        Lang.t("经典 (旧版)", "Classic (legacy)")),
+                ColorStandard.current(requireContext()).ordinal) { i ->
+            ColorStandard.set(requireContext(), ColorStandard.entries[i])
+            scheduleRebuild(0L)
+        }
+
         // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
         // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
         // 看到的界面与上一版完全一致，不会因为升级就换皮。
@@ -250,7 +263,7 @@ class SettingsFragment : Fragment() {
         }
         appear.addView(spacer(dp(12)))
         appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled, langRow),
+            M3Ui.groupCard(requireActivity(), pal, modeRow, stdRow, swDyn, swAmoled, langRow),
             LinearLayout.LayoutParams(-1, -2),
         )
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))

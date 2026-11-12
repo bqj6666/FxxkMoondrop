@@ -167,7 +167,37 @@ class ThemeUtil {
             val surf: Int
             val cardC: Int
 
-            if (dynColor(c)) {
+            // 3.3.2: 调色标准三分支。
+            //   M3      = HCT 官方算法：从 seed 取 hue/chroma，按 M3 规范的 tone 生成角色
+            //             （浅色 primary=40 / container=90 / surface=98；深色 80/30/6 …）。
+            //             只依赖 material-color-utilities 的 Hct（miuix 已传递进来），不新增依赖。
+            //   SYSTEM  = Android 12 系统 tonal palette（就近取档）
+            //   CLASSIC = 种子色手工混色（3.3.1 及以前）
+            val std = ColorStandard.current(c)
+            val m3Seed = if (std == ColorStandard.M3) {
+                val raw = if (dynColor(c)) dyn(c, "system_accent1_500", seedColor(c)) else seedColor(c)
+                try {
+                    com.materialkolor.hct.Hct.fromInt(raw or 0xFF000000.toInt())
+                } catch (_: Throwable) {
+                    null
+                }
+            } else null
+            val m3Hue = m3Seed?.hue ?: 0.0
+            val m3Chroma = (m3Seed?.chroma ?: 48.0).coerceIn(0.0, 48.0)
+            fun tone(h: Double, ch: Double, t: Double): Int =
+                    com.materialkolor.hct.Hct.from(h, ch, t).toInt()
+
+            if (m3Seed != null) {
+                prim = tone(m3Hue, m3Chroma, if (dark) 80.0 else 40.0)
+                onPrim = tone(m3Hue, m3Chroma, if (dark) 20.0 else 100.0)
+                cont = tone(m3Hue, m3Chroma, if (dark) 30.0 else 90.0)
+                onCont = tone(m3Hue, m3Chroma, if (dark) 90.0 else 10.0)
+                surf = if (on) android.graphics.Color.BLACK
+                else tone(m3Hue, 4.0, if (dark) 6.0 else 98.0)
+                cardC = if (on) c.getColor(R.color.m3_amoled_card)
+                else tone(m3Hue, 4.0, if (dark) 12.0 else 94.0)
+                onSurface = tone(m3Hue, 4.0, if (dark) 90.0 else 10.0)
+            } else if (dynColor(c)) {
                 prim = dyn(c, "system_accent1_400", themedColor(c, dark, R.color.m3_primary))
                 // 浅色下 primary 是深色，文字必须用白；深色下 primary 是浅色，文字用深色
                 onPrim = dyn(c, "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary))
@@ -207,10 +237,15 @@ class ThemeUtil {
             // 次级文字 / 描边也全部走动态中性调色板（M3 onSurfaceVariant=tone30、outline=tone50、
             // outlineVariant=tone80；深色反向取亮几档）。原先这三格是写死的紫调字面量，
             // 动态取色下整页是壁纸色、只有描边还是基线紫，层级看着发脏。
-            onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
-                    themedColor(c, dark, R.color.m3_on_surface_variant))
-            outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
-                    themedColor(c, dark, R.color.m3_outline))
+            if (m3Seed != null) {
+                onVariant = tone(m3Hue, 8.0, if (dark) 80.0 else 30.0)
+                outline = tone(m3Hue, 8.0, if (dark) 60.0 else 50.0)
+            } else {
+                onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
+                        themedColor(c, dark, R.color.m3_on_surface_variant))
+                outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
+                        themedColor(c, dark, R.color.m3_outline))
+            }
             green = themedColor(c, dark, R.color.m3_green)
             red = themedColor(c, dark, R.color.m3_red)
 
@@ -233,7 +268,8 @@ class ThemeUtil {
             //
             // AMOLED 纯黑下同样保留：卡片 #101010 与纯黑背景几乎同色，
             // 没有描边就彻底分不出层级。
-            cardStroke = dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
+            cardStroke = if (m3Seed != null) tone(m3Hue, 8.0, if (dark) 30.0 else 80.0)
+            else dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
                     themedColor(c, dark, R.color.m3_outline_variant))
             // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
             divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())

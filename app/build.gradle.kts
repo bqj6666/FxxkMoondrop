@@ -173,6 +173,10 @@ dependencies {
     implementation("org.luckypray:dexkit:2.3.0")
 
     // 单元测试（纯 JVM，验证 GaiaCommands 帧构造）
+    // 3.3.2: 「M3 标准」调色板只用它的 HCT（Cam16 + 色调映射），无 Compose 依赖、体积很小。
+    // 之前通过 miuix 传递进来，但 implementation 不暴露给本模块编译期，必须显式声明。
+    implementation("com.materialkolor:material-color-utilities:5.0.1")
+
     testImplementation("junit:junit:4.13.2")
     // 测试专用：android.jar 里的 org.json 是桩（且 unitTests.isReturnDefaultValues=true
     // 会让它静默返回默认值），必须用真实实现才能验证 release 响应的解析。
