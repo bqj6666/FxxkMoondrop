@@ -16,7 +16,8 @@ import android.view.animation.LinearInterpolator
  * 同时让瓣深 a 在 0.03~0.07 之间往复，看起来像在缓缓"呼吸/形变"。
  * 只做背景装饰，不拦截触摸；页面不可见时停止动画。
  */
-class ScallopView(ctx: Context, private val fillColor: Int) : View(ctx) {
+class ScallopView(ctx: Context, private val fillColor: Int,
+                  spinMs: Long = 14000L, breatheMs: Long = 2400L) : View(ctx) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -28,7 +29,7 @@ class ScallopView(ctx: Context, private val fillColor: Int) : View(ctx) {
     private var amp = 0.05f
 
     private val spin = ValueAnimator.ofFloat(0f, 360f).apply {
-        duration = 9000
+        duration = spinMs
         repeatCount = ValueAnimator.INFINITE
         interpolator = LinearInterpolator()
         addUpdateListener {
@@ -37,7 +38,7 @@ class ScallopView(ctx: Context, private val fillColor: Int) : View(ctx) {
         }
     }
     private val breathe = ValueAnimator.ofFloat(0.03f, 0.075f).apply {
-        duration = 1600
+        duration = breatheMs
         repeatCount = ValueAnimator.INFINITE
         repeatMode = ValueAnimator.REVERSE
         addUpdateListener {
