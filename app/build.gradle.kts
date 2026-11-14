@@ -195,6 +195,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    // 1.5.0：官方 M3 Expressive LoadingIndicator（关于页图标背景动画）需要的版本
+    implementation("androidx.compose.material3:material3-android:1.5.0-rc01")
     implementation("androidx.activity:activity-compose")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     // 3.2.13: miuix-preference 提供 **官方**的下拉选择组件

@@ -267,8 +267,9 @@ class M3Ui {
         fun collapsingHeader(act: Activity, pal: ThemeUtil.Palette, title: String, heightPx: Int): CollapseHeader {
             val bar = android.widget.FrameLayout(act)
             bar.setBackgroundColor(pal.surface)
-            // 左 68dp：给 MainActivity 常驻的 48dp 菜单键让位，避免标题与它重合
-            val padL = dp(act, 68)
+            // 抽屉模式左 68dp（给 48dp 菜单键让位）；悬浮导航栏模式没有菜单键，标题左对齐 16dp
+            val floatingNav = act.getSharedPreferences("cfg", 0).getInt("nav_mode", 0) == 1
+            val padL = dp(act, if (floatingNav) 16 else 68)
 
             // 展开态大标题：底部对齐
             val big = TextView(act)

@@ -378,8 +378,8 @@ class AboutFragment : Fragment() {
         val iconWrap = android.widget.FrameLayout(requireContext())
         // 图标背景：M3 Expressive 形变圆形（12 瓣波浪圆，缓慢自转 + 呼吸），取图标主色
         val iconColor = AppIconColor.of(requireContext(), pal.primary)
-        val scallop = ScallopView(requireContext(), (iconColor and 0x00FFFFFF) or 0x55000000)
-        iconWrap.addView(scallop, android.widget.FrameLayout.LayoutParams(dp(104), dp(104),
+        val badge = LoadingBadge.create(requireContext(), iconColor, 104)
+        iconWrap.addView(badge, android.widget.FrameLayout.LayoutParams(dp(104), dp(104),
                 Gravity.CENTER))
         val iconView = ImageView(requireContext())
         try {

@@ -610,7 +610,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         val bg = android.graphics.drawable.GradientDrawable()
         bg.cornerRadius = p2(28).toFloat()
         bg.setColor(pal.card)
-        bg.setStroke(p2(1), pal.cardStroke)
+        // 描边用 outline 30%：cardStroke 在浅色下几乎与卡片底色同色，看起来像没有边
+        bg.setStroke(p2(1), (pal.outline and 0x00FFFFFF) or 0x4D000000)
         row.background = bg
 
         val cells = ArrayList<NavCell>()
