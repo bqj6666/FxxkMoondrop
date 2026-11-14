@@ -177,6 +177,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         }
         // 便于无手势环境（如自动化）核对抽屉：am start ... --ez open_drawer true
         if (intent?.getBooleanExtra("open_drawer", false) == true) {
+            // 读完立刻清掉：否则 Activity 因切语言/换主题重建时这个 intent 还在，
+            // 抽屉会自己再弹一次（实测切语言后必现）。
+            intent?.removeExtra("open_drawer")
             drawer.postDelayed({ drawer.openDrawer(drawerPanel) }, 400)
         }
         // 状态栏/导航栏 insets：必须等 DecorView 创建后再设置（否则 getInsetsController NPE）

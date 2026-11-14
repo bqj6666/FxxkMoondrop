@@ -138,8 +138,7 @@ class SettingsFragment : Fragment() {
         val themeEntry = M3Ui.navRow(requireActivity(), pal,
                 R.drawable.ic_settings,
                 Lang.t("主题设置", "Theme settings"),
-                Lang.t("主题 / 强调色 / 色彩规范 / 调色板风格 / 界面缩放",
-                        "Theme, accent, color spec, palette style and UI scale"),
+                null,
                 Runnable {
                     startActivity(android.content.Intent(requireContext(), ThemeSettingsActivity::class.java))
                 })
