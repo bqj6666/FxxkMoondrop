@@ -782,6 +782,11 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                         if (next != idx) {
                             showTab(order[next])
                             animateFloatingSelection(palRef ?: ThemeUtil.Palette(this))
+                            // 切页后主动亮出底栏：否则收起状态下切页看不到任何导航反馈
+                            if (navHidden) {
+                                navHidden = false
+                                hideShowNav(true)
+                            }
                         }
                     }
                 } else if (d != null && pn != null && !d.isDrawerOpen(pn)) {
