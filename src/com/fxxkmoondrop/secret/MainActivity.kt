@@ -169,6 +169,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         palRef = pal
         installBackHandler()
         maybeAutoCheckUpdate()
+        appliedNavMode = navMode()
         applyNavMode(pal)
 
         // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
@@ -221,6 +222,12 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
 
     override fun onResume() {
         super.onResume()
+        // 导航方式在主题设置里改过：回到主页自己重建，不打断用户
+        if (appliedNavMode >= 0 && navMode() != appliedNavMode) {
+            appliedNavMode = navMode()
+            recreate()
+            return
+        }
         // 从「主题设置」回来时若缩放改过，重建一次让新 density 生效
         val cur = try {
             getSharedPreferences("cfg", MODE_PRIVATE).getFloat("ui_scale", 1f)
@@ -572,6 +579,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var floatNavCells: MutableList<NavCell>? = null
 
     private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 1)
+
+    /** 本实例已应用的导航方式：主题设置里改了之后，回到主页时自动重建。 */
+    private var appliedNavMode = -1
 
     /** 按当前导航方式切换：抽屉模式下显示菜单键并解锁抽屉，悬浮模式下反之。 */
     private fun applyNavMode(pal: ThemeUtil.Palette) {
