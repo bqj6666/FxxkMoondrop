@@ -150,9 +150,21 @@ class SettingsFragment : Fragment() {
             getSP().edit().putInt("lang", mi).commit()
             scheduleRebuild(0L)
         }
+        // 导航方式：抽屉菜单 / 悬浮导航栏（二选一，切换后整页重建即刻生效）
+        val navIdx = getSP().getInt("nav_mode", 0)
+        val navRow = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("导航方式", "Navigation"),
+                null,
+                arrayOf(Lang.t("抽屉菜单", "Navigation drawer"),
+                        Lang.t("悬浮导航栏", "Floating bar")),
+                navIdx) { mi ->
+            getSP().edit().putInt("nav_mode", mi).commit()
+            requireActivity().recreate()
+        }
+
         appear.addView(spacer(dp(12)))
         appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, themeEntry, langRow),
+            M3Ui.groupCard(requireActivity(), pal, themeEntry, langRow, navRow),
             LinearLayout.LayoutParams(-1, -2),
         )
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))

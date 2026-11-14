@@ -139,6 +139,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         mlp.topMargin = sbhPx + (4 * resources.displayMetrics.density).toInt()
         mlp.leftMargin = (4 * resources.displayMetrics.density).toInt()
         contentWrap.addView(menuBtn, mlp)
+        contentHost = contentWrap
+        menuButton = menuBtn
         root.addView(contentWrap, LinearLayout.LayoutParams(-1, 0, 1f))
         navBar = M3Ui.navBar(this, pal, curTab) { showTab(it) }
         // 3.3.x: 底部导航栏移除 —— 导航统一走侧滑菜单（M3 抽屉式导航）。
@@ -167,6 +169,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         palRef = pal
         installBackHandler()
         maybeAutoCheckUpdate()
+        applyNavMode(pal)
 
         // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
         // 用官方 systemGestureExclusionRects 把左侧 40dp 让给应用，抽屉边缘手势才生效。
@@ -560,7 +563,80 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         }
     }
 
+    // ── 导航方式：抽屉 / 悬浮导航栏 ──────────────────────────────
+    // nav_mode = 0 抽屉（默认），1 悬浮胶囊导航栏；二选一在设置页「外观」里切换。
+    private var contentHost: android.widget.FrameLayout? = null
+    private var menuButton: View? = null
+    private var floatNav: View? = null
+
+    private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 0)
+
+    /** 按当前导航方式切换：抽屉模式下显示菜单键并解锁抽屉，悬浮模式下反之。 */
+    private fun applyNavMode(pal: ThemeUtil.Palette) {
+        val floating = navMode() == 1
+        menuButton?.visibility = if (floating) View.GONE else View.VISIBLE
+        drawerRef?.setDrawerLockMode(if (floating)
+            androidx.drawerlayout.widget.DrawerLayout.LOCK_MODE_LOCKED_CLOSED
+        else androidx.drawerlayout.widget.DrawerLayout.LOCK_MODE_UNLOCKED)
+        floatNav?.let { contentHost?.removeView(it) }
+        floatNav = null
+        if (!floating) return
+        val bar = buildFloatingNav(pal)
+        floatNav = bar
+        val lp = android.widget.FrameLayout.LayoutParams(-2, -2)
+        lp.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
+        lp.bottomMargin = (24 * resources.displayMetrics.density).toInt()
+        contentHost?.addView(bar, lp)
+    }
+
+    /** 悬浮胶囊导航栏：三个入口，选中项用容器色 pill。 */
+    private fun buildFloatingNav(pal: ThemeUtil.Palette): View {
+        val d = resources.displayMetrics.density
+        fun p(v: Int) = (v * d).toInt()
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = android.view.Gravity.CENTER
+        row.setPadding(p(8), p(8), p(8), p(8))
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.cornerRadius = p(28).toFloat()
+        bg.setColor(pal.card)
+        bg.setStroke(p(1), pal.cardStroke)
+        row.background = bg
+
+        fun addItem(tab: Int, icon: Int, label: String) {
+            val sel = tab == curTab
+            val cell = android.widget.FrameLayout(this)
+            val cellBg = android.graphics.drawable.GradientDrawable()
+            cellBg.cornerRadius = p(20).toFloat()
+            cellBg.setColor(if (sel) pal.secondaryContainer else android.graphics.Color.TRANSPARENT)
+            cell.background = cellBg
+            val ic = android.widget.ImageView(this)
+            ic.setImageResource(icon)
+            ic.imageTintList = android.content.res.ColorStateList.valueOf(
+                    if (sel) pal.onSecondaryContainer else pal.onVariant)
+            val ilp = android.widget.FrameLayout.LayoutParams(p(24), p(24))
+            ilp.gravity = android.view.Gravity.CENTER
+            cell.addView(ic, ilp)
+            cell.contentDescription = label
+            cell.setOnClickListener {
+                if (navMode() == 1) {
+                    showTab(tab)
+                    applyNavMode(palRef ?: ThemeUtil.Palette(this))
+                }
+            }
+            val clp = LinearLayout.LayoutParams(p(64), p(48))
+            clp.leftMargin = p(2); clp.rightMargin = p(2)
+            row.addView(cell, clp)
+        }
+
+        addItem(1, R.drawable.ic_home, Lang.t("概览", "Overview"))
+        addItem(2, R.drawable.ic_settings, Lang.t("设置", "Settings"))
+        addItem(3, R.drawable.ic_info, Lang.t("关于", "About"))
+        return row
+    }
+
     /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
+
     private fun applyGestureExclusion() {
         if (Build.VERSION.SDK_INT < 29) return
         val dv = window?.decorView ?: return

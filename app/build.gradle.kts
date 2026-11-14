@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 32
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 351
         versionName = "3.3.1"
 
