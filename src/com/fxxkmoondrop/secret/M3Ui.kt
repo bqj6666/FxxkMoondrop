@@ -778,10 +778,9 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             value.setTextColor(pal.onVariant)
             value.isSingleLine = true
             val row = listRow(act, pal, 0, title, sub, value, null)
-            // 单行下拉行统一按 72dp 节奏排（= 双行行「标题 + 副标题」的高度）。
-            // 只有一行文字时 listRow 只到 56dp 下限，单独成卡会比其他卡片矮一截，
-            // 一行「语言 / Language」夹在 78dp 的卡片中间像被压扁了 —— 同一页的行高必须成体系。
-            if (sub.isNullOrEmpty()) row.minimumHeight = dp(act, 72)
+            // 无说明的下拉行（只有标题 + 当前值）按 56dp 单行节奏排，
+            // 与「语言 / Language」那类条目一致；强行撑到 72dp 会显得中间空一块。
+            if (sub.isNullOrEmpty()) row.minimumHeight = dp(act, 56)
             // alpha2.53: 菜单跟随手指位置（官方行为）。
             // 触摸点用 OnTouchListener 记录但返回 false，保留行自身的点击/涟漪；
             // 无障碍与键盘触发的 click 没有触摸点，退化为锚到行中心。
