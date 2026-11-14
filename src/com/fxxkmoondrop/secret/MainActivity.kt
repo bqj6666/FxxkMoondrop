@@ -70,6 +70,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var heroBadge: TextView? = null
     /** 抽屉底部的「发现新版本」胶囊。 */
     private var updBadge: TextView? = null
+    private var previewUpdate = false
     private var bannerSub: TextView? = null
 
     private val bannerPicker = registerForActivityResult(
@@ -166,6 +167,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         })
         palRef = pal
         installBackHandler()
+        previewUpdate = intent?.getBooleanExtra("preview_update", false) == true
+        if (previewUpdate) intent?.removeExtra("preview_update")
         maybeAutoCheckUpdate()
 
         // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
@@ -523,8 +526,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private fun refreshUpdateBadge() {
         val b = updBadge ?: return
         val tag = updPrefs().getString("update_latest_tag", "") ?: ""
-        if (tag.isNotEmpty() && UpdateChecker.isEnabled(this)) {
-            b.text = Lang.t("发现新版本 ", "New version ") + tag
+        val shown = if (previewUpdate) "v9.9.9" else tag
+        if (shown.isNotEmpty() && (previewUpdate || UpdateChecker.isEnabled(this))) {
+            b.text = Lang.t("发现新版本 ", "New version ") + shown
             b.visibility = View.VISIBLE
         } else {
             b.visibility = View.GONE
