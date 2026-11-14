@@ -150,31 +150,49 @@ class M3Ui {
                                     onBack: Runnable?): LargeHeaderPage {
             val sbh = act.resources.getIdentifier("status_bar_height", "dimen", "android")
                     .let { if (it > 0) act.resources.getDimensionPixelSize(it) else 0 }
-            val expandedPx = dp(act, 112) + sbh
+            val expandedPx = dp(act, HEADER_EXPANDED_DP) + sbh
             val collapsedPx = dp(act, HEADER_COLLAPSED_DP) + sbh
 
             val bar = android.widget.FrameLayout(act)
             bar.setBackgroundColor(pal.surface)
             bar.setPadding(0, sbh, 0, 0)
 
-            val barTitle = TextView(act)
-            barTitle.text = title
-            barTitle.textSize = 32f
-            barTitle.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            barTitle.setTextColor(pal.onSurface)
-            // 展开态标题左对齐内容（16dp）；收缩成顶栏时才让出 56dp（返回键 48 + 8）给返回键
-            // 展开态是**大标题**：字号 32sp、位于返回键下方；滚动后收成与返回键同行的小标题
-            bar.addView(barTitle, android.widget.FrameLayout.LayoutParams(-1, -2,
-                    Gravity.TOP or Gravity.START).also {
-                it.leftMargin = dp(act, 16)
-                it.topMargin = dp(act, 56)
-                it.rightMargin = dp(act, 16)
-            })
+            // 展开态大标题：底部对齐、左 16dp（与内容左边缘一致）
+            val big = TextView(act)
+            big.text = title
+            big.isSingleLine = true
+            big.setTextColor(pal.onSurface)
+            big.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            big.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_EXPANDED_SP)
+            val blp = android.widget.FrameLayout.LayoutParams(-1, -2)
+            blp.gravity = Gravity.BOTTOM
+            blp.leftMargin = dp(act, 16)
+            blp.rightMargin = dp(act, 16)
+            blp.bottomMargin = dp(act, 16)
+            bar.addView(big, blp)
 
+            // 收起态小标题：48dp 行垂直居中，左 72dp（返回键 8+48 之后留 16dp）
+            val mini = TextView(act)
+            mini.text = title
+            mini.isSingleLine = true
+            mini.setTextColor(pal.onSurface)
+            mini.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            mini.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_COLLAPSED_SP)
+            mini.gravity = Gravity.CENTER_VERTICAL
+            mini.alpha = 0f
+            val mlp = android.widget.FrameLayout.LayoutParams(-1, dp(act, 48))
+            mlp.gravity = Gravity.TOP
+            mlp.leftMargin = dp(act, 72)
+            mlp.rightMargin = dp(act, 16)
+            mlp.topMargin = dp(act, 4)
+            bar.addView(mini, mlp)
+
+            // 返回键：固定在顶栏左上角（与菜单键同一位置），不随滚动移动
             val back = backButton(act, pal, onBack)
-            // 返回键与标题**同一行**：展开时一起下移到标题那一行，收缩时一起上移（只改位置，不改标题字号）
             val backLp = android.widget.FrameLayout.LayoutParams(dp(act, 48), dp(act, 48),
-                    Gravity.TOP or Gravity.START).also { it.leftMargin = dp(act, 8); it.topMargin = dp(act, 56) }
+                    Gravity.TOP or Gravity.START).also {
+                it.leftMargin = dp(act, 8); it.topMargin = dp(act, 4)
+            }
             bar.addView(back, backLp)
 
             val sv = android.widget.ScrollView(act)
@@ -186,39 +204,16 @@ class M3Ui {
             val container = android.widget.FrameLayout(act)
             container.setBackgroundColor(pal.surface)
             container.addView(sv, android.widget.FrameLayout.LayoutParams(-1, -1))
-            container.addView(bar, android.widget.FrameLayout.LayoutParams(-1, expandedPx).also { it.gravity = Gravity.TOP })
+            container.addView(bar, android.widget.FrameLayout.LayoutParams(-1, expandedPx).also {
+                it.gravity = Gravity.TOP
+            })
 
-            fun apply(t: Float) {
-                val h = (expandedPx + (collapsedPx - expandedPx) * t).toInt()
-                bar.layoutParams = bar.layoutParams.also { it.height = h }
-                // 32sp → 22sp：放大感来自这一段字号收缩
-                barTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 32f - 10f * t)
-                // 返回键：56dp → 10dp（固定 48dp 高，中心 = top+24）
-                val backTm = dp(act, (56 - 46 * t).toInt())
-                // 标题：字号从 32sp 收到 22sp，行高跟着变，所以 top 要单独补偿，
-                // 才能让「文字中心」始终对齐「按钮中心」（否则收缩后文字会高于箭头）
-                val titleTm = dp(act, (56 - 38 * t).toInt())
-                val lp = barTitle.layoutParams as? android.widget.FrameLayout.LayoutParams
-                if (lp != null) {
-                    if (lp.topMargin != titleTm || lp.leftMargin != dp(act, 56)) {
-                        lp.topMargin = titleTm; lp.leftMargin = dp(act, 56); barTitle.layoutParams = lp
-                    }
-                }
-                if (backLp.topMargin != backTm) { backLp.topMargin = backTm; back.layoutParams = backLp }
-            }
-            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
-                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
-                apply((sy.toFloat() / span).coerceIn(0f, 1f))
-            }
-            apply(0f)
-            sv.post {
-                val span = (expandedPx - collapsedPx).coerceAtLeast(1)
-                apply((sv.scrollY.toFloat() / span).coerceIn(0f, 1f))
-            }
-            // 该页自己管理 apply（返回键 + 标题联动），这里只是为了满足 LargeHeaderPage 的类型
-            return LargeHeaderPage(container, sv,
-                    CollapseHeader(android.widget.FrameLayout(act), barTitle, barTitle,
-                            expandedPx, collapsedPx))
+            val header = CollapseHeader(bar, big, mini, expandedPx, collapsedPx)
+            // 与主页面同一套滚动行为：big 渐隐、mini 渐显、栏高 112 → 64dp 收缩
+            sv.setOnScrollChangeListener { _, _, sy, _, _ -> header.onScroll(sy) }
+            header.apply(0f)
+            sv.post { header.onScroll(sv.scrollY) }
+            return LargeHeaderPage(container, sv, header)
         }
 
         /** alpha2.53: 用大标题页骨架替换普通 ScrollView（三页统一入口）。 */
