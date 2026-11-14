@@ -48,7 +48,7 @@ class ThemeSettingsActivity : BaseActivity() {
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("主题", "Theme")))
         val modeRow = M3Ui.dropdownRow(this, pal,
                 Lang.t("主题", "Theme"),
-                Lang.t("选择应用的主题模式", "Choose the app theme mode"),
+                "",
                 arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
                 ThemeUtil.themeMode(this)) { mi ->
             sp().edit().putInt("theme_mode", mi).commit()
@@ -68,19 +68,19 @@ class ThemeSettingsActivity : BaseActivity() {
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("配色", "Colors")))
         val dynRow = M3Ui.switchRow(this, pal,
                 Lang.t("动态取色", "Dynamic color"),
-                Lang.t("跟随壁纸取色", "Take colors from the wallpaper"),
+                "",
                 themeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")) { on ->
                     // 立刻播强调色行的显隐动画；palette 重建延后到开关动画结束
                     M3Ui.reveal(seedRow, !on)
                 })
         val amoledRow = M3Ui.switchRow(this, pal,
                 Lang.t("AMOLED 纯黑", "AMOLED pure black"),
-                Lang.t("纯黑背景，卡片以描边分层", "Pure black background, cards split by stroke"),
+                "",
                 themeSwitch("amoled", false, "AMOLED"))
         // 色彩规范：只换 M3 语义角色的 tone 表（颜色），不影响形状与动效。
         val stdRow = M3Ui.dropdownRow(this, pal,
                 Lang.t("色彩规范", "Color spec"),
-                Lang.t("M3 语义角色取哪一套色调", "Which tone table the M3 roles use"),
+                "",
                 ColorSpec.entries.map { Lang.t(it.zh, it.en) }.toTypedArray(),
                 ColorSpec.current(this).ordinal) { i ->
             ColorSpec.set(this, ColorSpec.entries[i])
@@ -88,7 +88,7 @@ class ThemeSettingsActivity : BaseActivity() {
         }
         val variantRow = M3Ui.dropdownRow(this, pal,
                 Lang.t("调色板风格", "Palette style"),
-                Lang.t("调色板的色调算法", "Tone algorithm of the palette"),
+                "",
                 M3SchemeVariant.entries.map { Lang.t(it.zh, it.en) }.toTypedArray(),
                 M3SchemeVariant.current(this).ordinal) { i ->
             M3SchemeVariant.set(this, M3SchemeVariant.entries[i])
@@ -124,14 +124,7 @@ class ThemeSettingsActivity : BaseActivity() {
         })
         body.addView(M3Ui.groupCard(this, pal, wrap), LinearLayout.LayoutParams(-1, -2))
 
-        val hint = TextView(this)
-        hint.text = Lang.t(
-                "缩放对主界面生效，返回后按新比例重绘。",
-                "Applies to the main UI; it redraws at the new scale when you go back.")
-        hint.textSize = 12f
-        hint.setTextColor(pal.onVariant)
-        hint.setPadding(dp(24), dp(8), dp(24), dp(24))
-        body.addView(hint, LinearLayout.LayoutParams(-1, -2))
+
     }
 
     /** 强调色：五个官方种子色点，选一个即关闭动态取色（与 Material 轨行为一致）。 */
