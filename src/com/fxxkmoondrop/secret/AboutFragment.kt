@@ -368,51 +368,85 @@ class AboutFragment : Fragment() {
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(16), dp(8), dp(16), dp(28))
 
-        // ── 头部信息卡（M3 large icon 规格：96dp 容器 / 24dp 圆角 / 72dp 图标）──
+        // ── 头部卡：居中图标 + 旋转弧环 + 名称 + 两个信息 chip + 两个动作按钮 ──
         val header = LinearLayout(requireContext())
         header.orientation = LinearLayout.VERTICAL
         header.gravity = Gravity.CENTER_HORIZONTAL
         header.setPadding(dp(24), dp(24), dp(24), dp(24))
 
-        val iconWrap = LinearLayout(requireContext())
-        iconWrap.gravity = Gravity.CENTER
-        val iwBg = GradientDrawable()
-        iwBg.setColor(pal.container)
-        iwBg.setCornerRadius(dp(24).toFloat())
-        iconWrap.background = iwBg
+        // 图标 + 外圈旋转弧（Material 加载条手感）
+        val iconWrap = android.widget.FrameLayout(requireContext())
+        val ring = RingView(requireContext(), pal.primary, pal.outline)
+        iconWrap.addView(ring, android.widget.FrameLayout.LayoutParams(dp(96), dp(96),
+                Gravity.CENTER))
         val iconView = ImageView(requireContext())
         try {
             iconView.setImageDrawable(requireContext().packageManager
                     .getApplicationIcon(requireContext().packageName))
         } catch (_: Exception) { }
-        iconWrap.addView(iconView, LinearLayout.LayoutParams(dp(72), dp(72)))
+        iconWrap.addView(iconView, android.widget.FrameLayout.LayoutParams(dp(64), dp(64),
+                Gravity.CENTER))
         header.addView(iconWrap, LinearLayout.LayoutParams(dp(96), dp(96)))
 
         header.addView(spacer(dp(16)))
         val appTitle = TextView(requireContext())
         appTitle.text = "MoonEar"
-        appTitle.textSize = 24f
-        appTitle.typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        appTitle.textSize = 26f
+        appTitle.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         appTitle.setTextColor(pal.onSurface)
         header.addView(appTitle, LinearLayout.LayoutParams(-2, -2))
 
         header.addView(spacer(dp(6)))
-        val ver = TextView(requireContext())
-        ver.text = verText()
-        ver.textSize = 14f
-        ver.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        ver.setTextColor(pal.primary)
-        header.addView(ver, LinearLayout.LayoutParams(-2, -2))
-
-        header.addView(spacer(dp(8)))
         val tagline = TextView(requireContext())
-        tagline.text = Lang.t("Moondrop 蓝牙耳机助手",
-                "Moondrop Bluetooth Earbud Assistant")
-        tagline.textSize = 12f
+        tagline.text = Lang.t("Moondrop 蓝牙耳机助手", "Moondrop Bluetooth Earbud Assistant")
+        tagline.textSize = 14f
         tagline.setTextColor(pal.onVariant)
-        tagline.alpha = 0.85f
         tagline.gravity = Gravity.CENTER
         header.addView(tagline, LinearLayout.LayoutParams(-2, -2))
+
+        // 信息 chip：版本 + 许可证
+        header.addView(spacer(dp(14)))
+        val chipRow = LinearLayout(requireContext())
+        chipRow.orientation = LinearLayout.HORIZONTAL
+        chipRow.gravity = Gravity.CENTER
+        fun infoChip(text: String): TextView {
+            val tv = TextView(requireContext())
+            tv.text = text
+            tv.textSize = 13f
+            tv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            tv.setTextColor(pal.onSurface)
+            tv.gravity = Gravity.CENTER
+            tv.setPadding(dp(14), dp(7), dp(14), dp(7))
+            val cbg = GradientDrawable()
+            cbg.cornerRadius = dp(16).toFloat()
+            cbg.setColor(android.graphics.Color.TRANSPARENT)
+            cbg.setStroke(dp(1), pal.cardStroke)
+            tv.background = cbg
+            return tv
+        }
+        chipRow.addView(infoChip(verText()), LinearLayout.LayoutParams(-2, -2))
+        val chip2 = infoChip("GPL-3.0")
+        val c2lp = LinearLayout.LayoutParams(-2, -2)
+        c2lp.marginStart = dp(8)
+        chipRow.addView(chip2, c2lp)
+        header.addView(chipRow, LinearLayout.LayoutParams(-2, -2))
+
+        // 动作按钮：Star on GitHub（主）+ 反馈（次）
+        header.addView(spacer(dp(16)))
+        val btnRow = LinearLayout(requireContext())
+        btnRow.orientation = LinearLayout.HORIZONTAL
+        btnRow.gravity = Gravity.CENTER
+        val star = M3Ui.filledButton(requireActivity(), pal, Lang.t("GitHub 主页", "GitHub")) {
+            openUrl("https://github.com/bqj6666/FxxkMoondrop")
+        }
+        val issue = M3Ui.textButton(requireActivity(), pal, Lang.t("反馈问题", "Report a bug")) {
+            openUrl("https://github.com/bqj6666/FxxkMoondrop/issues/new")
+        }
+        btnRow.addView(star, LinearLayout.LayoutParams(0, -2, 1f))
+        val ilp2 = LinearLayout.LayoutParams(0, -2, 1f)
+        ilp2.marginStart = dp(8)
+        btnRow.addView(issue, ilp2)
+        header.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         box.addView(M3Ui.wrapInCard(requireContext(), pal, header), LinearLayout.LayoutParams(-1, -2))
 
         // ── 项目 ──
