@@ -42,7 +42,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
  * 页面内的开关与设置页共用同一份偏好（cfg SP）与同一套副作用，改完立即生效，
  * 不存在第二套状态。不新增任何链路。
  */
-class OnboardingActivity : Activity() {
+class OnboardingActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var pager: ViewPager2

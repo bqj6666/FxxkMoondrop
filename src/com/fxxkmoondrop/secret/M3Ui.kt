@@ -1288,6 +1288,48 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             if (onClick != null) row.setOnClickListener { onClick.run() }
             return row
         }
+
+        /**
+         * 页面统一入场动效：内容区里的标题/卡片自上而下依次淡入 + 上移 10dp。
+         *
+         * 主题设置页最早用的就是这套手感（进场 MEDIUM1 + decelerate、每项错开 30ms），
+         * 现在由 BaseActivity 在 onPostCreate 调用一次，所有二级页自动一致 —— 不必每个页面
+         * 各写一遍，也就不会出现「这个页面有动效、那个页面没有」。
+         *
+         * 优先在内容树里找 ScrollView（大标题页的内容都在其中），拿它的唯一子容器逐项动画；
+         * 找不到时退化为内容根的子项。系统关闭动画（animator scale = 0）时会立即完成。
+         */
+        @JvmStatic
+        fun staggerInContent(content: android.view.ViewGroup?) {
+            if (content == null) return
+            val host = content.getChildAt(0) as? android.view.ViewGroup ?: return
+            val container = findScrollBody(host) ?: host
+            val dy = dp(container.context, 10).toFloat()
+            for (i in 0 until container.childCount) {
+                val v = container.getChildAt(i) ?: continue
+                v.animate().cancel()
+                v.alpha = 0f
+                v.translationY = dy
+                v.animate().alpha(1f).translationY(0f)
+                        .setStartDelay((i * 30L).coerceAtMost(240L))
+                        .setDuration(Motion.MEDIUM1)
+                        .setInterpolator(Motion.enter())
+                        .start()
+            }
+        }
+
+        /** 深度优先找 ScrollView，返回它的内容容器。 */
+        private fun findScrollBody(v: android.view.View): android.view.ViewGroup? {
+            if (v is android.widget.ScrollView) return v.getChildAt(0) as? android.view.ViewGroup
+            if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) {
+                    val child = v.getChildAt(i) ?: continue
+                    val r = findScrollBody(child)
+                    if (r != null) return r
+                }
+            }
+            return null
+        }
     }
 }
 

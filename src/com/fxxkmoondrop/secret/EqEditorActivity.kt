@@ -32,7 +32,7 @@ import com.google.android.material.slider.Slider
  * 界面按 Material 3（Expressive 取向）重排：sectionTitle + 分组卡、M3 Slider（带数值气泡）、
  * 药丸按钮、圆角 chip 选预设；间距/字号沿用本应用 M3Ui 那套规范值。
  */
-class EqEditorActivity : Activity() {
+class EqEditorActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private val ui = Handler(Looper.getMainLooper())
@@ -231,17 +231,14 @@ class EqEditorActivity : Activity() {
      * materialSizeOverlay 与 m3expressive_button_shape_state_list，
      * 按下时就看不到「圆角→方形」的官方形变（概览页刷新按钮就是默认样式，所以它有）。
      */
-    private fun m3Filled(text: String, onClick: () -> Unit): TextView {
-        val b = com.google.android.material.button.MaterialButton(this)
-        b.text = text
-        b.textSize = 14f
-        b.isAllCaps = false
-        b.setTextColor(pal.onPrimary)
-        b.backgroundTintList = android.content.res.ColorStateList.valueOf(pal.primary)
-        b.gravity = Gravity.CENTER
-        b.setOnClickListener { onClick() }
-        return b
-    }
+    /**
+     * 主操作按钮：复用 M3Ui.actionButton 的 **Medium 档**（视觉 56dp、16sp、图标 24dp），
+     * 与概览页「刷新状态」、设置页「模拟连接」同一套官方尺寸与按压缩角形变。
+     * 不再手写 textSize/padding，避免又把 materialSizeOverlay 盖掉。
+     */
+    private fun m3Filled(text: String, onClick: () -> Unit): TextView =
+            M3Ui.actionButton(this, text, 0, pal.primary, pal.onPrimary,
+                    View.OnClickListener { onClick() }, medium = true)
 
     /**
      * 官方 M3 Text Button：MaterialButton + 透明底 + primary 文字，

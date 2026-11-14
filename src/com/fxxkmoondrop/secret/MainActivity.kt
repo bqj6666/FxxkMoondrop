@@ -35,7 +35,7 @@ import com.fxxkmoondrop.secret.ui.miuix.MiuixHostFragment
 // 所以这里显式实现：一个无参 NavigationEventDispatcher 即可。
 //
 // ⚠️ 与导航功能无关，不影响任何现有页面架构与行为。
-class MainActivity : FragmentActivity(), NavigationEventDispatcherOwner,
+class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     com.fxxkmoondrop.secret.ui.miuix.MiuixNavHost {
 
     // ⚠️ 必须写成 Kotlin 的 `override val`（不是 Java 风格的 override fun

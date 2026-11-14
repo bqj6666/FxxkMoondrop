@@ -167,17 +167,14 @@ class ThemeUtil {
             val surf: Int
             val cardC: Int
 
-            // 3.3.2: 调色标准三分支。
-            //   M3      = HCT 官方算法：从 seed 取 hue/chroma，按 M3 规范的 tone 生成角色
-            //             （浅色 primary=40 / container=90 / surface=98；深色 80/30/6 …）。
-            //             只依赖 material-color-utilities 的 Hct（miuix 已传递进来），不新增依赖。
-            //   SYSTEM  = Android 12 系统 tonal palette（就近取档）
-            //   CLASSIC = 种子色手工混色（3.3.1 及以前）
-            val std = ColorStandard.current(c)
-            val m3: Map<String, Int>? = if (std == ColorStandard.M3) {
+            // 配色统一走 HCT：从 seed/壁纸色按 M3 规范的 tone 生成完整角色
+            // （浅色 primary=40 / container=90 / surface=98；深色 80/30/6…）。
+            // 具体 tone 表由「色彩规范」决定：Material 3 (2021) 或 Expressive (2025)。
+            // 失败时（roles 返回 null）再退回下面的动态色 / 经典近似分支。
+            val m3: Map<String, Int>? = runCatching {
                 val raw = if (dynColor(c)) dyn(c, "system_accent1_500", seedColor(c)) else seedColor(c)
                 M3Scheme.roles(raw, M3SchemeVariant.current(c), dark, ColorSpec.current(c))
-            } else null
+            }.getOrNull()
 
             if (m3 != null) {
                 prim = m3.getValue("primary")

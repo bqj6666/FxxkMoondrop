@@ -133,12 +133,12 @@ class SettingsFragment : Fragment() {
         val appear = LinearLayout(requireContext())
         appear.orientation = LinearLayout.VERTICAL
 
-        // 3.3.2: 外观项收束成一个入口 —— 主题 / 强调色 / 调色规范 / 调色板风格 / 界面缩放
+        // 3.3.2: 外观项收束成一个入口 —— 主题 / 强调色 / 色彩规范 / 调色板风格 / 界面缩放
         // 全部搬进「主题设置」二级页（对齐 LSPosed 的结构），设置页只留一行。
         val themeEntry = M3Ui.navRow(requireActivity(), pal,
                 R.drawable.ic_settings,
                 Lang.t("主题设置", "Theme settings"),
-                Lang.t("主题 / 强调色 / 调色规范 / 调色板风格 / 界面缩放",
+                Lang.t("主题 / 强调色 / 色彩规范 / 调色板风格 / 界面缩放",
                         "Theme, accent, color spec, palette style and UI scale"),
                 Runnable {
                     startActivity(android.content.Intent(requireContext(), ThemeSettingsActivity::class.java))

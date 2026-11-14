@@ -14,10 +14,12 @@ import android.widget.TextView
  * 对齐 LSPosed「主题设置」的信息层级：主题 / 强调色 / 调色规范 / 调色板风格 / 界面缩放
  * 全部收在这一页，设置页只留一个入口 —— 避免外观分组被七八行下拉撑爆。
  */
-class ThemeSettingsActivity : Activity() {
+class ThemeSettingsActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var body: LinearLayout
+
+    /** 首次构建走分层入场，之后的 rebirth 只做整体淡入。 */
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,11 +52,15 @@ class ThemeSettingsActivity : Activity() {
                 arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
                 ThemeUtil.themeMode(this)) { mi ->
             sp().edit().putInt("theme_mode", mi).commit()
-            rebirth()
+            recreate()
         }
 
-        // 强调色（种子色）：与 Material 轨「设置 → 外观 → 种子颜色」同一份偏好
+        // 强调色（种子色）：只在跟固定主色时才显示。
+        // 始终建出来、用 visibility 控制，才能在开关切换时走 reveal 的淡入/淡出动画
+        // （条件创建 = 只能"啪"地出现或消失，没有过渡）。
+        val dynOn = sp().getBoolean("dynamic_color", true)
         val seedRow = buildSeedRow()
+        seedRow.visibility = if (dynOn) View.GONE else View.VISIBLE
 
         body.addView(M3Ui.groupCard(this, pal, modeRow, seedRow), LinearLayout.LayoutParams(-1, -2))
 
@@ -62,30 +68,31 @@ class ThemeSettingsActivity : Activity() {
         body.addView(M3Ui.sectionTitle(this, pal, Lang.t("配色", "Colors")))
         val dynRow = M3Ui.switchRow(this, pal,
                 Lang.t("动态取色", "Dynamic color"),
-                Lang.t("跟随壁纸调色；关闭时使用上方强调色", "Follow the wallpaper; otherwise use the accent above"),
-                themeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
+                Lang.t("跟随壁纸取色", "Take colors from the wallpaper"),
+                themeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")) { on ->
+                    // 立刻播强调色行的显隐动画；palette 重建延后到开关动画结束
+                    M3Ui.reveal(seedRow, !on)
+                })
         val amoledRow = M3Ui.switchRow(this, pal,
                 Lang.t("AMOLED 纯黑", "AMOLED pure black"),
-                Lang.t("深色模式下背景使用纯黑", "Pure black background in dark mode"),
+                Lang.t("纯黑背景，卡片以描边分层", "Pure black background, cards split by stroke"),
                 themeSwitch("amoled", false, "AMOLED"))
+        // 色彩规范：只换 M3 语义角色的 tone 表（颜色），不影响形状与动效。
         val stdRow = M3Ui.dropdownRow(this, pal,
-                Lang.t("调色规范", "Color spec"),
-                Lang.t("M3 语义角色的取值算法", "How M3 color roles are derived"),
-                arrayOf(Lang.t("M3 标准 (HCT)", "M3 standard (HCT)"),
-                        Lang.t("系统动态 (Android 12)", "System dynamic (Android 12)"),
-                        Lang.t("经典 (旧版)", "Classic (legacy)")),
-                ColorStandard.current(this).ordinal) { i ->
-            ColorStandard.set(this, ColorStandard.entries[i])
-            rebirth()
+                Lang.t("色彩规范", "Color spec"),
+                Lang.t("M3 语义角色取哪一套色调", "Which tone table the M3 roles use"),
+                ColorSpec.entries.map { Lang.t(it.zh, it.en) }.toTypedArray(),
+                ColorSpec.current(this).ordinal) { i ->
+            ColorSpec.set(this, ColorSpec.entries[i])
+            recreate()
         }
         val variantRow = M3Ui.dropdownRow(this, pal,
                 Lang.t("调色板风格", "Palette style"),
-                Lang.t("用于推导 M3 调色板的色调算法（仅 M3 标准生效）",
-                        "Tone algorithm for the M3 palette (M3 standard only)"),
+                Lang.t("调色板的色调算法", "Tone algorithm of the palette"),
                 M3SchemeVariant.entries.map { Lang.t(it.zh, it.en) }.toTypedArray(),
                 M3SchemeVariant.current(this).ordinal) { i ->
             M3SchemeVariant.set(this, M3SchemeVariant.entries[i])
-            rebirth()
+            recreate()
         }
         body.addView(M3Ui.groupCard(this, pal, dynRow, amoledRow, stdRow, variantRow),
                 LinearLayout.LayoutParams(-1, -2))
@@ -147,20 +154,34 @@ class ThemeSettingsActivity : Activity() {
             dg.shape = GradientDrawable.OVAL
             dg.setColor(color)
             if (i == cur) dg.setStroke(dp(3), pal.onSurface)
-            dot.background = dg
+            // 点选反馈：圆点蒙版 + 主题涟漪，与列表行一致的按下观感
+            val mask = GradientDrawable()
+            mask.shape = GradientDrawable.OVAL
+            mask.setColor(0xFFFFFFFF.toInt())
+            dot.background = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(
+                            (pal.onSurface and 0x00FFFFFF) or 0x33000000),
+                    dg, mask)
             val lp = LinearLayout.LayoutParams(dp(26), dp(26))
             lp.marginStart = dp(6)
             dot.setOnClickListener {
                 sp().edit().putInt("seed", i).putBoolean("dynamic_color", false).commit()
-                rebirth()
+                recreate()
             }
             row.addView(dot, lp)
         }
         return row
     }
 
-    /** 主题相关开关：改即写 SP 并重建当前页。 */
-    private fun themeSwitch(key: String, def: Boolean, label: String):
+    /**
+     * 主题相关开关：改即写 SP。
+     *
+     * ⚠️ 不要立刻 [rebirth]：整页重建会当场销毁这个 MaterialSwitch，
+     * 滑块动画（约 200ms）根本没机会播完，用户只觉得「点了没有任何反应」。
+     * 所以先让开关自己的动画跑完，再用 postDelayed 重建配色。
+     */
+    private fun themeSwitch(key: String, def: Boolean, label: String,
+                            afterChange: ((Boolean) -> Unit)? = null):
             com.google.android.material.materialswitch.MaterialSwitch {
         val sw = com.google.android.material.materialswitch.MaterialSwitch(this)
         sw.isChecked = sp().getBoolean(key, def)
@@ -168,14 +189,10 @@ class ThemeSettingsActivity : Activity() {
         M3Ui.standardSwitch(sw, pal)
         sw.setOnCheckedChangeListener { _, c ->
             sp().edit().putBoolean(key, c).commit()
-            rebirth()
+            afterChange?.invoke(c)
+            body.postDelayed({ if (!isFinishing) recreate() }, 260)
         }
         return sw
     }
 
-    /** 改完重新构造当前页（不 recreate，避免闪一下旧配色）。 */
-    private fun rebirth() {
-        pal = ThemeUtil.Palette(this)
-        rebuild()
-    }
 }

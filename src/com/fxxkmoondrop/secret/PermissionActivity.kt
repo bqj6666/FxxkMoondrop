@@ -25,7 +25,7 @@ import android.widget.Toast
  * 检查蓝牙 / 通知 / 电池白名单 / Root 权限 / FastPairHook / GAIA 直连，缺失项可点击跳转修复。
  * 运行模式不在这里：已移到设置页单独展示。
  */
-class PermissionActivity : Activity() {
+class PermissionActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private var statusBarH = 0
