@@ -55,6 +55,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     /** 侧滑菜单引用：返回键要先关抽屉，再退出页面。 */
     private var drawerRef: androidx.drawerlayout.widget.DrawerLayout? = null
     private var panelRef: View? = null
+    private var palRef: ThemeUtil.Palette? = null
+    /** tab -> 抽屉行，用于刷新选中态（tag 1/2/3）。 */
+    private val drawerRows = HashMap<Int, LinearLayout>()
     private var navBar: com.google.android.material.bottomnavigation.BottomNavigationView? = null
 
     /** 主题设置里的「界面缩放」：改 densityDpi 实现整体缩放（dp 全部跟着走）。 */
@@ -89,9 +92,30 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         root.setBackgroundColor(pal.surface)
         val content = FrameLayout(this)
         content.id = containerId
-        root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // 菜单键覆盖层：抽屉入口必须所有 tab 都能点到。
+        // 之前只加在概览页，切到设置/关于就找不到入口 —— 这是"唤不出来"的直接原因。
+        val contentWrap = FrameLayout(this)
+        contentWrap.addView(content, FrameLayout.LayoutParams(-1, -1))
+        val menuBtn = android.widget.ImageButton(this)
+        menuBtn.setImageResource(R.drawable.ic_menu)
+        menuBtn.imageTintList = android.content.res.ColorStateList.valueOf(pal.onSurface)
+        menuBtn.background = M3Ui.pressRipple(this, null)
+        menuBtn.contentDescription = Lang.t("打开菜单", "Open menu")
+        menuBtn.setOnClickListener { openDrawer() }
+        val sbhPx = resources.getIdentifier("status_bar_height", "dimen", "android")
+                .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
+        val mlp = FrameLayout.LayoutParams(
+                (48 * resources.displayMetrics.density).toInt(),
+                (48 * resources.displayMetrics.density).toInt())
+        mlp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+        mlp.topMargin = sbhPx + (4 * resources.displayMetrics.density).toInt()
+        mlp.leftMargin = (4 * resources.displayMetrics.density).toInt()
+        contentWrap.addView(menuBtn, mlp)
+        root.addView(contentWrap, LinearLayout.LayoutParams(-1, 0, 1f))
         navBar = M3Ui.navBar(this, pal, curTab) { showTab(it) }
-        root.addView(navBar, LinearLayout.LayoutParams(-1, -2))
+        // 3.3.x: 底部导航栏移除 —— 导航统一走侧滑菜单（M3 抽屉式导航）。
+        // 底部导航与抽屉同时存在属于两套导航并存，且底栏高度/指示器并不符合 Expressive 规范。
         // 3.2.13 (D1): Miuix 轨自带 Compose 导航栏，Material 的这根要藏起来，
         // 否则页面里会出现两根导航栏。
         syncNavBarVisibility()
@@ -108,7 +132,19 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         setContentView(drawer)
         drawerRef = drawer
         panelRef = drawerPanel
+        palRef = pal
         installBackHandler()
+
+        // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
+        // 用官方 systemGestureExclusionRects 把左侧 40dp 让给应用，抽屉边缘手势才生效。
+        if (Build.VERSION.SDK_INT >= 29) {
+            window.decorView.post {
+                val excl = (40 * resources.displayMetrics.density).toInt()
+                val h = resources.displayMetrics.heightPixels
+                window.decorView.systemGestureExclusionRects =
+                        listOf(android.graphics.Rect(0, 0, excl, h))
+            }
+        }
         // 便于无手势环境（如自动化）核对抽屉：am start ... --ez open_drawer true
         if (intent?.getBooleanExtra("open_drawer", false) == true) {
             drawer.postDelayed({ drawer.openDrawer(drawerPanel) }, 400)
@@ -216,6 +252,26 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
      * 必须走 OnBackPressedDispatcher —— Android 13+ 启用预测性返回后，
      * 覆盖 onBackPressed() 不再被调用（实测直接退出到桌面）。
      */
+    /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
+    private fun applyGestureExclusion() {
+        if (Build.VERSION.SDK_INT < 29) return
+        val dv = window?.decorView ?: return
+        val d = resources.displayMetrics.density
+        val excl = (40 * d).toInt()
+        val h = resources.displayMetrics.heightPixels
+        // 系统限制：每条屏幕边缘最多排除 200dp，且必须贴着边缘。
+        // 之前给的是整屏高（≈880dp），会被系统直接忽略 —— 抽屉边缘手势因此一直不生效。
+        val half = (100 * d).toInt()
+        val top = (h / 2 - half).coerceAtLeast(0)
+        val bottom = (h / 2 + half).coerceAtMost(h)
+        dv.systemGestureExclusionRects = listOf(android.graphics.Rect(0, top, excl, bottom))
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyGestureExclusion()
+    }
+
     private fun installBackHandler() {
         onBackPressedDispatcher.addCallback(this,
                 object : androidx.activity.OnBackPressedCallback(true) {
@@ -243,6 +299,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
 
     private fun showTab(id: Int) {
         curTab = id
+        runCatching { refreshDrawerSelection() }
         syncNavBarVisibility()
         // 3.2.13: 双主题分派点（**全项目唯一**）。
         //
@@ -354,6 +411,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                             drawer: androidx.drawerlayout.widget.DrawerLayout): View {
         fun px(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+        drawerRows.clear()
         val panel = LinearLayout(this)
         panel.orientation = LinearLayout.VERTICAL
         panel.setBackgroundColor(pal.surface)
@@ -379,7 +437,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         // ── 导航 ──
         panel.addView(drawerSection(pal, Lang.t("导航", "Navigation")))
 
-        fun addItem(icon: Int, label: String, selected: Boolean, onClick: () -> Unit) {
+        fun addItem(tab: Int, icon: Int, label: String, selected: Boolean, onClick: () -> Unit) {
             val row = LinearLayout(this)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = android.view.Gravity.CENTER_VERTICAL
@@ -403,15 +461,16 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
             val rlp = LinearLayout.LayoutParams(-1, -2)
             rlp.leftMargin = px(12); rlp.rightMargin = px(12); rlp.bottomMargin = px(2)
             panel.addView(row, rlp)
+            drawerRows[tab] = row
         }
 
-        addItem(R.drawable.ic_home, Lang.t("概览", "Overview"), curTab == 1) {
+        addItem(1, R.drawable.ic_home, Lang.t("概览", "Overview"), curTab == 1) {
             drawer.closeDrawers(); showTab(1)
         }
-        addItem(R.drawable.ic_settings, Lang.t("设置", "Settings"), curTab == 2) {
+        addItem(2, R.drawable.ic_settings, Lang.t("设置", "Settings"), curTab == 2) {
             drawer.closeDrawers(); showTab(2)
         }
-        addItem(R.drawable.ic_info, Lang.t("关于", "About"), curTab == 3) {
+        addItem(3, R.drawable.ic_info, Lang.t("关于", "About"), curTab == 3) {
             drawer.closeDrawers(); showTab(3)
         }
 
@@ -446,6 +505,23 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         return android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000),
                 shape, mask)
+    }
+
+    /**
+     * 只更新抽屉里各行的选中样式，**不重建 panel**。
+     * 重建会把 DrawerLayout 正在跟踪的抽屉视图换掉，导致切换页面后抽屉关不干净。
+     */
+    private fun refreshDrawerSelection() {
+        val p = palRef ?: return
+        for ((tab, row) in drawerRows) {
+            val sel = tab == curTab
+            row.background = drawerRowBg(p, sel)
+            (row.getChildAt(0) as? android.widget.ImageView)?.imageTintList =
+                    android.content.res.ColorStateList.valueOf(
+                            if (sel) p.onContainer else p.onVariant)
+            (row.getChildAt(1) as? TextView)?.setTextColor(
+                    if (sel) p.onContainer else p.onSurface)
+        }
     }
 
     /** 供概览页标题栏的菜单键调用（系统手势导航会占用左边缘，单靠边缘滑动唤不出）。 */

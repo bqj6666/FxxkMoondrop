@@ -85,7 +85,18 @@ class M3Ui {
                               val sv: android.widget.ScrollView,
                               val header: CollapseHeader)
 
-        class CollapseHeader(val view: LinearLayout, private val title: TextView,
+        /**
+         * 大标题栏（M3 large top app bar 语义）。
+         *
+         * 两个标题叠在同一栏里：
+         *  - big：展开态的大标题（28sp，底部对齐）
+         *  - mini：收起态的小标题（22sp，与菜单键同高，顶部对齐）
+         *
+         * 滚动时 big 渐隐、mini 渐显（交叉淡入淡出），同时栏高 152 → 64dp 收缩。
+         * 只做字号插值、不做透明度的话，两个状态之间会"糊"在一起，就是之前那样。
+         */
+        class CollapseHeader(val view: android.widget.FrameLayout, private val title: TextView,
+                             private val mini: TextView,
                              private val expandedPx: Int, private val collapsedPx: Int) {
             private var lastT = -1f
 
@@ -99,6 +110,10 @@ class M3Ui {
                     lp.height = h
                     view.layoutParams = lp
                 }
+                // 大标题：前 45% 就开始淡出，避免与小标题同时可见
+                title.alpha = (1f - t / 0.55f).coerceIn(0f, 1f)
+                // 小标题：后 45% 淡入
+                mini.alpha = ((t - 0.55f) / 0.45f).coerceIn(0f, 1f)
                 val sp = HEADER_EXPANDED_SP + (HEADER_COLLAPSED_SP - HEADER_EXPANDED_SP) * t
                 title.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
             }
@@ -186,7 +201,10 @@ class M3Ui {
                 val span = (expandedPx - collapsedPx).coerceAtLeast(1)
                 apply((sv.scrollY.toFloat() / span).coerceIn(0f, 1f))
             }
-            return LargeHeaderPage(container, sv, CollapseHeader(android.widget.LinearLayout(act), barTitle, expandedPx, collapsedPx))
+            // 该页自己管理 apply（返回键 + 标题联动），这里只是为了满足 LargeHeaderPage 的类型
+            return LargeHeaderPage(container, sv,
+                    CollapseHeader(android.widget.FrameLayout(act), barTitle, barTitle,
+                            expandedPx, collapsedPx))
         }
 
         /** alpha2.53: 用大标题页骨架替换普通 ScrollView（三页统一入口）。 */
@@ -225,21 +243,47 @@ class M3Ui {
         /** alpha2.53: 大标题栏本体 —— 底部对齐，随容器高度收缩自然上移。 */
         @JvmStatic
         fun collapsingHeader(act: Activity, pal: ThemeUtil.Palette, title: String, heightPx: Int): CollapseHeader {
-            val bar = LinearLayout(act)
-            bar.orientation = LinearLayout.VERTICAL
-            bar.gravity = Gravity.BOTTOM
+            val bar = android.widget.FrameLayout(act)
             bar.setBackgroundColor(pal.surface)
-            bar.setPadding(dp(act, 16), 0, dp(act, 16), dp(act, 16))
-            val tv = TextView(act)
-            tv.text = title
-            tv.isSingleLine = true
-            tv.setTextColor(pal.onSurface)
-            tv.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_EXPANDED_SP)
-            bar.addView(tv, LinearLayout.LayoutParams(-1, -2))
+            // 左 68dp：给 MainActivity 常驻的 48dp 菜单键让位，避免标题与它重合
+            val padL = dp(act, 68)
+
+            // 展开态大标题：底部对齐
+            val big = TextView(act)
+            big.text = title
+            big.isSingleLine = true
+            big.setTextColor(pal.onSurface)
+            big.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            big.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_EXPANDED_SP)
+            val blp = android.widget.FrameLayout.LayoutParams(-1, -2)
+            blp.gravity = Gravity.BOTTOM
+            blp.leftMargin = padL
+            blp.rightMargin = dp(act, 16)
+            blp.bottomMargin = dp(act, 16)
+            bar.addView(big, blp)
+
+            // 收起态小标题：顶部对齐、与菜单键同一行，默认透明
+            val mini = TextView(act)
+            mini.text = title
+            mini.isSingleLine = true
+            mini.setTextColor(pal.onSurface)
+            mini.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            mini.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_COLLAPSED_SP)
+            mini.alpha = 0f
+            // 收缩态小标题占一行 48dp、垂直居中，正好与常驻的 48dp 菜单键同一中心线；
+            // 用 wrap_content + topMargin 估位置的话，字号变化会带得文字上下漂。
+            mini.gravity = Gravity.CENTER_VERTICAL
+            val mlp = android.widget.FrameLayout.LayoutParams(-1, dp(act, 48))
+            mlp.gravity = Gravity.TOP
+            mlp.leftMargin = padL
+            mlp.rightMargin = dp(act, 16)
+            mlp.topMargin = dp(act, 4)
+            bar.addView(mini, mlp)
+
             val lp = LinearLayout.LayoutParams(-1, heightPx)
             bar.layoutParams = lp
-            return CollapseHeader(bar, tv, dp(act, HEADER_EXPANDED_DP), dp(act, HEADER_COLLAPSED_DP))
+            return CollapseHeader(bar, big, mini,
+                    dp(act, HEADER_EXPANDED_DP), dp(act, HEADER_COLLAPSED_DP))
         }
 
         @JvmStatic

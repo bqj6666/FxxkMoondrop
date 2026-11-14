@@ -597,22 +597,8 @@ class OverviewFragment : Fragment() {
         val page = M3Ui.largeHeaderPage(requireActivity(), pal0, "MoonEar")
         page.sv.addView(root)
 
-        // 抽屉入口：左上角 48dp 菜单键。
-        // 系统手势导航把左边缘划动占为「返回」，抽屉单靠边缘滑动唤不出，必须有可点的入口。
-        val menuBtn = android.widget.ImageButton(requireContext())
-        menuBtn.setImageResource(R.drawable.ic_menu)
-        menuBtn.imageTintList = android.content.res.ColorStateList.valueOf(pal0.onSurface)
-        menuBtn.background = M3Ui.pressRipple(requireContext(), null)
-        menuBtn.contentDescription = Lang.t("打开菜单", "Open menu")
-        menuBtn.setOnClickListener {
-            (activity as? MainActivity)?.openDrawer()
-        }
-        val mlp = android.widget.FrameLayout.LayoutParams(dp(48), dp(48))
-        mlp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
-        mlp.topMargin = statusBarH + dp(4)
-        mlp.leftMargin = dp(4)
-        // 注意：菜单键不能加进 page.container —— 标题栏是在 container 里后加的，
-        // 会把它整块盖住（实测按钮不可见、也点不到）。下面用一层 FrameLayout 叠在整页之上。
+        // 菜单键由 MainActivity 统一提供（覆盖在 content 之上，所有 tab 常驻），
+        // 页面内不再各自添加，避免两个入口叠在一起。
 
         val outer = LinearLayout(requireContext())
         outer.orientation = LinearLayout.VERTICAL
@@ -640,11 +626,7 @@ class OverviewFragment : Fragment() {
         dumpDynColors(if (isDark()) "DARK" else "LIGHT")
         requestNeededPermissions()
         updateStatus()
-        // 页面 + 菜单键覆盖层：按钮叠在整页最上层，滚动/标题收缩都不影响它
-        val wrap = android.widget.FrameLayout(requireContext())
-        wrap.addView(outer, android.widget.FrameLayout.LayoutParams(-1, -1))
-        wrap.addView(menuBtn, mlp)
-        return wrap
+        return outer
     }
 
     private fun dumpDynColors(tag: String) {
