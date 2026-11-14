@@ -442,40 +442,17 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
             bannerTitle?.setTextColor(fg)
             bannerSub?.setTextColor((fg and 0x00FFFFFF) or 0xCC000000.toInt())
         } else {
-            // 默认背景：应用图标的单色剪影 + 高斯模糊（API 31+ RenderEffect）
-            val icon = appIconBitmap()
+            // 默认完全透明：不加任何图片/滤镜/描边，标题用正常前景色
             v.colorFilter = null
             v.alpha = 1f
             if (Build.VERSION.SDK_INT >= 31) v.setRenderEffect(null)
-            if (icon != null) {
-                v.scaleType = android.widget.ImageView.ScaleType.CENTER
-                v.setImageBitmap(icon)
-                v.colorFilter = android.graphics.PorterDuffColorFilter(pal.container,
-                        android.graphics.PorterDuff.Mode.SRC_IN)
-                v.alpha = 0.55f
-                if (Build.VERSION.SDK_INT >= 31) {
-                    v.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
-                            90f, 90f, android.graphics.Shader.TileMode.CLAMP))
-                }
-            } else {
-                v.setImageDrawable(null)
-            }
+            v.setImageDrawable(null)
             bannerScrim?.visibility = View.GONE
             bannerTitle?.setTextColor(pal.onSurface)
             bannerSub?.setTextColor(pal.onVariant)
         }
     }
 
-    /** 应用图标转 Bitmap（用于 banner 默认剪影背景）。 */
-    private fun appIconBitmap(size: Int = 512): android.graphics.Bitmap? = runCatching {
-        val d = packageManager.getApplicationIcon(packageName)
-        val bmp = android.graphics.Bitmap.createBitmap(size, size,
-                android.graphics.Bitmap.Config.ARGB_8888)
-        val cv = android.graphics.Canvas(bmp)
-        d.setBounds(0, 0, size, size)
-        d.draw(cv)
-        bmp
-    }.getOrNull()
 
     /** 采样 5×5 网格的平均亮度（0-255），决定 banner 文字用白还是近黑。 */
     private fun averageLuminance(bmp: android.graphics.Bitmap): Double {
@@ -743,8 +720,6 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         val round = android.graphics.drawable.GradientDrawable()
         round.cornerRadius = px(28).toFloat()
         round.setColor(android.graphics.Color.TRANSPARENT)
-        // 无图时也要看得出这是一个独立的胶囊卡：1dp 描边勾勒边界
-        round.setStroke(px(1), pal.cardStroke)
         header.background = round
         header.clipToOutline = true
 
