@@ -77,7 +77,7 @@ class OnboardingActivity : BaseActivity() {
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(pal.surface)
-        root.setPadding(dp(20), statusBarH, dp(20), dp(16))
+        root.setPadding(dp(24), statusBarH, dp(24), dp(16))
 
         // 顶部只有「跳过」：第一次启动时它是唯一的提前退出入口，不放返回箭头。
         root.addView(buildTopRow(), LinearLayout.LayoutParams(-1, -2))
@@ -110,7 +110,7 @@ class OnboardingActivity : BaseActivity() {
                 insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             else
                 insets.systemWindowInsetBottom
-            v.setPadding(dp(20), statusBarH, dp(20), dp(16) + nav)
+            v.setPadding(dp(24), statusBarH, dp(24), dp(16) + nav)
             insets
         }
         setContentView(root)
