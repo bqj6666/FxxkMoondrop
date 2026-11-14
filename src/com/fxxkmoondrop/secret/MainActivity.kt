@@ -64,8 +64,10 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var bannerTitle: TextView? = null
     /** 抽屉里的当前状态卡（连接状态 / 降噪模式）。 */
     private var statusRow: LinearLayout? = null
-    private var chipConn: TextView? = null
-    private var chipMode: TextView? = null
+    private var heroStatus: TextView? = null
+    private var heroSub: TextView? = null
+    /** 英雄卡右侧 API 徽章。 */
+    private var heroBadge: TextView? = null
     private var bannerSub: TextView? = null
 
     private val bannerPicker = registerForActivityResult(
@@ -284,45 +286,59 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private fun buildStatusCard(pal: ThemeUtil.Palette): LinearLayout {
         val d = resources.displayMetrics.density
         fun p(v: Int) = (v * d).toInt()
+
+        // 结构照搬概览页英雄卡：圆形图标 chip（44dp）+ 状态词 + 版本 + 右侧 API 徽章。
+        // 底色与文字色全部取 Palette（primary / onPrimary），动态取色、AMOLED、深浅色都会跟着变。
         val card = LinearLayout(this)
-        card.orientation = LinearLayout.VERTICAL
+        card.orientation = LinearLayout.HORIZONTAL
+        card.gravity = android.view.Gravity.CENTER_VERTICAL
         val bg = android.graphics.drawable.GradientDrawable()
         bg.cornerRadius = p(24).toFloat()
-        bg.setColor(pal.card)
+        bg.setColor(pal.primary)
         card.background = bg
         card.setPadding(p(16), p(14), p(16), p(14))
 
-        val label = TextView(this)
-        label.text = Lang.t("当前状态", "Status")
-        label.textSize = 12f
-        label.setTextColor(pal.onVariant)
-        card.addView(label, LinearLayout.LayoutParams(-2, -2))
+        val chip = android.widget.FrameLayout(this)
+        val chipBg = android.graphics.drawable.GradientDrawable()
+        chipBg.shape = android.graphics.drawable.GradientDrawable.OVAL
+        chipBg.setColor((pal.onPrimary and 0x00FFFFFF) or 0x26000000)
+        chip.background = chipBg
+        val icon = android.widget.ImageView(this)
+        icon.setImageResource(R.drawable.ic_check)
+        icon.imageTintList = android.content.res.ColorStateList.valueOf(pal.onPrimary)
+        val ilp = android.widget.FrameLayout.LayoutParams(p(20), p(20))
+        ilp.gravity = android.view.Gravity.CENTER
+        chip.addView(icon, ilp)
+        val clp = LinearLayout.LayoutParams(p(44), p(44))
+        clp.marginEnd = p(14)
+        card.addView(chip, clp)
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = android.view.Gravity.CENTER_VERTICAL
-        val rlp = LinearLayout.LayoutParams(-1, -2)
-        rlp.topMargin = p(8)
-        card.addView(row, rlp)
+        val texts = LinearLayout(this)
+        texts.orientation = LinearLayout.VERTICAL
+        heroStatus = TextView(this)
+        heroStatus!!.textSize = 16f
+        heroStatus!!.isSingleLine = true
+        heroStatus!!.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        heroStatus!!.setTextColor(pal.onPrimary)
+        texts.addView(heroStatus, LinearLayout.LayoutParams(-2, -2))
+        heroSub = TextView(this)
+        heroSub!!.textSize = 14f
+        heroSub!!.isSingleLine = true
+        heroSub!!.setTextColor((pal.onPrimary and 0x00FFFFFF) or 0xB3000000.toInt())
+        texts.addView(heroSub, LinearLayout.LayoutParams(-2, -2))
+        card.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
 
-        fun chip(): TextView {
-            val tv = TextView(this)
-            tv.textSize = 13f
-            tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-            tv.setPadding(p(12), p(6), p(12), p(6))
-            val cbg = android.graphics.drawable.GradientDrawable()
-            cbg.cornerRadius = p(16).toFloat()
-            cbg.setColor(pal.secondaryContainer)
-            tv.background = cbg
-            tv.setTextColor(pal.onSecondaryContainer)
-            return tv
-        }
-        val c1 = chip(); val c2 = chip()
-        chipConn = c1; chipMode = c2
-        row.addView(c1, LinearLayout.LayoutParams(-2, -2))
-        val lp2 = LinearLayout.LayoutParams(-2, -2)
-        lp2.marginStart = p(6)
-        row.addView(c2, lp2)
+        heroBadge = TextView(this)
+        heroBadge!!.textSize = 12f
+        heroBadge!!.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        heroBadge!!.setTextColor(pal.primary)
+        heroBadge!!.gravity = android.view.Gravity.CENTER
+        heroBadge!!.setPadding(p(10), p(5), p(10), p(5))
+        val bdg = android.graphics.drawable.GradientDrawable()
+        bdg.cornerRadius = p(20).toFloat()
+        bdg.setColor(pal.onPrimary)
+        heroBadge!!.background = bdg
+        card.addView(heroBadge, LinearLayout.LayoutParams(-2, -2))
 
         card.setOnClickListener {
             drawerRef?.closeDrawers()
@@ -331,23 +347,14 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         return card
     }
 
-    /** 刷新状态卡文案（连接状态来自 GaiaBleClient，模式来自 AncBridge）。 */
+    /** 刷新英雄卡文案（连接状态 / 版本 / API 级别）。 */
     private fun refreshStatusCard() {
         val conn = runCatching { GaiaBleClient.getInstance().isConnected() }.getOrDefault(false)
-        chipConn?.text = if (conn) Lang.t("已连接", "Connected") else Lang.t("未连接", "Disconnected")
-        if (!conn) {
-            chipMode?.visibility = View.GONE
-            return
-        }
-        chipMode?.visibility = View.VISIBLE
-        val mode = runCatching { AncBridge.getCurrentMode() }.getOrDefault(-1)
-        chipMode?.text = Lang.t("降噪 · ", "ANC · ") + when (mode) {
-            0 -> Lang.t("关闭", "Off")
-            1 -> Lang.t("降噪", "ANC")
-            2 -> Lang.t("透传", "Transparency")
-            3 -> Lang.t("抗风", "Wind")
-            else -> Lang.t("未知", "Unknown")
-        }
+        heroStatus?.text = if (conn) Lang.t("已连接", "Connected") else Lang.t("未连接", "Disconnected")
+        heroSub?.text = runCatching {
+            "V" + (packageManager.getPackageInfo(packageName, 0).versionName ?: "").removePrefix("alpha")
+        }.getOrDefault("")
+        heroBadge?.text = "API " + Build.VERSION.SDK_INT
     }
 
     /** banner：有自定义图片就显示（裁成胶囊圆角），没有就保持透明 —— 不预设任何图片。 */
@@ -358,14 +365,33 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         if (bmp != null) {
             v.setImageBitmap(bmp)
             bannerScrim?.visibility = View.VISIBLE
-            bannerTitle?.setTextColor(android.graphics.Color.WHITE)
-            bannerSub?.setTextColor(0xCCFFFFFF.toInt())
+            // 按图片平均亮度自动取文字色：暗图用白字、亮图用近黑，保证对比度
+            val lum = averageLuminance(bmp)
+            val fg = if (lum < 140) android.graphics.Color.WHITE else 0xFF1B1B1F.toInt()
+            bannerTitle?.setTextColor(fg)
+            bannerSub?.setTextColor((fg and 0x00FFFFFF) or 0xCC000000.toInt())
         } else {
             v.setImageDrawable(null)
             bannerScrim?.visibility = View.GONE
             bannerTitle?.setTextColor(pal.onSurface)
             bannerSub?.setTextColor(pal.onVariant)
         }
+    }
+
+    /** 采样 5×5 网格的平均亮度（0-255），决定 banner 文字用白还是近黑。 */
+    private fun averageLuminance(bmp: android.graphics.Bitmap): Double {
+        var sum = 0.0
+        var n = 0
+        for (i in 1..5) for (j in 1..5) {
+            val x = ((bmp.width - 1) * i / 6f).toInt().coerceIn(0, bmp.width - 1)
+            val y = ((bmp.height - 1) * j / 6f).toInt().coerceIn(0, bmp.height - 1)
+            val c = bmp.getPixel(x, y)
+            sum += 0.299 * android.graphics.Color.red(c) +
+                    0.587 * android.graphics.Color.green(c) +
+                    0.114 * android.graphics.Color.blue(c)
+            n++
+        }
+        return if (n == 0) 128.0 else sum / n
     }
 
     /** banner 换图／恢复默认：走全应用统一的 M3 弹窗。 */
@@ -610,41 +636,45 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         // 显式让出状态栏：banner 顶到屏幕外会被状态栏／通知横幅压掉一截
         val sbhDrawer = resources.getIdentifier("status_bar_height", "dimen", "android")
                 .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
-        panel.setPadding(0, 0, 0, px(12))
+        panel.setPadding(0, sbhDrawer + px(8), 0, px(12))
 
-        // 品牌区：banner 顶到屏幕最上沿（与状态栏重叠），默认透明、有图时裁成胶囊圆角
-        val bannerH = sbhDrawer + px(132)
+        // 品牌区：内缩的独立胶囊卡（四角全圆），默认透明；有图时裁圆角并按图取对比色文字
+        val bannerH = px(120)
         val header = android.widget.FrameLayout(this)
+        val round = android.graphics.drawable.GradientDrawable()
+        round.cornerRadius = px(28).toFloat()
+        round.setColor(android.graphics.Color.TRANSPARENT)
+        // 无图时也要看得出这是一个独立的胶囊卡：1dp 描边勾勒边界
+        round.setStroke(px(1), pal.cardStroke)
+        header.background = round
+        header.clipToOutline = true
+
         val bannerImg = android.widget.ImageView(this)
         bannerImg.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-        // 用背景 outline 裁剪 bitmap：大圆角 = 胶囊感，比四方块贴边更符合 Expressive 形状语言
-        val clip = android.graphics.drawable.GradientDrawable()
-        clip.cornerRadius = px(32).toFloat()
-        bannerImg.background = clip
-        bannerImg.clipToOutline = true
-        header.addView(bannerImg, android.widget.FrameLayout.LayoutParams(-1, bannerH))
+        header.addView(bannerImg, android.widget.FrameLayout.LayoutParams(-1, -1))
         bannerView = bannerImg
 
-        // 有图时才压暗，保证白字可读；没图时用正常背景色 + 正常文字色
+        // 只在有图时压暗，保证文字可读；没图时保持透明
         val scrim = View(this)
         scrim.background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(0xCC000000.toInt(), 0x00000000))
-        header.addView(scrim, android.widget.FrameLayout.LayoutParams(-1, bannerH))
+                intArrayOf(0xB3000000.toInt(), 0x00000000))
+        scrim.visibility = View.GONE
+        header.addView(scrim, android.widget.FrameLayout.LayoutParams(-1, -1))
         bannerScrim = scrim
 
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
         titleBox.gravity = android.view.Gravity.BOTTOM
-        titleBox.setPadding(px(24), 0, px(24), px(18))
+        titleBox.setPadding(px(20), 0, px(20), px(16))
         val name = TextView(this)
         name.text = "MoonEar"
-        name.textSize = 24f
+        name.textSize = 22f
         name.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
         titleBox.addView(name, LinearLayout.LayoutParams(-2, -2))
         val sub = TextView(this)
         sub.text = Lang.t("耳机控制助手", "Earbud control assistant")
-        sub.textSize = 13f
+        sub.textSize = 12f
         titleBox.addView(sub, LinearLayout.LayoutParams(-2, -2))
         header.addView(titleBox, android.widget.FrameLayout.LayoutParams(-1, -1,
                 android.view.Gravity.BOTTOM))
@@ -652,7 +682,10 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         bannerSub = sub
 
         header.setOnClickListener { showBannerDialog() }
-        panel.addView(header, LinearLayout.LayoutParams(-1, bannerH))
+        applyBanner(pal)
+        val hLp = LinearLayout.LayoutParams(-1, bannerH)
+        hLp.leftMargin = px(12); hLp.rightMargin = px(12)
+        panel.addView(header, hLp)
 
         // 当前状态卡（原概览页英雄卡的位置）：banner 与导航之间
         statusRow = buildStatusCard(pal)
