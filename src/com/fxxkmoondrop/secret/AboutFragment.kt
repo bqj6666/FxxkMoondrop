@@ -376,13 +376,9 @@ class AboutFragment : Fragment() {
 
         // 图标 + Material 圆形加载指示器（取图标主色，与图标同色系）
         val iconWrap = android.widget.FrameLayout(requireContext())
-        val spinner = com.google.android.material.progressindicator.CircularProgressIndicator(requireContext())
-        spinner.isIndeterminate = true
+        // 与概览页刷新按钮同款：无轨道、圆头弧的官方 M3 圆形指示器，取图标主色
         val iconColor = AppIconColor.of(requireContext(), pal.primary)
-        spinner.setIndicatorColor(iconColor)
-        spinner.trackColor = (iconColor and 0x00FFFFFF) or 0x22000000
-        spinner.trackThickness = dp(3)
-        spinner.indicatorSize = dp(96)
+        val spinner = M3Ui.circularLoader(requireContext(), 96, iconColor)
         iconWrap.addView(spinner, android.widget.FrameLayout.LayoutParams(dp(96), dp(96),
                 Gravity.CENTER))
         val iconView = ImageView(requireContext())
