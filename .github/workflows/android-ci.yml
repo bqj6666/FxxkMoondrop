@@ -186,5 +186,3 @@ jobs:
           sleep 15   # 等 Release 的 APK 资产上传完成，mirror 侧要 gh release download
           gh workflow run sync-module-release.yml -f tag="${{ github.ref_name }}"
           echo "已触发镜像同步：${{ github.ref_name }}"
-          fail_on_unmatched_files: false
-          generate_release_notes: false
