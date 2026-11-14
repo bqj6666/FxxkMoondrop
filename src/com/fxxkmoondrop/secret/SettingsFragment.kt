@@ -790,7 +790,29 @@ class SettingsFragment : Fragment() {
         }
         // 「联网检查更新」与「更新通道」是同一组（一张卡两行，中间 1dp 细缝），
         // 之前各建一张卡、中间还垫了 12dp spacer，看着像两个互不相干的设置。
-        val updCard = M3Ui.groupCard(requireActivity(), pal, rowNetUpdate, rowChannel)
+        // 自动检查与频率：只在联网开启时出现（默认每天一次，仅打开应用时检查）
+        val updSp = requireContext().getSharedPreferences("cfg", 0)
+        val swAutoUpdate = makeTintedSwitch()
+        swAutoUpdate.isChecked = updSp.getBoolean("update_auto", true)
+        val rowAutoUpdate = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_refresh,
+                Lang.t("自动检查更新", "Auto check"),
+                Lang.t("仅打开应用时检查，不常驻后台", "Only when the app opens"),
+                swAutoUpdate, null)
+
+        val days = updSp.getInt("update_interval_days", 1)
+        val freqIdx = when (days) { 3 -> 1; 7 -> 2; else -> 0 }
+        val rowFreq = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("检查频率", "Check frequency"),
+                null,
+                arrayOf(Lang.t("每天", "Daily"), Lang.t("每 3 天", "Every 3 days"),
+                        Lang.t("每周", "Weekly")),
+                freqIdx) { mi ->
+            val d = when (mi) { 1 -> 3; 2 -> 7; else -> 1 }
+            updSp.edit().putInt("update_interval_days", d).apply()
+        }
+
+        val updCard = M3Ui.groupCard(requireActivity(), pal,
+                rowNetUpdate, rowChannel, rowAutoUpdate, rowFreq)
         val updInner = updCard.getChildAt(0) as? LinearLayout
         // groupCard 内部结构：[行0, 细缝, 行1]；通道行隐藏时那条 1dp 细缝也得一起藏
         val updGap = updInner?.getChildAt(1)

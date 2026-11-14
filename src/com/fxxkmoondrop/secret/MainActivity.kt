@@ -68,6 +68,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var heroSub: TextView? = null
     /** 英雄卡右侧 API 徽章。 */
     private var heroBadge: TextView? = null
+    /** 抽屉底部的「发现新版本」胶囊。 */
+    private var updBadge: TextView? = null
     private var bannerSub: TextView? = null
 
     private val bannerPicker = registerForActivityResult(
@@ -164,6 +166,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         })
         palRef = pal
         installBackHandler()
+        maybeAutoCheckUpdate()
 
         // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
         // 用官方 systemGestureExclusionRects 把左侧 40dp 让给应用，抽屉边缘手势才生效。
@@ -510,6 +513,53 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         dlg.show()
     }
 
+    // ── 更新检查 ─────────────────────────────────────────────
+    // 轻量策略：只在应用被打开时（MainActivity 创建）按频率静默查一次，
+    // 不注册后台任务、不常驻服务；联网总开关沿用 UpdateChecker.isEnabled（默认关）。
+
+    private fun updPrefs() = getSharedPreferences("cfg", MODE_PRIVATE)
+
+    /** 抽屉底部胶囊：有新版才显示版本号。 */
+    private fun refreshUpdateBadge() {
+        val b = updBadge ?: return
+        val tag = updPrefs().getString("update_latest_tag", "") ?: ""
+        if (tag.isNotEmpty() && UpdateChecker.isEnabled(this)) {
+            b.text = Lang.t("发现新版本 ", "New version ") + tag
+            b.visibility = View.VISIBLE
+        } else {
+            b.visibility = View.GONE
+        }
+    }
+
+    /** 启动时按频率静默检查一次（距上次不足间隔则只刷新胶囊）。 */
+    private fun maybeAutoCheckUpdate() {
+        if (!UpdateChecker.isEnabled(this)) return
+        val sp = updPrefs()
+        if (!sp.getBoolean("update_auto", true)) return
+        val days = sp.getInt("update_interval_days", 1).coerceAtLeast(1)
+        val last = sp.getLong("update_last_at", 0L)
+        val now = System.currentTimeMillis()
+        if (now - last < days * 24L * 60L * 60L * 1000L) {
+            refreshUpdateBadge()
+            return
+        }
+        sp.edit().putLong("update_last_at", now).apply()
+        Thread {
+            val res = runCatching { UpdateChecker.check(applicationContext, false) }.getOrNull()
+            val tag = (res as? UpdateChecker.Result.Available)?.info?.tag ?: ""
+            updPrefs().edit().putString("update_latest_tag", tag).apply()
+            runOnUiThread { refreshUpdateBadge() }
+        }.start()
+    }
+
+    /** 打开发布页。 */
+    private fun openUpdatePage() {
+        runCatching {
+            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://github.com/bqj6666/FxxkMoondrop/releases")))
+        }
+    }
+
     /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
     private fun applyGestureExclusion() {
         if (Build.VERSION.SDK_INT < 29) return
@@ -811,6 +861,27 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
 
         // 抽屉只做导航：不再重复「设置」页已有的入口（原「通用设置」与「设置」同指一页）
         panel.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // ── 底部：更新入口 + 有新版时的胶囊提示 ──
+        updBadge = TextView(this)
+        updBadge!!.textSize = 13f
+        updBadge!!.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        updBadge!!.setTextColor(pal.onSecondaryContainer)
+        updBadge!!.gravity = android.view.Gravity.CENTER
+        updBadge!!.setPadding(px(14), px(8), px(14), px(8))
+        val ubg = android.graphics.drawable.GradientDrawable()
+        ubg.cornerRadius = px(18).toFloat()
+        ubg.setColor(pal.secondaryContainer)
+        updBadge!!.background = ubg
+        updBadge!!.visibility = View.GONE
+        updBadge!!.setOnClickListener { openUpdatePage() }
+        val ubLp = LinearLayout.LayoutParams(-2, -2)
+        ubLp.leftMargin = px(28); ubLp.rightMargin = px(28); ubLp.bottomMargin = px(8)
+        ubLp.gravity = android.view.Gravity.START
+        panel.addView(updBadge, ubLp)
+
+        // 抽屉里只放「有新版」提示，具体设置项在设置页的更新栏
+        refreshUpdateBadge()
         return panel
     }
 
