@@ -430,6 +430,10 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         val f = java.io.File(filesDir, "drawer_banner")
         val bmp = if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.absolutePath) else null
         if (bmp != null) {
+            v.colorFilter = null
+            v.alpha = 1f
+            if (Build.VERSION.SDK_INT >= 31) v.setRenderEffect(null)
+            v.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
             v.setImageBitmap(bmp)
             bannerScrim?.visibility = View.VISIBLE
             // 按图片平均亮度自动取文字色：暗图用白字、亮图用近黑，保证对比度
@@ -438,12 +442,40 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
             bannerTitle?.setTextColor(fg)
             bannerSub?.setTextColor((fg and 0x00FFFFFF) or 0xCC000000.toInt())
         } else {
-            v.setImageDrawable(null)
+            // 默认背景：应用图标的单色剪影 + 高斯模糊（API 31+ RenderEffect）
+            val icon = appIconBitmap()
+            v.colorFilter = null
+            v.alpha = 1f
+            if (Build.VERSION.SDK_INT >= 31) v.setRenderEffect(null)
+            if (icon != null) {
+                v.scaleType = android.widget.ImageView.ScaleType.CENTER
+                v.setImageBitmap(icon)
+                v.colorFilter = android.graphics.PorterDuffColorFilter(pal.container,
+                        android.graphics.PorterDuff.Mode.SRC_IN)
+                v.alpha = 0.55f
+                if (Build.VERSION.SDK_INT >= 31) {
+                    v.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                            90f, 90f, android.graphics.Shader.TileMode.CLAMP))
+                }
+            } else {
+                v.setImageDrawable(null)
+            }
             bannerScrim?.visibility = View.GONE
             bannerTitle?.setTextColor(pal.onSurface)
             bannerSub?.setTextColor(pal.onVariant)
         }
     }
+
+    /** 应用图标转 Bitmap（用于 banner 默认剪影背景）。 */
+    private fun appIconBitmap(size: Int = 512): android.graphics.Bitmap? = runCatching {
+        val d = packageManager.getApplicationIcon(packageName)
+        val bmp = android.graphics.Bitmap.createBitmap(size, size,
+                android.graphics.Bitmap.Config.ARGB_8888)
+        val cv = android.graphics.Canvas(bmp)
+        d.setBounds(0, 0, size, size)
+        d.draw(cv)
+        bmp
+    }.getOrNull()
 
     /** 采样 5×5 网格的平均亮度（0-255），决定 banner 文字用白还是近黑。 */
     private fun averageLuminance(bmp: android.graphics.Bitmap): Double {

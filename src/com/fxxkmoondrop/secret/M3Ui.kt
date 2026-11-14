@@ -560,7 +560,12 @@ class M3Ui {
             row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            // 与 listRow / switchRow 同一套行高分级：单行 56dp、双行 72dp。
+            // 这里原来固定 16dp 垂直内边距，注释掉副标题后行仍按双行撑开。
+            val hasSubNav = !sub.isNullOrEmpty()
+            val padVNav = dp(act, if (hasSubNav) 8 else 4)
+            row.setPadding(dp(act, 16), padVNav, dp(act, 16), padVNav)
+            row.minimumHeight = dp(act, if (hasSubNav) 72 else 56)
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
@@ -838,7 +843,12 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
+            // 与 listRow / switchRow 同一套行高分级：单行 56dp、双行 72dp。
+            // 这里原来固定 16dp 垂直内边距，注释掉副标题后行仍按双行撑开。
+            val hasSubNav = !sub.isNullOrEmpty()
+            val padVNav = dp(act, if (hasSubNav) 8 else 4)
+            row.setPadding(dp(act, 16), padVNav, dp(act, 16), padVNav)
+            row.minimumHeight = dp(act, if (hasSubNav) 72 else 56)
             if (iconRes != 0) {
                 val ic = android.widget.ImageView(act)
                 ic.setImageResource(iconRes)
