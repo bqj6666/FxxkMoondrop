@@ -753,10 +753,25 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                 swipeArmed = true
             }
             android.view.MotionEvent.ACTION_MOVE -> {
-                if (swipeArmed && d != null && pn != null && !d.isDrawerOpen(pn)) {
-                    val dx = ev.rawX - swipeDownX
-                    val dy = ev.rawY - swipeDownY
-                    val threshold = 64 * resources.displayMetrics.density
+                if (!swipeArmed) return super.dispatchTouchEvent(ev)
+                val dx = ev.rawX - swipeDownX
+                val dy = ev.rawY - swipeDownY
+                if (Math.abs(dy) > Math.abs(dx)) return super.dispatchTouchEvent(ev)
+                val threshold = 72 * resources.displayMetrics.density
+                if (navMode() == 1) {
+                    // 悬浮导航栏模式：左右滑切页，顺序与底栏一致（概览 1 / 设置 2 / 关于 3）
+                    if (Math.abs(dx) > threshold) {
+                        swipeArmed = false
+                        val order = intArrayOf(1, 2, 3)
+                        val idx = order.indexOf(curTab).coerceAtLeast(0)
+                        val next = if (dx < 0) (idx + 1).coerceAtMost(order.size - 1)
+                                   else (idx - 1).coerceAtLeast(0)
+                        if (next != idx) {
+                            showTab(order[next])
+                            paintFloatingSelection(palRef ?: ThemeUtil.Palette(this))
+                        }
+                    }
+                } else if (d != null && pn != null && !d.isDrawerOpen(pn)) {
                     if (dx > threshold && dx > 2 * Math.abs(dy)) {
                         swipeArmed = false
                         openDrawer()

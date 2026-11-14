@@ -376,10 +376,10 @@ class AboutFragment : Fragment() {
 
         // 图标 + Material 圆形加载指示器（取图标主色，与图标同色系）
         val iconWrap = android.widget.FrameLayout(requireContext())
-        // 与概览页刷新按钮同款：无轨道、圆头弧的官方 M3 圆形指示器，取图标主色
+        // 图标背景：M3 Expressive 形变圆形（12 瓣波浪圆，缓慢自转 + 呼吸），取图标主色
         val iconColor = AppIconColor.of(requireContext(), pal.primary)
-        val spinner = M3Ui.circularLoader(requireContext(), 96, iconColor)
-        iconWrap.addView(spinner, android.widget.FrameLayout.LayoutParams(dp(96), dp(96),
+        val scallop = ScallopView(requireContext(), (iconColor and 0x00FFFFFF) or 0x55000000)
+        iconWrap.addView(scallop, android.widget.FrameLayout.LayoutParams(dp(104), dp(104),
                 Gravity.CENTER))
         val iconView = ImageView(requireContext())
         try {
