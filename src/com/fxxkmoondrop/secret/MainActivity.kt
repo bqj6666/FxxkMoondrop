@@ -11,6 +11,7 @@ import android.view.Window
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
@@ -51,6 +52,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     // 固定 container id：recreate 后 FragmentManager 按保存的 containerId 恢复 fragment；
     // 若用 View.generateViewId() 每次重建 ID 都变，恢复时找不到容器导致页面消失
     private val containerId = 0x00F0F1
+    /** 侧滑菜单引用：返回键要先关抽屉，再退出页面。 */
+    private var drawerRef: androidx.drawerlayout.widget.DrawerLayout? = null
+    private var panelRef: View? = null
     private var navBar: com.google.android.material.bottomnavigation.BottomNavigationView? = null
 
     /** 主题设置里的「界面缩放」：改 densityDpi 实现整体缩放（dp 全部跟着走）。 */
@@ -91,7 +95,24 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         // 3.2.13 (D1): Miuix 轨自带 Compose 导航栏，Material 的这根要藏起来，
         // 否则页面里会出现两根导航栏。
         syncNavBarVisibility()
-        setContentView(root)
+        // ── 侧滑菜单：品牌区 / 导航 / 开关 / 通用设置（DrawerLayout，边缘滑动唤出）──
+        val drawer = androidx.drawerlayout.widget.DrawerLayout(this)
+        drawer.addView(root, androidx.drawerlayout.widget.DrawerLayout.LayoutParams(-1, -1))
+        // M3 modal drawer 规范宽度 360dp；窄屏取 85%，避免盖满整个屏幕
+        val dm = resources.displayMetrics
+        val panelW = minOf((360 * dm.density).toInt(), (dm.widthPixels * 0.85f).toInt())
+        val panelParams = androidx.drawerlayout.widget.DrawerLayout.LayoutParams(panelW, -1)
+        panelParams.gravity = android.view.Gravity.START
+        val drawerPanel = buildDrawer(pal, drawer)
+        drawer.addView(drawerPanel, panelParams)
+        setContentView(drawer)
+        drawerRef = drawer
+        panelRef = drawerPanel
+        installBackHandler()
+        // 便于无手势环境（如自动化）核对抽屉：am start ... --ez open_drawer true
+        if (intent?.getBooleanExtra("open_drawer", false) == true) {
+            drawer.postDelayed({ drawer.openDrawer(drawerPanel) }, 400)
+        }
         // 状态栏/导航栏 insets：必须等 DecorView 创建后再设置（否则 getInsetsController NPE）
         if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
@@ -189,6 +210,28 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
      * Miuix 轨的导航栏由 `MiuixNavBar` 画在页面的 Scaffold 里，
      * 这根 View 导航栏必须 `GONE`，否则一屏两根。
      */
+    /**
+     * 返回键：抽屉打开时先关抽屉。
+     *
+     * 必须走 OnBackPressedDispatcher —— Android 13+ 启用预测性返回后，
+     * 覆盖 onBackPressed() 不再被调用（实测直接退出到桌面）。
+     */
+    private fun installBackHandler() {
+        onBackPressedDispatcher.addCallback(this,
+                object : androidx.activity.OnBackPressedCallback(true) {
+                    override fun handleOnBackPressed() {
+                        val d = drawerRef
+                        val pn = panelRef
+                        if (d != null && pn != null && d.isDrawerOpen(pn)) {
+                            d.closeDrawer(pn)
+                        } else {
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                        }
+                    }
+                })
+    }
+
     private fun syncNavBarVisibility() {
         navBar?.visibility = if (MiuixSurface.enabled(this)) View.GONE else View.VISIBLE
     }
@@ -292,5 +335,123 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                 override fun onActivityDestroyed(activity: Activity) {}
             })
         }
+    }
+
+    /**
+     * 侧滑菜单内容：品牌区 / 导航 / 快捷开关 / 通用设置。
+     *
+     * 行沿用 M3Ui 的列表行（48dp 图标容器 + 标题），开关用官方 MaterialSwitch，
+     * 与设置页同一套控件与配色，避免抽屉里出现另一套「长得不一样」的组件。
+     */
+    /**
+     * 侧滑菜单（M3 modal navigation drawer）。
+     *
+     * 规范要点：宽度 360dp（窄屏取 85%）、行高 56dp、图标 24dp 无彩色底、
+     * 选中态是 pill（secondaryContainer 语义），分组之间用小标题分隔。
+     * 不再放主题开关 —— 那属于「设置 → 主题」，抽屉只做导航。
+     */
+    private fun buildDrawer(pal: ThemeUtil.Palette,
+                            drawer: androidx.drawerlayout.widget.DrawerLayout): View {
+        fun px(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+        val panel = LinearLayout(this)
+        panel.orientation = LinearLayout.VERTICAL
+        panel.setBackgroundColor(pal.surface)
+        panel.fitsSystemWindows = true
+        panel.setPadding(0, px(12), 0, px(12))
+
+        // 品牌区
+        val name = TextView(this)
+        name.text = "MoonEar"
+        name.textSize = 22f
+        name.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        name.setTextColor(pal.onSurface)
+        name.setPadding(px(28), px(20), px(28), 0)
+        panel.addView(name, LinearLayout.LayoutParams(-1, -2))
+
+        val sub = TextView(this)
+        sub.text = Lang.t("耳机控制助手", "Earbud control assistant")
+        sub.textSize = 13f
+        sub.setTextColor(pal.onVariant)
+        sub.setPadding(px(28), px(2), px(28), px(16))
+        panel.addView(sub, LinearLayout.LayoutParams(-1, -2))
+
+        // ── 导航 ──
+        panel.addView(drawerSection(pal, Lang.t("导航", "Navigation")))
+
+        fun addItem(icon: Int, label: String, selected: Boolean, onClick: () -> Unit) {
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = android.view.Gravity.CENTER_VERTICAL
+            row.minimumHeight = px(56)
+            row.setPadding(px(16), 0, px(16), 0)
+            row.background = drawerRowBg(pal, selected)
+            val ic = android.widget.ImageView(this)
+            ic.setImageResource(icon)
+            ic.imageTintList = android.content.res.ColorStateList.valueOf(
+                    if (selected) pal.onContainer else pal.onVariant)
+            row.addView(ic, LinearLayout.LayoutParams(px(24), px(24)))
+            val tv = TextView(this)
+            tv.text = label
+            tv.textSize = 14f
+            tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            tv.setTextColor(if (selected) pal.onContainer else pal.onSurface)
+            val lp = LinearLayout.LayoutParams(0, -2, 1f)
+            lp.marginStart = px(12)
+            row.addView(tv, lp)
+            row.setOnClickListener { onClick() }
+            val rlp = LinearLayout.LayoutParams(-1, -2)
+            rlp.leftMargin = px(12); rlp.rightMargin = px(12); rlp.bottomMargin = px(2)
+            panel.addView(row, rlp)
+        }
+
+        addItem(R.drawable.ic_home, Lang.t("概览", "Overview"), curTab == 1) {
+            drawer.closeDrawers(); showTab(1)
+        }
+        addItem(R.drawable.ic_settings, Lang.t("设置", "Settings"), curTab == 2) {
+            drawer.closeDrawers(); showTab(2)
+        }
+        addItem(R.drawable.ic_info, Lang.t("关于", "About"), curTab == 3) {
+            drawer.closeDrawers(); showTab(3)
+        }
+
+        // 抽屉只做导航：不再重复「设置」页已有的入口（原「通用设置」与「设置」同指一页）
+        panel.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+        return panel
+    }
+
+    /** 抽屉分组小标题：14sp、onSurfaceVariant、左内边距与行文字对齐。 */
+    private fun drawerSection(pal: ThemeUtil.Palette, text: String): TextView {
+        val tv = TextView(this)
+        tv.text = text
+        tv.textSize = 14f
+        tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        tv.setTextColor(pal.onVariant)
+        val d = resources.displayMetrics.density
+        tv.setPadding((28 * d).toInt(), (14 * d).toInt(), (28 * d).toInt(), (6 * d).toInt())
+        return tv
+    }
+
+    /** 抽屉行背景：选中为 pill（容器色），未选中为透明 + 圆角涟漪。 */
+    private fun drawerRowBg(pal: ThemeUtil.Palette, selected: Boolean):
+            android.graphics.drawable.Drawable {
+        val d = resources.displayMetrics.density
+        val r = 28 * d
+        val shape = android.graphics.drawable.GradientDrawable()
+        shape.cornerRadius = r
+        shape.setColor(if (selected) pal.container else android.graphics.Color.TRANSPARENT)
+        val mask = android.graphics.drawable.GradientDrawable()
+        mask.cornerRadius = r
+        mask.setColor(android.graphics.Color.WHITE)
+        return android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf((pal.onSurface and 0x00FFFFFF) or 0x1F000000),
+                shape, mask)
+    }
+
+    /** 供概览页标题栏的菜单键调用（系统手势导航会占用左边缘，单靠边缘滑动唤不出）。 */
+    fun openDrawer() {
+        val d = drawerRef ?: return
+        val p = panelRef ?: return
+        d.openDrawer(p)
     }
 }

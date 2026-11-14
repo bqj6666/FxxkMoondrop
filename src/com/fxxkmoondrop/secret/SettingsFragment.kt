@@ -474,8 +474,8 @@ class SettingsFragment : Fragment() {
         // 总开关状态 = enable && auto_service，两键始终同步写入
         swAuto.isChecked = KeepAlive.enabled(requireContext())
         val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_sensors, Lang.t("后台监听", "Background monitor"),
-                Lang.t("开启后立即开始监听，启动与开机时自动恢复；连接耳机后直连 GAIA",
-                        "Start monitoring immediately; resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
+                Lang.t("启动与开机自动恢复，连接后直连 GAIA",
+                        "Resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             KeepAlive.setEnabled(requireContext(), checked)
         }
@@ -491,8 +491,8 @@ class SettingsFragment : Fragment() {
 
         val ancMapHint = TextView(requireContext())
         // alpha2.53: 文案对齐下拉交互（原来写的是「手动修改」的输入框说法）
-        ancMapHint.text = Lang.t("各降噪档位发送给耳机的设备码（0-5）；改动任意一档即优先于型号档案",
-                "Device code (0-5) each noise-control level sends; changing any level overrides the profile")
+        ancMapHint.text = Lang.t("各档位对应的设备码（0-5）",
+                "Device code (0-5) for each level")
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -548,8 +548,8 @@ class SettingsFragment : Fragment() {
         swWind.isChecked = getSP().getBoolean("show_wind", true)
         val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_air,
                 Lang.t("显示抗风噪按钮", "Show the wind-noise button"),
-                Lang.t("控制抗风档在弹窗、主界面与详情页是否出现",
-                        "Whether the wind-noise level appears in the popup, main screen and details page"),
+                Lang.t("控制抗风档的显隐",
+                        "Whether the wind-noise level is shown"),
                 swWind, null)
         swWind.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("show_wind", checked).commit()
@@ -560,8 +560,8 @@ class SettingsFragment : Fragment() {
         // ── 增益映射（alpha2.37：用户自定义增益设备码，同 ANC 映射逻辑）──
         box.addView(makeSubLabel(Lang.t("增益按钮", "Gain buttons")))
         val gainMapHint = TextView(requireContext())
-        gainMapHint.text = Lang.t("各增益档位发送给耳机的设备码（0-9）",
-                "Device code (0-9) each gain level sends")
+        gainMapHint.text = Lang.t("各档位对应的设备码（0-9）",
+                "Device code (0-9) for each level")
         gainMapHint.textSize = 12f
         gainMapHint.setTextColor(pal.onVariant)
         gainMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -644,8 +644,8 @@ class SettingsFragment : Fragment() {
         // ── 重置自定义映射（alpha2.37）──
         val rowReset = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_restart_alt,
                 Lang.t("重置所有自定义映射", "Reset all custom mappings"),
-                Lang.t("恢复降噪、增益与追踪标签为型号档案默认值",
-                        "Restore noise control, gain and tracking labels to the profile defaults"),
+                Lang.t("恢复型号档案默认值",
+                        "Restore the profile defaults"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             view?.clearFocus()
             val editor = getSP().edit()
@@ -680,22 +680,22 @@ class SettingsFragment : Fragment() {
         // 用带多彩图标容器的行（与「检查权限」「日志抓取」同款），保持诊断区视觉一致
         val rowDebug = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
                 Lang.t("调试模式", "Debug mode"),
-                Lang.t("显示「服务探测（GATT）」与「EQ 通道（SPP）」等排查入口",
-                        "Show diagnostics-only entries such as the GATT service probe and the SPP EQ channel"),
+                Lang.t("显示排查入口（服务探测 / EQ 通道）",
+                        "Show diagnostics entries (GATT probe, SPP EQ)"),
                 swDebug, null)
         // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
         val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
                 Lang.t("服务探测（GATT）", "Service probe (GATT)"),
-                Lang.t("列出耳机的 GATT 服务，用于判断是否支持均衡器等私有协议",
-                        "Dump the earbud's GATT services to see if private protocols like the equalizer exist"),
+                Lang.t("列出耳机的 GATT 服务",
+                        "List the earbud's GATT services"),
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), ServiceProbeActivity::class.java))
         }
         // EQ 通道（经典蓝牙 SPP）：读/切预设、读/写曲线
         val rowEq = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_anc_on,
                 Lang.t("EQ 通道（SPP）", "EQ over SPP"),
-                Lang.t("读写耳机均衡器：预设切换与曲线读写",
-                        "Read/write the earbud equalizer: presets and curve"),
+                Lang.t("预设切换与曲线读写",
+                        "Preset switching and curve editing"),
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), EqSppActivity::class.java))
         }
@@ -704,8 +704,8 @@ class SettingsFragment : Fragment() {
             // 调试日志：只在调试模式下出现，里面能直接看 AppLog 与相关 logcat
             val rowDebugLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
                     Lang.t("调试日志", "Debug log"),
-                    Lang.t("查看应用内日志与系统 logcat（定位问题用）",
-                            "Inspect in-app log and logcat for troubleshooting"),
+                    Lang.t("应用内日志与系统 logcat",
+                            "In-app log and system logcat"),
                     M3Ui.chevron(requireContext(), pal.onVariant)) {
                 startActivity(Intent(requireContext(), DebugLogActivity::class.java))
             }
@@ -772,8 +772,8 @@ class SettingsFragment : Fragment() {
         swNetUpdate.isChecked = UpdateChecker.isEnabled(requireContext())
         val rowNetUpdate = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_settings_ethernet,
                 Lang.t("联网检查更新", "Check for updates online"),
-                Lang.t("查询 GitHub 公开接口以获知新版本",
-                        "Query GitHub's public API for new versions"),
+                Lang.t("查询 GitHub 上的新版本",
+                        "Check GitHub for new versions"),
                 swNetUpdate, null)
 
         // 「更新通道」只在联网开启时存在。
@@ -782,8 +782,8 @@ class SettingsFragment : Fragment() {
         val chIdx = if (UpdateChecker.channel(requireContext()) == UpdateChecker.Channel.PRERELEASE) 1 else 0
         val rowChannel = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("更新通道", "Update channel"),
-                Lang.t("预发布为每次提交自动构建，可能含未验证改动",
-                        "Pre-release builds come from every commit and may contain unverified changes"),
+                Lang.t("预发布可能包含未验证改动",
+                        "Pre-releases may contain unverified changes"),
                 arrayOf(Lang.t("正式版", "Stable"), Lang.t("预发布", "Pre-release")),
                 chIdx) { mi ->
             UpdateChecker.setChannel(requireContext(),
