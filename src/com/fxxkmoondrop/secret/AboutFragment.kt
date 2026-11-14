@@ -443,13 +443,17 @@ class AboutFragment : Fragment() {
         val star = M3Ui.filledButton(requireActivity(), pal, Lang.t("GitHub 仓库", "Repository")) {
             openUrl("https://github.com/bqj6666/FxxkMoondrop")
         }
-        val updBtn = M3Ui.filledButton(requireActivity(), pal, Lang.t("检测更新", "Check updates")) {
-            manualCheckUpdate()
-        }
+        // 「检测更新」同样受设置页「联网检查更新」开关控制：
+        // 关着就不出现（关着时点它必然失败，不如不显示），与下方「更新日志」保持一致。
+        val updateEnabled = UpdateChecker.isEnabled(requireContext())
         btnRow.addView(star, LinearLayout.LayoutParams(0, -2, 1f))
-        val ilp2 = LinearLayout.LayoutParams(0, -2, 1f)
-        ilp2.marginStart = dp(8)
-        btnRow.addView(updBtn, ilp2)
+        if (updateEnabled) {
+            val updBtn = M3Ui.filledButton(requireActivity(), pal,
+                    Lang.t("检测更新", "Check updates")) { manualCheckUpdate() }
+            val ilp2 = LinearLayout.LayoutParams(0, -2, 1f)
+            ilp2.marginStart = dp(8)
+            btnRow.addView(updBtn, ilp2)
+        }
         header.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         box.addView(M3Ui.wrapInCard(requireContext(), pal, header), LinearLayout.LayoutParams(-1, -2))
 
