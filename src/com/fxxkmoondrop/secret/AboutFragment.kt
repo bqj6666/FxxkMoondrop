@@ -440,16 +440,16 @@ class AboutFragment : Fragment() {
         val btnRow = LinearLayout(requireContext())
         btnRow.orientation = LinearLayout.HORIZONTAL
         btnRow.gravity = Gravity.CENTER
-        val star = M3Ui.filledButton(requireActivity(), pal, Lang.t("GitHub 主页", "GitHub")) {
+        val star = M3Ui.filledButton(requireActivity(), pal, Lang.t("GitHub 仓库", "Repository")) {
             openUrl("https://github.com/bqj6666/FxxkMoondrop")
         }
-        val issue = M3Ui.textButton(requireActivity(), pal, Lang.t("反馈问题", "Report a bug")) {
-            openUrl("https://github.com/bqj6666/FxxkMoondrop/issues/new")
+        val updBtn = M3Ui.filledButton(requireActivity(), pal, Lang.t("检测更新", "Check updates")) {
+            manualCheckUpdate()
         }
         btnRow.addView(star, LinearLayout.LayoutParams(0, -2, 1f))
         val ilp2 = LinearLayout.LayoutParams(0, -2, 1f)
         ilp2.marginStart = dp(8)
-        btnRow.addView(issue, ilp2)
+        btnRow.addView(updBtn, ilp2)
         header.addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         box.addView(M3Ui.wrapInCard(requireContext(), pal, header), LinearLayout.LayoutParams(-1, -2))
 
@@ -460,19 +460,11 @@ class AboutFragment : Fragment() {
         // 点下去必然失败，不如干脆不显示。
         val projRows = ArrayList<View>()
         if (UpdateChecker.isEnabled(requireContext())) {
-            projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_refresh,
-                    Lang.t("检查更新", "Check for updates"),
-                    Lang.t("查询是否有新版本", "Query for a newer version"),
-                    M3Ui.chevron(act, pal.onVariant)) { manualCheckUpdate() })
             projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_description,
                     Lang.t("更新日志", "Changelog"),
                     Lang.t("本版变更", "Changes in this build"),
                     M3Ui.chevron(act, pal.onVariant)) { showChangelog() })
         }
-        projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_code,
-                Lang.t("GitHub 仓库", "GitHub Repository"),
-                Lang.t("查看源码与更新日志", "Source code and changelog"),
-                M3Ui.chevron(act, pal.onVariant)) { openUrl(repoUrl) })
         projRows.add(M3Ui.listRow(act, pal, R.drawable.ic_bug_report,
                 Lang.t("反馈问题", "Report an issue"),
                 Lang.t("提交适配问题与日志", "Submit an issue with logs"),
