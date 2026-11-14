@@ -374,10 +374,16 @@ class AboutFragment : Fragment() {
         header.gravity = Gravity.CENTER_HORIZONTAL
         header.setPadding(dp(24), dp(24), dp(24), dp(24))
 
-        // 图标 + 外圈旋转弧（Material 加载条手感）
+        // 图标 + Material 圆形加载指示器（取图标主色，与图标同色系）
         val iconWrap = android.widget.FrameLayout(requireContext())
-        val ring = RingView(requireContext(), pal.primary, pal.outline)
-        iconWrap.addView(ring, android.widget.FrameLayout.LayoutParams(dp(96), dp(96),
+        val spinner = com.google.android.material.progressindicator.CircularProgressIndicator(requireContext())
+        spinner.isIndeterminate = true
+        val iconColor = AppIconColor.of(requireContext(), pal.primary)
+        spinner.setIndicatorColor(iconColor)
+        spinner.trackColor = (iconColor and 0x00FFFFFF) or 0x22000000
+        spinner.trackThickness = dp(3)
+        spinner.indicatorSize = dp(96)
+        iconWrap.addView(spinner, android.widget.FrameLayout.LayoutParams(dp(96), dp(96),
                 Gravity.CENTER))
         val iconView = ImageView(requireContext())
         try {
@@ -386,7 +392,7 @@ class AboutFragment : Fragment() {
         } catch (_: Exception) { }
         iconWrap.addView(iconView, android.widget.FrameLayout.LayoutParams(dp(64), dp(64),
                 Gravity.CENTER))
-        header.addView(iconWrap, LinearLayout.LayoutParams(dp(96), dp(96)))
+        header.addView(iconWrap, LinearLayout.LayoutParams(dp(104), dp(104)))
 
         header.addView(spacer(dp(16)))
         val appTitle = TextView(requireContext())

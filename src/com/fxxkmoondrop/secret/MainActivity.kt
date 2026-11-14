@@ -568,6 +568,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var contentHost: android.widget.FrameLayout? = null
     private var menuButton: View? = null
     private var floatNav: View? = null
+    private var floatNavRow: LinearLayout? = null
+    private var floatNavCells: MutableList<NavCell>? = null
 
     private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 0)
 
@@ -587,52 +589,132 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         lp.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
         lp.bottomMargin = (24 * resources.displayMetrics.density).toInt()
         contentHost?.addView(bar, lp)
+        navHidden = false
+        bindScrollToNav()
     }
 
-    /** 悬浮胶囊导航栏：三个入口，选中项用容器色 pill。 */
+    private class NavCell(val tab: Int, val cell: LinearLayout,
+                          val icon: android.widget.ImageView, val label: TextView)
+
+    /** 悬浮胶囊导航栏：三个入口，选中项展开名字（ChangeBounds + Fade 过渡）。 */
     private fun buildFloatingNav(pal: ThemeUtil.Palette): View {
         val d = resources.displayMetrics.density
-        fun p(v: Int) = (v * d).toInt()
+        fun p2(v: Int) = (v * d).toInt()
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = android.view.Gravity.CENTER
-        row.setPadding(p(8), p(8), p(8), p(8))
+        row.setPadding(p2(8), p2(8), p2(8), p2(8))
         val bg = android.graphics.drawable.GradientDrawable()
-        bg.cornerRadius = p(28).toFloat()
+        bg.cornerRadius = p2(28).toFloat()
         bg.setColor(pal.card)
-        bg.setStroke(p(1), pal.cardStroke)
+        bg.setStroke(p2(1), pal.cardStroke)
         row.background = bg
 
-        fun addItem(tab: Int, icon: Int, label: String) {
-            val sel = tab == curTab
-            val cell = android.widget.FrameLayout(this)
+        val cells = ArrayList<NavCell>()
+        floatNavRow = row
+        floatNavCells = cells
+
+        fun addItem(tab: Int, iconRes: Int, labelText: String) {
+            val cell = LinearLayout(this)
+            cell.orientation = LinearLayout.HORIZONTAL
+            cell.gravity = android.view.Gravity.CENTER
+            cell.setPadding(p2(14), 0, p2(14), 0)
             val cellBg = android.graphics.drawable.GradientDrawable()
-            cellBg.cornerRadius = p(20).toFloat()
-            cellBg.setColor(if (sel) pal.secondaryContainer else android.graphics.Color.TRANSPARENT)
+            cellBg.cornerRadius = p2(20).toFloat()
             cell.background = cellBg
             val ic = android.widget.ImageView(this)
-            ic.setImageResource(icon)
-            ic.imageTintList = android.content.res.ColorStateList.valueOf(
-                    if (sel) pal.onSecondaryContainer else pal.onVariant)
-            val ilp = android.widget.FrameLayout.LayoutParams(p(24), p(24))
-            ilp.gravity = android.view.Gravity.CENTER
-            cell.addView(ic, ilp)
-            cell.contentDescription = label
+            ic.setImageResource(iconRes)
+            cell.addView(ic, LinearLayout.LayoutParams(p2(24), p2(24)))
+            val tv = TextView(this)
+            tv.text = labelText
+            tv.textSize = 13f
+            tv.isSingleLine = true
+            tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            val tlp = LinearLayout.LayoutParams(-2, -2)
+            tlp.marginStart = p2(6)
+            cell.addView(tv, tlp)
+            cell.contentDescription = labelText
             cell.setOnClickListener {
-                if (navMode() == 1) {
+                if (navMode() == 1 && curTab != tab) {
                     showTab(tab)
-                    applyNavMode(palRef ?: ThemeUtil.Palette(this))
+                    animateFloatingSelection(pal)
                 }
             }
-            val clp = LinearLayout.LayoutParams(p(64), p(48))
-            clp.leftMargin = p(2); clp.rightMargin = p(2)
+            val clp = LinearLayout.LayoutParams(-2, p2(48))
+            clp.leftMargin = p2(2)
+            clp.rightMargin = p2(2)
             row.addView(cell, clp)
+            cells.add(NavCell(tab, cell, ic, tv))
         }
 
         addItem(1, R.drawable.ic_home, Lang.t("概览", "Overview"))
         addItem(2, R.drawable.ic_settings, Lang.t("设置", "Settings"))
         addItem(3, R.drawable.ic_info, Lang.t("关于", "About"))
+
+        paintFloatingSelection(pal)
         return row
+    }
+
+    /** 选中态切换：整条底栏走 ChangeBounds + Fade，胶囊平滑展开、名字淡入。 */
+    private fun animateFloatingSelection(pal: ThemeUtil.Palette) {
+        val row = floatNavRow ?: return
+        android.transition.TransitionManager.beginDelayedTransition(row,
+                android.transition.TransitionSet().apply {
+                    addTransition(android.transition.ChangeBounds())
+                    addTransition(android.transition.Fade())
+                    duration = Motion.MEDIUM1
+                    interpolator = Motion.enter()
+                })
+        paintFloatingSelection(pal)
+    }
+
+    /** 直接刷新选中态（无水波动画，用于首次构建）。 */
+    private fun paintFloatingSelection(pal: ThemeUtil.Palette) {
+        val cells = floatNavCells ?: return
+        for (c in cells) {
+            val sel = c.tab == curTab
+            (c.cell.background as? android.graphics.drawable.GradientDrawable)
+                    ?.setColor(if (sel) pal.secondaryContainer else android.graphics.Color.TRANSPARENT)
+            c.icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                    if (sel) pal.onSecondaryContainer else pal.onVariant)
+            c.label.visibility = if (sel) View.VISIBLE else View.GONE
+            c.label.setTextColor(pal.onSecondaryContainer)
+        }
+    }
+
+    /** 内容滚动时收起/展开悬浮导航栏（下滑收起、上滑出现）。 */
+    private var lastScrollY = 0
+    private var navHidden = false
+
+    private fun bindScrollToNav() {
+        if (navMode() != 1) return
+        contentHost?.post {
+            val sv = contentHost?.findViewById<android.widget.ScrollView>(R.id.m3_page_scroll)
+                    ?: return@post
+            lastScrollY = sv.scrollY
+            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
+                val dy = sy - lastScrollY
+                if (dy > 6 && !navHidden) {
+                    navHidden = true
+                    hideShowNav(false)
+                } else if (dy < -6 && navHidden) {
+                    navHidden = false
+                    hideShowNav(true)
+                }
+                lastScrollY = sy
+            }
+        }
+    }
+
+    private fun hideShowNav(show: Boolean) {
+        val v = floatNav ?: return
+        v.animate().cancel()
+        val dy = if (show) 0f else v.height.toFloat() + 32f
+        v.animate().translationY(dy)
+                .alpha(if (show) 1f else 0f)
+                .setDuration(if (show) Motion.MEDIUM1 else Motion.SHORT4)
+                .setInterpolator(if (show) Motion.enter() else Motion.exit())
+                .start()
     }
 
     /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
@@ -736,6 +818,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         ft.setCustomAnimations(R.anim.m3_page_in, R.anim.m3_page_out)
         ft.replace(containerId, f)
         ft.commit()
+        contentHost?.postDelayed({ bindScrollToNav() }, 350)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
