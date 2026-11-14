@@ -60,6 +60,13 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private val drawerRows = HashMap<Int, LinearLayout>()
     /** 抽屉 banner：用户自选图片存 filesDir/drawer_banner，缺省用主题渐变。 */
     private var bannerView: android.widget.ImageView? = null
+    private var bannerScrim: View? = null
+    private var bannerTitle: TextView? = null
+    /** 抽屉里的当前状态卡（连接状态 / 降噪模式）。 */
+    private var statusRow: LinearLayout? = null
+    private var chipConn: TextView? = null
+    private var chipMode: TextView? = null
+    private var bannerSub: TextView? = null
 
     private val bannerPicker = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
@@ -148,6 +155,11 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         setContentView(drawer)
         drawerRef = drawer
         panelRef = drawerPanel
+        drawer.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                refreshStatusCard()
+            }
+        })
         palRef = pal
         installBackHandler()
 
@@ -268,34 +280,132 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
      * 必须走 OnBackPressedDispatcher —— Android 13+ 启用预测性返回后，
      * 覆盖 onBackPressed() 不再被调用（实测直接退出到桌面）。
      */
-    /** 把 banner 刷成用户图片（存在时）或主题渐变。 */
+    /** 抽屉状态卡：胶囊 chip 显示连接状态与降噪模式，点一下回概览。 */
+    private fun buildStatusCard(pal: ThemeUtil.Palette): LinearLayout {
+        val d = resources.displayMetrics.density
+        fun p(v: Int) = (v * d).toInt()
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.VERTICAL
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.cornerRadius = p(24).toFloat()
+        bg.setColor(pal.card)
+        card.background = bg
+        card.setPadding(p(16), p(14), p(16), p(14))
+
+        val label = TextView(this)
+        label.text = Lang.t("当前状态", "Status")
+        label.textSize = 12f
+        label.setTextColor(pal.onVariant)
+        card.addView(label, LinearLayout.LayoutParams(-2, -2))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = android.view.Gravity.CENTER_VERTICAL
+        val rlp = LinearLayout.LayoutParams(-1, -2)
+        rlp.topMargin = p(8)
+        card.addView(row, rlp)
+
+        fun chip(): TextView {
+            val tv = TextView(this)
+            tv.textSize = 13f
+            tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            tv.setPadding(p(12), p(6), p(12), p(6))
+            val cbg = android.graphics.drawable.GradientDrawable()
+            cbg.cornerRadius = p(16).toFloat()
+            cbg.setColor(pal.secondaryContainer)
+            tv.background = cbg
+            tv.setTextColor(pal.onSecondaryContainer)
+            return tv
+        }
+        val c1 = chip(); val c2 = chip()
+        chipConn = c1; chipMode = c2
+        row.addView(c1, LinearLayout.LayoutParams(-2, -2))
+        val lp2 = LinearLayout.LayoutParams(-2, -2)
+        lp2.marginStart = p(6)
+        row.addView(c2, lp2)
+
+        card.setOnClickListener {
+            drawerRef?.closeDrawers()
+            showTab(1)
+        }
+        return card
+    }
+
+    /** 刷新状态卡文案（连接状态来自 GaiaBleClient，模式来自 AncBridge）。 */
+    private fun refreshStatusCard() {
+        val conn = runCatching { GaiaBleClient.getInstance().isConnected() }.getOrDefault(false)
+        chipConn?.text = if (conn) Lang.t("已连接", "Connected") else Lang.t("未连接", "Disconnected")
+        if (!conn) {
+            chipMode?.visibility = View.GONE
+            return
+        }
+        chipMode?.visibility = View.VISIBLE
+        val mode = runCatching { AncBridge.getCurrentMode() }.getOrDefault(-1)
+        chipMode?.text = Lang.t("降噪 · ", "ANC · ") + when (mode) {
+            0 -> Lang.t("关闭", "Off")
+            1 -> Lang.t("降噪", "ANC")
+            2 -> Lang.t("透传", "Transparency")
+            3 -> Lang.t("抗风", "Wind")
+            else -> Lang.t("未知", "Unknown")
+        }
+    }
+
+    /** banner：有自定义图片就显示（裁成胶囊圆角），没有就保持透明 —— 不预设任何图片。 */
     private fun applyBanner(pal: ThemeUtil.Palette) {
         val v = bannerView ?: return
         val f = java.io.File(filesDir, "drawer_banner")
         val bmp = if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.absolutePath) else null
         if (bmp != null) {
             v.setImageBitmap(bmp)
+            bannerScrim?.visibility = View.VISIBLE
+            bannerTitle?.setTextColor(android.graphics.Color.WHITE)
+            bannerSub?.setTextColor(0xCCFFFFFF.toInt())
         } else {
-            v.setImageDrawable(android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                    intArrayOf(pal.container, pal.primary)))
+            v.setImageDrawable(null)
+            bannerScrim?.visibility = View.GONE
+            bannerTitle?.setTextColor(pal.onSurface)
+            bannerSub?.setTextColor(pal.onVariant)
         }
     }
 
-    /** banner 换图／恢复默认。 */
+    /** banner 换图／恢复默认：走全应用统一的 M3 弹窗。 */
     private fun showBannerDialog() {
-        val items = arrayOf(Lang.t("更换图片", "Choose image"),
-                Lang.t("恢复默认", "Use default"))
-        android.app.AlertDialog.Builder(this)
-                .setItems(items) { _, which ->
-                    if (which == 0) {
-                        runCatching { bannerPicker.launch("image/*") }
-                    } else {
-                        runCatching { java.io.File(filesDir, "drawer_banner").delete() }
-                        bannerView?.let { applyBanner(palRef ?: ThemeUtil.Palette(this)) }
-                    }
-                }
-                .show()
+        val pal = palRef ?: ThemeUtil.Palette(this)
+        val (dlg, body) = M3Ui.materialDialog(this, pal.primary, pal.card)
+        val title = TextView(this)
+        title.text = Lang.t("抽屉背景", "Drawer banner")
+        title.textSize = 20f
+        title.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        title.setTextColor(pal.onSurface)
+        body.addView(title, LinearLayout.LayoutParams(-1, -2))
+        val hint = TextView(this)
+        hint.text = Lang.t("选择一张图片作为抽屉顶部的背景", "Pick an image for the drawer header")
+        hint.textSize = 13f
+        hint.setTextColor(pal.onVariant)
+        val hlp = LinearLayout.LayoutParams(-1, -2)
+        hlp.topMargin = (4 * resources.displayMetrics.density).toInt()
+        hlp.bottomMargin = (12 * resources.displayMetrics.density).toInt()
+        body.addView(hint, hlp)
+
+        fun action(label: String, onClick: () -> Unit) {
+            val tv = TextView(this)
+            tv.text = label
+            tv.textSize = 16f
+            tv.setTextColor(pal.primary)
+            val d = resources.displayMetrics.density
+            tv.setPadding((12 * d).toInt(), (14 * d).toInt(), (12 * d).toInt(), (14 * d).toInt())
+            tv.background = M3Ui.pressRipple(this, null)
+            tv.setOnClickListener { dlg.dismiss(); onClick() }
+            body.addView(tv, LinearLayout.LayoutParams(-1, -2))
+        }
+        action(Lang.t("选择图片", "Choose image")) {
+            runCatching { bannerPicker.launch("image/*") }
+        }
+        action(Lang.t("恢复默认", "Use default")) {
+            runCatching { java.io.File(filesDir, "drawer_banner").delete() }
+            bannerView?.let { applyBanner(palRef ?: ThemeUtil.Palette(this)) }
+        }
+        dlg.show()
     }
 
     /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
@@ -500,23 +610,28 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         // 显式让出状态栏：banner 顶到屏幕外会被状态栏／通知横幅压掉一截
         val sbhDrawer = resources.getIdentifier("status_bar_height", "dimen", "android")
                 .let { if (it > 0) resources.getDimensionPixelSize(it) else 0 }
-        panel.setPadding(0, sbhDrawer, 0, px(12))
+        panel.setPadding(0, 0, 0, px(12))
 
-        // 品牌区：可自定义 banner（默认渐变），底部叠标题
-        val bannerH = px(148)
+        // 品牌区：banner 顶到屏幕最上沿（与状态栏重叠），默认透明、有图时裁成胶囊圆角
+        val bannerH = sbhDrawer + px(132)
         val header = android.widget.FrameLayout(this)
         val bannerImg = android.widget.ImageView(this)
         bannerImg.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+        // 用背景 outline 裁剪 bitmap：大圆角 = 胶囊感，比四方块贴边更符合 Expressive 形状语言
+        val clip = android.graphics.drawable.GradientDrawable()
+        clip.cornerRadius = px(32).toFloat()
+        bannerImg.background = clip
+        bannerImg.clipToOutline = true
         header.addView(bannerImg, android.widget.FrameLayout.LayoutParams(-1, bannerH))
         bannerView = bannerImg
-        applyBanner(pal)
 
-        // 底部压暗，保证白字在任何照片上都读得清
+        // 有图时才压暗，保证白字可读；没图时用正常背景色 + 正常文字色
         val scrim = View(this)
         scrim.background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
                 intArrayOf(0xCC000000.toInt(), 0x00000000))
         header.addView(scrim, android.widget.FrameLayout.LayoutParams(-1, bannerH))
+        bannerScrim = scrim
 
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
@@ -526,19 +641,26 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         name.text = "MoonEar"
         name.textSize = 24f
         name.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-        name.setTextColor(android.graphics.Color.WHITE)
         titleBox.addView(name, LinearLayout.LayoutParams(-2, -2))
         val sub = TextView(this)
         sub.text = Lang.t("耳机控制助手", "Earbud control assistant")
         sub.textSize = 13f
-        sub.setTextColor(0xCCFFFFFF.toInt())
         titleBox.addView(sub, LinearLayout.LayoutParams(-2, -2))
         header.addView(titleBox, android.widget.FrameLayout.LayoutParams(-1, -1,
                 android.view.Gravity.BOTTOM))
+        bannerTitle = name
+        bannerSub = sub
 
-        // 点标题区即可换图／恢复默认
         header.setOnClickListener { showBannerDialog() }
         panel.addView(header, LinearLayout.LayoutParams(-1, bannerH))
+
+        // 当前状态卡（原概览页英雄卡的位置）：banner 与导航之间
+        statusRow = buildStatusCard(pal)
+        val scLp = LinearLayout.LayoutParams(-1, -2)
+        scLp.leftMargin = px(12); scLp.rightMargin = px(12)
+        scLp.topMargin = px(8); scLp.bottomMargin = px(4)
+        panel.addView(statusRow, scLp)
+        refreshStatusCard()
 
         // ── 导航 ──
         panel.addView(drawerSection(pal, Lang.t("导航", "Navigation")))

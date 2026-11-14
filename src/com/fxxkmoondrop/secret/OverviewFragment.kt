@@ -255,7 +255,8 @@ class OverviewFragment : Fragment() {
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         statusPanel.addView(heroRow, heroLp)
-        root.addView(statusPanel, lp(false))
+        // 当前状态英雄卡已移到侧滑抽屉（banner 下方），概览页不再显示
+        statusPanel.visibility = View.GONE
 
         root.addView(spacer(dp(16)))
 
