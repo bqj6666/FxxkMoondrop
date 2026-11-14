@@ -378,17 +378,17 @@ class AboutFragment : Fragment() {
         val iconWrap = android.widget.FrameLayout(requireContext())
         // 图标背景：M3 Expressive 形变圆形（12 瓣波浪圆，缓慢自转 + 呼吸），取图标主色
         val iconColor = AppIconColor.of(requireContext(), pal.primary)
-        val badge = LoadingBadge.create(requireContext(), iconColor, 104)
-        iconWrap.addView(badge, android.widget.FrameLayout.LayoutParams(dp(104), dp(104),
+        val badge = LoadingBadge.create(requireContext(), iconColor, 112)
+        iconWrap.addView(badge, android.widget.FrameLayout.LayoutParams(dp(112), dp(112),
                 Gravity.CENTER))
         val iconView = ImageView(requireContext())
         try {
             iconView.setImageDrawable(requireContext().packageManager
                     .getApplicationIcon(requireContext().packageName))
         } catch (_: Exception) { }
-        iconWrap.addView(iconView, android.widget.FrameLayout.LayoutParams(dp(64), dp(64),
+        iconWrap.addView(iconView, android.widget.FrameLayout.LayoutParams(dp(80), dp(80),
                 Gravity.CENTER))
-        header.addView(iconWrap, LinearLayout.LayoutParams(dp(104), dp(104)))
+        header.addView(iconWrap, LinearLayout.LayoutParams(dp(112), dp(112)))
 
         header.addView(spacer(dp(16)))
         val appTitle = TextView(requireContext())

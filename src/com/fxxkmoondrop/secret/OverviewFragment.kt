@@ -257,7 +257,7 @@ class OverviewFragment : Fragment() {
         statusPanel.addView(heroRow, heroLp)
         // 抽屉模式下英雄卡在抽屉里（banner 下方），概览页不重复显示；
         // 悬浮导航栏模式没有抽屉，英雄卡回到概览页顶部。
-        val floatingNav = requireContext().getSharedPreferences("cfg", 0).getInt("nav_mode", 0) == 1
+        val floatingNav = requireContext().getSharedPreferences("cfg", 0).getInt("nav_mode", 1) == 1
         statusPanel.visibility = if (floatingNav) View.VISIBLE else View.GONE
 
         root.addView(spacer(dp(16)))

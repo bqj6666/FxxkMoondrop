@@ -268,7 +268,7 @@ class M3Ui {
             val bar = android.widget.FrameLayout(act)
             bar.setBackgroundColor(pal.surface)
             // 抽屉模式左 68dp（给 48dp 菜单键让位）；悬浮导航栏模式没有菜单键，标题左对齐 16dp
-            val floatingNav = act.getSharedPreferences("cfg", 0).getInt("nav_mode", 0) == 1
+            val floatingNav = act.getSharedPreferences("cfg", 0).getInt("nav_mode", 1) == 1
             val padL = dp(act, if (floatingNav) 16 else 68)
 
             // 展开态大标题：底部对齐

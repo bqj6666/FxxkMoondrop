@@ -97,8 +97,20 @@ class ThemeSettingsActivity : BaseActivity() {
         body.addView(M3Ui.groupCard(this, pal, dynRow, amoledRow, stdRow, variantRow),
                 LinearLayout.LayoutParams(-1, -2))
 
-        // ── 界面缩放 ─────────────────────────────────────────
-        body.addView(M3Ui.sectionTitle(this, pal, Lang.t("界面缩放", "UI scale")))
+        // ── 界面：导航方式 + 界面缩放 ─────────────────────────
+        body.addView(M3Ui.sectionTitle(this, pal, Lang.t("界面", "Interface")))
+        val navRow = M3Ui.dropdownRow(this, pal,
+                Lang.t("导航方式", "Navigation"),
+                null,
+                arrayOf(Lang.t("悬浮导航栏", "Floating bar"),
+                        Lang.t("抽屉菜单", "Navigation drawer")),
+                if (sp().getInt("nav_mode", 1) == 1) 0 else 1) { mi ->
+            sp().edit().putInt("nav_mode", if (mi == 0) 1 else 0).commit()
+            // 导航方式属于整页结构，回到主页重建才能生效
+            startActivity(android.content.Intent(this, MainActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish()
+        }
         val scale = UiStyle.clampScale(sp().getFloat("ui_scale", 1f))
         val txt = TextView(this)
         txt.text = Lang.t("当前 ", "Current ") + (scale * 100).toInt() + "%"
@@ -122,7 +134,7 @@ class ThemeSettingsActivity : BaseActivity() {
         wrap.addView(slider, LinearLayout.LayoutParams(-1, -2).also {
             it.leftMargin = dp(12); it.rightMargin = dp(12); it.bottomMargin = dp(8)
         })
-        body.addView(M3Ui.groupCard(this, pal, wrap), LinearLayout.LayoutParams(-1, -2))
+        body.addView(M3Ui.groupCard(this, pal, navRow, wrap), LinearLayout.LayoutParams(-1, -2))
 
 
     }

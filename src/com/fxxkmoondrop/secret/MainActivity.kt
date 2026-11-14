@@ -571,7 +571,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var floatNavRow: LinearLayout? = null
     private var floatNavCells: MutableList<NavCell>? = null
 
-    private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 0)
+    private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 1)
 
     /** 按当前导航方式切换：抽屉模式下显示菜单键并解锁抽屉，悬浮模式下反之。 */
     private fun applyNavMode(pal: ThemeUtil.Palette) {
@@ -610,8 +610,6 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         val bg = android.graphics.drawable.GradientDrawable()
         bg.cornerRadius = p2(28).toFloat()
         bg.setColor(pal.card)
-        // 描边用 outline 30%：cardStroke 在浅色下几乎与卡片底色同色，看起来像没有边
-        bg.setStroke(p2(1), (pal.outline and 0x00FFFFFF) or 0x4D000000)
         row.background = bg
 
         val cells = ArrayList<NavCell>()
