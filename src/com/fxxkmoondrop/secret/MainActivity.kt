@@ -354,7 +354,71 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         heroSub?.text = runCatching {
             "V" + (packageManager.getPackageInfo(packageName, 0).versionName ?: "").removePrefix("alpha")
         }.getOrDefault("")
-        heroBadge?.text = "API " + Build.VERSION.SDK_INT
+        // 徽章显示的是**当前链路/编解码器**（与概览页一致），不是系统 API 级别。
+        // 未连接时隐藏：否则和左侧状态词「未连接」重复两遍。
+        val link = linkTypeLabel()
+        if (link == null) {
+            heroBadge?.visibility = View.GONE
+        } else {
+            heroBadge?.visibility = View.VISIBLE
+            heroBadge?.text = badgeText()
+            refreshCodecBadge()
+        }
+    }
+
+    /** 编解码器缓存（dumpsys 查询是百毫秒级，5 秒内不重复查）。 */
+    private var codecLabel: String? = null
+    private var codecQuerying = false
+    private var lastCodecQueryMs = 0L
+
+    /** 徽章文案：编解码器 > 链路类型 > 未连接。 */
+    private fun badgeText(): String {
+        val link = linkTypeLabel() ?: return Lang.t("未连接", "Not connected")
+        codecLabel?.let { if (it.isNotEmpty()) return it }
+        return link
+    }
+
+    /** 链路类型：LE Audio / ACL，无链路返回 null。 */
+    private fun linkTypeLabel(): String? {
+        return try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val types = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).map { it.type }.toSet()
+            when {
+                Build.VERSION.SDK_INT >= 31 &&
+                        (android.media.AudioDeviceInfo.TYPE_BLE_HEADSET in types ||
+                                android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER in types) -> "LE Audio"
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP in types ||
+                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO in types -> "ACL"
+                else -> null
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** 经 Root 通道读蓝牙栈的当前编解码器（系统 API 是 @SystemApi，普通应用拿不到）。 */
+    private fun refreshCodecBadge() {
+        if (linkTypeLabel() == null) {
+            codecLabel = null
+            return
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (codecQuerying || now - lastCodecQueryMs < 5000L) return
+        codecQuerying = true
+        lastCodecQueryMs = now
+        Thread {
+            val out = runCatching { RootShell.exec("dumpsys bluetooth_manager | grep -m1 'mCodecConfig:'") }
+                    .getOrNull()
+            val name = Regex("codecName:([A-Za-z0-9 ]+)").find(out ?: "")
+                    ?.groupValues?.get(1)?.trim()
+            runOnUiThread {
+                codecQuerying = false
+                if (!name.isNullOrEmpty()) {
+                    codecLabel = name
+                    heroBadge?.text = badgeText()
+                }
+            }
+        }.start()
     }
 
     /** banner：有自定义图片就显示（裁成胶囊圆角），没有就保持透明 —— 不预设任何图片。 */

@@ -629,8 +629,12 @@ class M3Ui {
             row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
-            row.minimumHeight = dp(act, 56)
+            // 行高按内容分级：单行 56dp、双行（标题 + 副标题）72dp。
+            // 统一压到 4dp 会把双行文字挤出卡片边界，统一留 16dp 又让单行空一大截。
+            val hasSub = !sub.isNullOrEmpty()
+            val padV = dp(act, if (hasSub) 8 else 4)
+            row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
+            row.minimumHeight = dp(act, if (hasSub) 72 else 56)
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
             val t1 = TextView(act)
@@ -1289,8 +1293,12 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16))
-            row.minimumHeight = dp(act, 56)
+            // 行高按内容分级：单行 56dp、双行（标题 + 副标题）72dp。
+            // 统一压到 4dp 会把双行文字挤出卡片边界，统一留 16dp 又让单行空一大截。
+            val hasSub = !sub.isNullOrEmpty()
+            val padV = dp(act, if (hasSub) 8 else 4)
+            row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
+            row.minimumHeight = dp(act, if (hasSub) 72 else 56)
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
