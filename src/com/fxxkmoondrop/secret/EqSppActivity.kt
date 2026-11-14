@@ -11,7 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /** EQ（经典蓝牙 SPP 通道）测试页：读预设 / 切预设 / 读曲线 / 回写曲线 */
-class EqSppActivity : Activity() {
+class EqSppActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var logBox: LinearLayout

@@ -255,7 +255,8 @@ class OverviewFragment : Fragment() {
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         statusPanel.addView(heroRow, heroLp)
-        root.addView(statusPanel, lp(false))
+        // 当前状态英雄卡已移到侧滑抽屉（banner 下方），概览页不再显示
+        statusPanel.visibility = View.GONE
 
         root.addView(spacer(dp(16)))
 
@@ -342,25 +343,33 @@ class OverviewFragment : Fragment() {
             val icon = ImageView(requireContext())
             icon.tag = "fxxk_main_icon"
             icon.isClickable = false          // 触摸交给底下的按钮，图标只负责画
-            icon.setImageDrawable(buildMainModeIcon(fm, dp(28), onContainerColor))
-            holder.addView(icon, android.widget.FrameLayout.LayoutParams(
-                    dp(28), dp(28), Gravity.CENTER))
-            ancBtns!![fm] = holder
-            if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
-            if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
-            ancCols!![fm] = col         // 3.2.20: 统一显隐用
-            // 官方 Icon Button M 档：容器 56dp（图标 28dp + 四周 14dp），触摸区天然 56dp ≥ 48dp
-            val sz = dp(56)
-            col.addView(holder, LinearLayout.LayoutParams(sz, sz))
-            col.addView(spacer(dp(2)))
+            icon.setImageDrawable(buildMainModeIcon(fm, dp(18), onContainerColor))
+            // Expressive：档位做成「图标 + 文字」的胶囊，而不是圆钮加一行游离标签
+            val inner = LinearLayout(requireContext())
+            inner.orientation = LinearLayout.HORIZONTAL
+            inner.gravity = Gravity.CENTER
+            inner.isClickable = false
+            inner.addView(icon, LinearLayout.LayoutParams(dp(18), dp(18)))
             val lbl = TextView(requireContext())
             lbl.text = AncProfileLib.modeNamesFull(requireContext())[fm]
             lbl.textSize = 12f
             lbl.gravity = Gravity.CENTER
             lbl.isSingleLine = true
+            lbl.isClickable = false
             lbl.setTextColor(onContainerColor)
             ancLabels!![fm] = lbl
-            col.addView(lbl, LinearLayout.LayoutParams(-1, -2))
+            val llp = LinearLayout.LayoutParams(-2, -2)
+            llp.marginStart = dp(5)
+            inner.addView(lbl, llp)
+            holder.addView(inner, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            ancBtns!![fm] = holder
+            if (fm == 3) ancWindCol = col // alpha2.26.2: 记录抗风列用于按需隐藏
+            if (fm == 4) ancAdaptCol = col // 3.0.5: 记录自适应列用于按能力隐藏
+            ancCols!![fm] = col         // 3.2.20: 统一显隐用
+            // 胶囊档位：撑满所在列（高 56dp，圆角由按钮自身形状给足），触摸区 ≥ 48dp
+            val clp2 = LinearLayout.LayoutParams(-1, dp(56))
+            clp2.leftMargin = dp(3); clp2.rightMargin = dp(3)
+            col.addView(holder, clp2)
             ancRow.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         }
         ancBtnRow = ancRow
@@ -596,6 +605,9 @@ class OverviewFragment : Fragment() {
         // alpha2.53: M3 LargeTopAppBar —— 大标题钉在上层，内容从下方穿过并随滚动收缩
         val page = M3Ui.largeHeaderPage(requireActivity(), pal0, "MoonEar")
         page.sv.addView(root)
+
+        // 菜单键由 MainActivity 统一提供（覆盖在 content 之上，所有 tab 常驻），
+        // 页面内不再各自添加，避免两个入口叠在一起。
 
         val outer = LinearLayout(requireContext())
         outer.orientation = LinearLayout.VERTICAL
@@ -1483,11 +1495,11 @@ class OverviewFragment : Fragment() {
                 mb?.isChecked = sel
                 mb?.isEnabled = ancEnabled
                 val iv = hol.findViewWithTag<View>("fxxk_main_icon") as? ImageView
-                iv?.setImageDrawable(buildMainModeIcon(i, dp(28),
+                iv?.setImageDrawable(buildMainModeIcon(i, dp(18),
                         if (sel) onPrimaryColor else onContainerColor))
                 iv?.alpha = if (ancEnabled) 1f else 0.38f
                 ancLabels?.get(i)?.let {
-                    it.setTextColor(if (sel) primaryColor else onContainerColor)
+                    it.setTextColor(if (sel) onPrimaryColor else onContainerColor)
                     it.alpha = if (ancEnabled) 1f else 0.4f
                 }
             }
@@ -1590,8 +1602,8 @@ class OverviewFragment : Fragment() {
         val row = LinearLayout(requireContext())
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
-        // M3 单行列表规范：行高 ≥56dp，水平/垂直内边距 16dp
-        row.setPadding(dp(16), dp(16), dp(16), dp(16))
+        // M3 单行列表规范：行高 56dp（垂直内边距 8dp，由 minimumHeight 撑住），水平 16dp
+        row.setPadding(dp(16), dp(8), dp(16), dp(8))
         row.minimumHeight = dp(56)
         val ic = ImageView(requireContext())
         ic.setImageResource(iconRes)
@@ -1605,12 +1617,19 @@ class OverviewFragment : Fragment() {
         t.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         t.setTextColor(onSurfaceColor)
         row.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
+        // 值用胶囊 chip 承载（Expressive 的信息呈现方式），比裸文字更符合规范
         val valTv = TextView(requireContext())
-        valTv.textSize = 14f
+        valTv.textSize = 13f
         valTv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        valTv.setTextColor(onVariantColor)
-        valTv.gravity = Gravity.END
+        val p0 = ThemeUtil.Palette(requireContext())
+        valTv.setTextColor(p0.onSecondaryContainer)
+        valTv.gravity = Gravity.CENTER
         valTv.isSingleLine = true
+        valTv.setPadding(dp(10), dp(4), dp(10), dp(4))
+        val chipBg = GradientDrawable()
+        chipBg.cornerRadius = dp(14).toFloat()
+        chipBg.setColor(p0.secondaryContainer)
+        valTv.background = chipBg
         row.addView(valTv, LinearLayout.LayoutParams(-2, -2))
         when (which) {
             0 -> gaiaStateVal = valTv

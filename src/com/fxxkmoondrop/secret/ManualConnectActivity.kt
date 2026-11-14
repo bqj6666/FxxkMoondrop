@@ -17,7 +17,7 @@ import android.widget.TextView
  * 为什么单独一页：连接是个**有过程**的操作（发起 → BLE 链路 → GAIA 服务发现），
  * 弹窗里只能给一句 toast，失败了也不知道断在哪一步。这里把每一步都摆出来。
  */
-class ManualConnectActivity : Activity() {
+class ManualConnectActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var statusBox: LinearLayout

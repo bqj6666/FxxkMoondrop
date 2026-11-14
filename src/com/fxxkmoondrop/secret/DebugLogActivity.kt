@@ -21,7 +21,7 @@ import android.widget.TextView
  *
  * 未打开调试模式时，界面入口不显示，本页也会直接退出——避免普通用户误入。
  */
-class DebugLogActivity : Activity() {
+class DebugLogActivity : BaseActivity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var pal: ThemeUtil.Palette

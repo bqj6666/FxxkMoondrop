@@ -21,7 +21,7 @@ import java.util.Locale
  * 手动连接是有过程的操作，这里按 logcat 的样子逐步打印（时间 / 级别 / 内容），
  * 每一步都来自真实状态（isConnected / isGaiaReady），失败也给出可判断的原因。
  */
-class ConnectLogActivity : Activity() {
+class ConnectLogActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_NAME = "name"

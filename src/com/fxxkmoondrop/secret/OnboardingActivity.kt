@@ -42,7 +42,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
  * 页面内的开关与设置页共用同一份偏好（cfg SP）与同一套副作用，改完立即生效，
  * 不存在第二套状态。不新增任何链路。
  */
-class OnboardingActivity : Activity() {
+class OnboardingActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var pager: ViewPager2
@@ -77,7 +77,7 @@ class OnboardingActivity : Activity() {
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(pal.surface)
-        root.setPadding(dp(20), statusBarH, dp(20), dp(16))
+        root.setPadding(dp(24), statusBarH, dp(24), dp(16))
 
         // 顶部只有「跳过」：第一次启动时它是唯一的提前退出入口，不放返回箭头。
         root.addView(buildTopRow(), LinearLayout.LayoutParams(-1, -2))
@@ -110,7 +110,7 @@ class OnboardingActivity : Activity() {
                 insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             else
                 insets.systemWindowInsetBottom
-            v.setPadding(dp(20), statusBarH, dp(20), dp(16) + nav)
+            v.setPadding(dp(24), statusBarH, dp(24), dp(16) + nav)
             insets
         }
         setContentView(root)

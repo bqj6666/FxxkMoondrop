@@ -130,116 +130,18 @@ class SettingsFragment : Fragment() {
 
         box.addView(M3Ui.sectionTitle(requireActivity(), pal, Lang.t("外观", "Appearance")))
 
-        // ── 外观（对齐 org.lsposed.manager：每项独立卡片 + 12dp 卡间距）──
         val appear = LinearLayout(requireContext())
         appear.orientation = LinearLayout.VERTICAL
-        // 主题模式：跟随系统 / 浅色 / 深色（3 段 pill）
-        // alpha2.52: 统一走 M3 分段控件（高 40dp / 圆角 20dp / labelLarge 14sp）
-        // alpha2.53: 对齐 org.lsposed.manager —— 主题模式改为「行 + 当前值 + 下拉菜单」
-        val modeRow = M3Ui.dropdownRow(requireActivity(), pal,
-                Lang.t("主题", "Theme"), Lang.t("选择应用的主题模式", "Choose the app theme mode"),
-                arrayOf(Lang.t("跟随系统", "System"), Lang.t("浅色", "Light"), Lang.t("深色", "Dark")),
-                ThemeUtil.themeMode(requireContext())) { mi ->
-            getSP().edit().putInt("theme_mode", mi).commit()
-            scheduleRebuild(0L)
-        }
 
-        // 3.2.13: 界面风格（Material / HyperOS）。与上方「主题」正交：
-        // 亮暗管配色，风格管控件观感。默认 MATERIAL —— 存量用户升级后
-        // 看到的界面与上一版完全一致，不会因为升级就换皮。
-        //
-        // ⛔ 3.2.13: Miuix 轨已停用（见 MiuixSurface.DISABLED）。
-        // 这块 UI 随之隐藏 —— 否则用户选了「HyperOS」界面却毫无变化，
-        // 属于「能点但没反应」的坏体验。停用期间不显示，恢复后自动回来。
-        if (!MiuixSurface.disabled) {
-        val styleRow = M3Ui.dropdownRow(requireActivity(), pal,
-                Lang.t("界面风格", "Interface style"),
-                Lang.t("选择控件观感；切换不影响上方亮暗设置", "Control appearance; independent of light/dark"),
-                arrayOf(Lang.t("Material You", "Material You"), Lang.t("HyperOS (Miuix)", "HyperOS (Miuix)")),
-                UiStyle.entries.indexOf(UiStyle.current(requireContext()))) { si ->
-            UiStyle.set(requireContext(), UiStyle.entries[si])
-            // 3.2.13: scheduleRebuild(0L) -> applyStyleSwitch()。
-            //
-            // scheduleRebuild 内部是 act.recreate()，而 recreate() 之后
-            // MainActivity.onCreate 里 `if (savedInstanceState == null) showTab(curTab)`
-            // **不会执行**（savedInstanceState 非 null），showTab 不被调用，
-            // FragmentManager 依据保存的 state 恢复**旧主题的 Fragment** ——
-            // 于是 SP 已切到 Miuix，界面却还是 Material，必须手动切一次 tab 才生效。
-            //
-            // 用户实测反馈的「要来回切换一下页面才会生效」就是这个。
-            // applyStyleSwitch() 直接 showTab(curTab)，按当前 SP 重新分派，立即生效。
-            (activity as? MainActivity)?.applyStyleSwitch()
-        }
-        appear.addView(M3Ui.groupCard(requireActivity(), pal, styleRow), LinearLayout.LayoutParams(-1, -2))
-        }
-
-        // 动态取色 / AMOLED 开关（裸行；卡片由下面的 groupCard 统一添加）
-        val swDyn = makeSwitchRow(Lang.t("动态取色", "Dynamic color"),
-                Lang.t("跟随壁纸调色，关闭时使用种子颜色", "Follow the wallpaper; use the seed color when off"), makeThemeSwitch("dynamic_color", true, Lang.t("动态取色", "Dynamic color")))
-        // alpha2.52: 副标题只说明开关作用，不反映当前状态（状态由开关自身表达）
-        val swAmoled = makeSwitchRow(Lang.t("AMOLED 纯黑", "AMOLED pure black"),
-                Lang.t("深色模式下背景使用纯黑", "Pure black background in dark mode"),
-                makeThemeSwitch("amoled", false, "AMOLED"))
-        // 3.3.1: 主题 / 动态取色 / AMOLED 归入**同一张卡片**。
-        // 对齐 LSPosed 实测结构：一组一张卡 + 组内行间细分隔线。
-
-        // 种子颜色（仅动态取色关闭时显示）：5 个官方种子色点
-        seedRow = LinearLayout(requireContext())
-        seedRow!!.orientation = LinearLayout.HORIZONTAL
-        seedRow!!.gravity = Gravity.CENTER_VERTICAL
-        // 与其它行一致的度量：水平 16dp 内边距 + 56dp 最小高度。
-        // 原实现没有任何内边距，标签顶到卡片左边缘、5 个色点溢出卡片右边缘，
-        // 表现为「卡片与内容错位」。
-        seedRow!!.setPadding(dp(16), dp(12), dp(16), dp(12))
-        seedRow!!.minimumHeight = dp(56)
-        val seedLabel = TextView(requireContext())
-        seedLabel.text = Lang.t("种子颜色", "Seed color")
-        seedLabel.textSize = 14f
-        seedLabel.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        seedLabel.setTextColor(pal.onSurface)
-        seedLabel.setPadding(0, 0, 0, 0)
-        seedRow!!.addView(seedLabel, LinearLayout.LayoutParams(0, -2, 1f))
-        val curSeed = ThemeUtil.seed(requireContext())
-        for (si in ThemeUtil.SEEDS.indices) {
-            val seedCol = ThemeUtil.SEEDS[si]
-            val dot = View(requireContext())
-            val dg = GradientDrawable()
-            dg.shape = GradientDrawable.OVAL
-            dg.setColor(seedCol)
-            if (si == curSeed) dg.setStroke(dp(3), pal.onSurface)
-            dot.background = dg
-            val dlp = LinearLayout.LayoutParams(dp(26), dp(26))
-            dlp.marginStart = dp(6)
-            dot.setOnClickListener {
-                // 选种子色 = 官方互斥：自动关闭动态取色，储存并即时重建
-                getSP().edit().putInt("seed", si).putBoolean("dynamic_color", false).commit()
-                scheduleRebuild(0L)
-            }
-            seedRow!!.addView(dot, dlp)
-        }
-        if (!ThemeUtil.dynColor(requireContext())) {
-            appear.addView(spacer(dp(12)))
-            // 动画必须作用在**卡片容器**上：MaterialCardView 按形状裁剪子视图，
-            // 对卡片内部的行走 translationY 会被裁掉，表现为卡片与内容错位。
-            val seedCard = wrapCard(seedRow!!)
-            appear.addView(seedCard, LinearLayout.LayoutParams(-1, -2))
-            // alpha2.8: 种子颜色行入场动画（fade + slide，Material emphasized）
-            seedCard.alpha = 0f
-            seedCard.translationY = dp(8).toFloat()
-            // alpha2.54: 必须捕获局部引用 —— onDestroyView 会把 seedRow 置空，
-            // 延迟回调里再解引用（seedRow!!）会抛 KotlinNullPointerException。
-            // 视图已分离时跳过动画即可，不影响正确性。
-            val seedAnim = seedCard
-            if (seedAnim != null) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    if (seedAnim.parent != null) {
-                        seedAnim.animate().alpha(1f).translationY(0f)
-                                .setDuration(Motion.MEDIUM1)
-                                .setInterpolator(Motion.enter()).start()
-                    }
-                }, 120)
-            }
-        }
+        // 3.3.2: 外观项收束成一个入口 —— 主题 / 强调色 / 色彩规范 / 调色板风格 / 界面缩放
+        // 全部搬进「主题设置」二级页（对齐 LSPosed 的结构），设置页只留一行。
+        val themeEntry = M3Ui.navRow(requireActivity(), pal,
+                R.drawable.ic_settings,
+                Lang.t("主题设置", "Theme settings"),
+                null,
+                Runnable {
+                    startActivity(android.content.Intent(requireContext(), ThemeSettingsActivity::class.java))
+                })
 
         // 语言：区域设置与主题同类 → 与 主题 / 动态取色 / AMOLED 放进**同一张卡**（同一分组）。
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
@@ -250,7 +152,7 @@ class SettingsFragment : Fragment() {
         }
         appear.addView(spacer(dp(12)))
         appear.addView(
-            M3Ui.groupCard(requireActivity(), pal, modeRow, swDyn, swAmoled, langRow),
+            M3Ui.groupCard(requireActivity(), pal, themeEntry, langRow),
             LinearLayout.LayoutParams(-1, -2),
         )
         box.addView(appear, LinearLayout.LayoutParams(-1, -2))
@@ -571,8 +473,8 @@ class SettingsFragment : Fragment() {
         // 总开关状态 = enable && auto_service，两键始终同步写入
         swAuto.isChecked = KeepAlive.enabled(requireContext())
         val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_sensors, Lang.t("后台监听", "Background monitor"),
-                Lang.t("开启后立即开始监听，启动与开机时自动恢复；连接耳机后直连 GAIA",
-                        "Start monitoring immediately; resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
+                Lang.t("启动与开机自动恢复，连接后直连 GAIA",
+                        "Resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             KeepAlive.setEnabled(requireContext(), checked)
         }
@@ -588,8 +490,8 @@ class SettingsFragment : Fragment() {
 
         val ancMapHint = TextView(requireContext())
         // alpha2.53: 文案对齐下拉交互（原来写的是「手动修改」的输入框说法）
-        ancMapHint.text = Lang.t("各降噪档位发送给耳机的设备码（0-5）；改动任意一档即优先于型号档案",
-                "Device code (0-5) each noise-control level sends; changing any level overrides the profile")
+        ancMapHint.text = Lang.t("各档位对应的设备码（0-5）",
+                "Device code (0-5) for each level")
         ancMapHint.textSize = 12f
         ancMapHint.setTextColor(pal.onVariant)
         ancMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -645,8 +547,8 @@ class SettingsFragment : Fragment() {
         swWind.isChecked = getSP().getBoolean("show_wind", true)
         val rowWind = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_air,
                 Lang.t("显示抗风噪按钮", "Show the wind-noise button"),
-                Lang.t("控制抗风档在弹窗、主界面与详情页是否出现",
-                        "Whether the wind-noise level appears in the popup, main screen and details page"),
+                Lang.t("控制抗风档的显隐",
+                        "Whether the wind-noise level is shown"),
                 swWind, null)
         swWind.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("show_wind", checked).commit()
@@ -657,8 +559,8 @@ class SettingsFragment : Fragment() {
         // ── 增益映射（alpha2.37：用户自定义增益设备码，同 ANC 映射逻辑）──
         box.addView(makeSubLabel(Lang.t("增益按钮", "Gain buttons")))
         val gainMapHint = TextView(requireContext())
-        gainMapHint.text = Lang.t("各增益档位发送给耳机的设备码（0-9）",
-                "Device code (0-9) each gain level sends")
+        gainMapHint.text = Lang.t("各档位对应的设备码（0-9）",
+                "Device code (0-9) for each level")
         gainMapHint.textSize = 12f
         gainMapHint.setTextColor(pal.onVariant)
         gainMapHint.setPadding(dp(4), 0, dp(4), dp(6))
@@ -741,8 +643,8 @@ class SettingsFragment : Fragment() {
         // ── 重置自定义映射（alpha2.37）──
         val rowReset = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_restart_alt,
                 Lang.t("重置所有自定义映射", "Reset all custom mappings"),
-                Lang.t("恢复降噪、增益与追踪标签为型号档案默认值",
-                        "Restore noise control, gain and tracking labels to the profile defaults"),
+                Lang.t("恢复型号档案默认值",
+                        "Restore the profile defaults"),
                 M3Ui.chevron(requireActivity(), pal.onVariant)) {
             view?.clearFocus()
             val editor = getSP().edit()
@@ -777,22 +679,22 @@ class SettingsFragment : Fragment() {
         // 用带多彩图标容器的行（与「检查权限」「日志抓取」同款），保持诊断区视觉一致
         val rowDebug = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
                 Lang.t("调试模式", "Debug mode"),
-                Lang.t("显示「服务探测（GATT）」与「EQ 通道（SPP）」等排查入口",
-                        "Show diagnostics-only entries such as the GATT service probe and the SPP EQ channel"),
+                Lang.t("显示排查入口（服务探测 / EQ 通道）",
+                        "Show diagnostics entries (GATT probe, SPP EQ)"),
                 swDebug, null)
         // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
         val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
                 Lang.t("服务探测（GATT）", "Service probe (GATT)"),
-                Lang.t("列出耳机的 GATT 服务，用于判断是否支持均衡器等私有协议",
-                        "Dump the earbud's GATT services to see if private protocols like the equalizer exist"),
+                Lang.t("列出耳机的 GATT 服务",
+                        "List the earbud's GATT services"),
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), ServiceProbeActivity::class.java))
         }
         // EQ 通道（经典蓝牙 SPP）：读/切预设、读/写曲线
         val rowEq = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_anc_on,
                 Lang.t("EQ 通道（SPP）", "EQ over SPP"),
-                Lang.t("读写耳机均衡器：预设切换与曲线读写",
-                        "Read/write the earbud equalizer: presets and curve"),
+                Lang.t("预设切换与曲线读写",
+                        "Preset switching and curve editing"),
                 M3Ui.chevron(requireContext(), pal.onVariant)) {
             startActivity(Intent(requireContext(), EqSppActivity::class.java))
         }
@@ -801,8 +703,8 @@ class SettingsFragment : Fragment() {
             // 调试日志：只在调试模式下出现，里面能直接看 AppLog 与相关 logcat
             val rowDebugLog = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
                     Lang.t("调试日志", "Debug log"),
-                    Lang.t("查看应用内日志与系统 logcat（定位问题用）",
-                            "Inspect in-app log and logcat for troubleshooting"),
+                    Lang.t("应用内日志与系统 logcat",
+                            "In-app log and system logcat"),
                     M3Ui.chevron(requireContext(), pal.onVariant)) {
                 startActivity(Intent(requireContext(), DebugLogActivity::class.java))
             }
@@ -869,8 +771,8 @@ class SettingsFragment : Fragment() {
         swNetUpdate.isChecked = UpdateChecker.isEnabled(requireContext())
         val rowNetUpdate = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_settings_ethernet,
                 Lang.t("联网检查更新", "Check for updates online"),
-                Lang.t("查询 GitHub 公开接口以获知新版本",
-                        "Query GitHub's public API for new versions"),
+                Lang.t("查询 GitHub 上的新版本",
+                        "Check GitHub for new versions"),
                 swNetUpdate, null)
 
         // 「更新通道」只在联网开启时存在。
@@ -879,8 +781,8 @@ class SettingsFragment : Fragment() {
         val chIdx = if (UpdateChecker.channel(requireContext()) == UpdateChecker.Channel.PRERELEASE) 1 else 0
         val rowChannel = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("更新通道", "Update channel"),
-                Lang.t("预发布为每次提交自动构建，可能含未验证改动",
-                        "Pre-release builds come from every commit and may contain unverified changes"),
+                Lang.t("预发布可能包含未验证改动",
+                        "Pre-releases may contain unverified changes"),
                 arrayOf(Lang.t("正式版", "Stable"), Lang.t("预发布", "Pre-release")),
                 chIdx) { mi ->
             UpdateChecker.setChannel(requireContext(),
@@ -888,7 +790,29 @@ class SettingsFragment : Fragment() {
         }
         // 「联网检查更新」与「更新通道」是同一组（一张卡两行，中间 1dp 细缝），
         // 之前各建一张卡、中间还垫了 12dp spacer，看着像两个互不相干的设置。
-        val updCard = M3Ui.groupCard(requireActivity(), pal, rowNetUpdate, rowChannel)
+        // 自动检查与频率：只在联网开启时出现（默认每天一次，仅打开应用时检查）
+        val updSp = requireContext().getSharedPreferences("cfg", 0)
+        val swAutoUpdate = makeTintedSwitch()
+        swAutoUpdate.isChecked = updSp.getBoolean("update_auto", true)
+        val rowAutoUpdate = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_refresh,
+                Lang.t("自动检查更新", "Auto check"),
+                Lang.t("仅打开应用时检查，不常驻后台", "Only when the app opens"),
+                swAutoUpdate, null)
+
+        val days = updSp.getInt("update_interval_days", 1)
+        val freqIdx = when (days) { 3 -> 1; 7 -> 2; else -> 0 }
+        val rowFreq = M3Ui.dropdownRow(requireActivity(), pal,
+                Lang.t("检查频率", "Check frequency"),
+                null,
+                arrayOf(Lang.t("每天", "Daily"), Lang.t("每 3 天", "Every 3 days"),
+                        Lang.t("每周", "Weekly")),
+                freqIdx) { mi ->
+            val d = when (mi) { 1 -> 3; 2 -> 7; else -> 1 }
+            updSp.edit().putInt("update_interval_days", d).apply()
+        }
+
+        val updCard = M3Ui.groupCard(requireActivity(), pal,
+                rowNetUpdate, rowChannel, rowAutoUpdate, rowFreq)
         val updInner = updCard.getChildAt(0) as? LinearLayout
         // groupCard 内部结构：[行0, 细缝, 行1]；通道行隐藏时那条 1dp 细缝也得一起藏
         val updGap = updInner?.getChildAt(1)

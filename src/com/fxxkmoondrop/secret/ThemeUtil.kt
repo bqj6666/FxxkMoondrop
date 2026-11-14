@@ -141,6 +141,9 @@ class ThemeUtil {
         @JvmField val onPrimary: Int
         @JvmField val container: Int
         @JvmField val onContainer: Int
+        /** M3 secondaryContainer：导航抽屉选中 pill、筛选 chip 等"次级选中"角色的规范用色。 */
+        @JvmField val secondaryContainer: Int
+        @JvmField val onSecondaryContainer: Int
         @JvmField val surface: Int
         @JvmField val card: Int
         /** 卡片描边色；0 表示不描边（仅 AMOLED 下启用，用于区分同为纯黑的层级） */
@@ -164,10 +167,31 @@ class ThemeUtil {
             val onPrim: Int
             var cont: Int
             var onCont: Int
+            var secCont: Int
+            var onSecCont: Int
             val surf: Int
             val cardC: Int
 
-            if (dynColor(c)) {
+            // 配色统一走 HCT：从 seed/壁纸色按 M3 规范的 tone 生成完整角色
+            // （浅色 primary=40 / container=90 / surface=98；深色 80/30/6…）。
+            // 具体 tone 表由「色彩规范」决定：Material 3 (2021) 或 Expressive (2025)。
+            // 失败时（roles 返回 null）再退回下面的动态色 / 经典近似分支。
+            val m3: Map<String, Int>? = runCatching {
+                val raw = if (dynColor(c)) dyn(c, "system_accent1_500", seedColor(c)) else seedColor(c)
+                M3Scheme.roles(raw, M3SchemeVariant.current(c), dark, ColorSpec.current(c))
+            }.getOrNull()
+
+            if (m3 != null) {
+                prim = m3.getValue("primary")
+                onPrim = m3.getValue("onPrimary")
+                cont = m3.getValue("primaryContainer")
+                onCont = m3.getValue("onPrimaryContainer")
+                surf = if (on) android.graphics.Color.BLACK else m3.getValue("surface")
+                cardC = if (on) c.getColor(R.color.m3_amoled_card) else m3.getValue("surfaceContainer")
+                onSurface = m3.getValue("onSurface")
+                secCont = m3.getValue("secondaryContainer")
+                onSecCont = m3.getValue("onSecondaryContainer")
+            } else if (dynColor(c)) {
                 prim = dyn(c, "system_accent1_400", themedColor(c, dark, R.color.m3_primary))
                 // 浅色下 primary 是深色，文字必须用白；深色下 primary 是浅色，文字用深色
                 onPrim = dyn(c, "system_accent1_900", themedColor(c, dark, R.color.m3_on_primary))
@@ -192,6 +216,10 @@ class ThemeUtil {
                 else dyn(c, if (dark) "system_neutral1_800" else "system_neutral1_10",
                         themedColor(c, dark, R.color.m3_surface_container))
                 onSurface = dyn(c, if (dark) "system_neutral1_100" else "system_neutral1_900", themedColor(c, dark, R.color.m3_on_surface))
+                secCont = dyn(c, if (dark) "system_accent1_800" else "system_accent1_50",
+                        themedColor(c, dark, R.color.m3_primary_container))
+                onSecCont = dyn(c, if (dark) "system_accent1_50" else "system_accent1_900",
+                        themedColor(c, dark, R.color.m3_on_primary_container))
             } else {
                 // 种子色生成（官方 LSPosed seed 近似调色）
                 val seed = seedColor(c)
@@ -202,15 +230,22 @@ class ThemeUtil {
                 surf = if (on) android.graphics.Color.BLACK else themedColor(c, dark, R.color.m3_surface)
                 cardC = if (on) c.getColor(R.color.m3_amoled_card) else themedColor(c, dark, R.color.m3_surface_container)
                 onSurface = themedColor(c, dark, R.color.m3_on_surface)
+                secCont = themedColor(c, dark, R.color.m3_primary_container)
+                onSecCont = themedColor(c, dark, R.color.m3_on_primary_container)
             }
 
             // 次级文字 / 描边也全部走动态中性调色板（M3 onSurfaceVariant=tone30、outline=tone50、
             // outlineVariant=tone80；深色反向取亮几档）。原先这三格是写死的紫调字面量，
             // 动态取色下整页是壁纸色、只有描边还是基线紫，层级看着发脏。
-            onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
-                    themedColor(c, dark, R.color.m3_on_surface_variant))
-            outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
-                    themedColor(c, dark, R.color.m3_outline))
+            if (m3 != null) {
+                onVariant = m3.getValue("onSurfaceVariant")
+                outline = m3.getValue("outline")
+            } else {
+                onVariant = dyn(c, if (dark) "system_neutral1_200" else "system_neutral1_700",
+                        themedColor(c, dark, R.color.m3_on_surface_variant))
+                outline = dyn(c, if (dark) "system_neutral1_400" else "system_neutral1_500",
+                        themedColor(c, dark, R.color.m3_outline))
+            }
             green = themedColor(c, dark, R.color.m3_green)
             red = themedColor(c, dark, R.color.m3_red)
 
@@ -233,7 +268,8 @@ class ThemeUtil {
             //
             // AMOLED 纯黑下同样保留：卡片 #101010 与纯黑背景几乎同色，
             // 没有描边就彻底分不出层级。
-            cardStroke = dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
+            cardStroke = if (m3 != null) m3.getValue("outlineVariant")
+            else dyn(c, if (dark) "system_neutral1_700" else "system_neutral1_200",
                     themedColor(c, dark, R.color.m3_outline_variant))
             // 卡片间/行间分隔线沿用 outline 淡线（LSPosed 用间距分隔，仅在合并卡内保留细线）
             divider = ((outline and 0x00FFFFFF) or 0x2E000000.toInt())
@@ -247,6 +283,8 @@ class ThemeUtil {
             onPrimary = onPrim
             container = cont
             onContainer = onCont
+            secondaryContainer = secCont
+            onSecondaryContainer = onSecCont
             surface = surf
             card = cardC
         }

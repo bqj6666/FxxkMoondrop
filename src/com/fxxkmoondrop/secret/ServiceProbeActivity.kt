@@ -25,7 +25,7 @@ import android.widget.TextView
  * 用途：判断某型号到底有没有 9ECA（均衡器私有协议）或其它厂商服务，
  * 从而决定均衡器入口该不该出现、以及该走哪条协议。
  */
-class ServiceProbeActivity : Activity() {
+class ServiceProbeActivity : BaseActivity() {
 
     private lateinit var pal: ThemeUtil.Palette
     private lateinit var box: LinearLayout
