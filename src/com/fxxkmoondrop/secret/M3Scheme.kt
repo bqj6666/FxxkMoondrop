@@ -92,6 +92,8 @@ object M3Scheme {
         "onPrimaryContainer" -> if (dark) 90.0 else 10.0
         "secondary" -> if (dark) 80.0 else 40.0
         "tertiary" -> if (dark) 80.0 else 40.0
+        "secondaryContainer" -> if (dark) 30.0 else 90.0
+        "onSecondaryContainer" -> if (dark) 90.0 else 10.0
         "surface" -> if (dark) 6.0 else 98.0
         "surfaceContainer" -> if (dark) 12.0 else 94.0
         "onSurface" -> if (dark) 90.0 else 10.0
@@ -121,7 +123,7 @@ object M3Scheme {
             val t = toneOf(role, dark, spec)
             return when (role) {
                 "onSurfaceVariant", "outline", "outlineVariant" -> neutralVariant(t)
-                "secondary" -> secondary(t)
+                "secondary", "secondaryContainer", "onSecondaryContainer" -> secondary(t)
                 "tertiary" -> tertiary(t)
                 "surface", "surfaceContainer", "onSurface" -> neutral(t)
                 else -> primary(t)
@@ -133,6 +135,8 @@ object M3Scheme {
                 "primaryContainer" to r("primaryContainer"),
                 "onPrimaryContainer" to r("onPrimaryContainer"),
                 "secondary" to r("secondary"),
+                "secondaryContainer" to r("secondaryContainer"),
+                "onSecondaryContainer" to r("onSecondaryContainer"),
                 "tertiary" to r("tertiary"),
                 "surface" to r("surface"),
                 "surfaceContainer" to r("surfaceContainer"),

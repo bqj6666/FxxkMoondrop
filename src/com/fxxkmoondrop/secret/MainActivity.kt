@@ -414,7 +414,12 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         drawerRows.clear()
         val panel = LinearLayout(this)
         panel.orientation = LinearLayout.VERTICAL
-        panel.setBackgroundColor(pal.surface)
+        // Expressive modal drawer：面板右缘 16dp 圆角（左缘贴屏幕边不加圆角）
+        val panelBg = android.graphics.drawable.GradientDrawable()
+        panelBg.setColor(pal.surface)
+        val cr = px(16).toFloat()
+        panelBg.cornerRadii = floatArrayOf(0f, 0f, cr, cr, cr, cr, 0f, 0f)
+        panel.background = panelBg
         panel.fitsSystemWindows = true
         panel.setPadding(0, px(12), 0, px(12))
 
@@ -447,13 +452,13 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
             val ic = android.widget.ImageView(this)
             ic.setImageResource(icon)
             ic.imageTintList = android.content.res.ColorStateList.valueOf(
-                    if (selected) pal.onContainer else pal.onVariant)
+                    if (selected) pal.onSecondaryContainer else pal.onVariant)
             row.addView(ic, LinearLayout.LayoutParams(px(24), px(24)))
             val tv = TextView(this)
             tv.text = label
             tv.textSize = 14f
             tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-            tv.setTextColor(if (selected) pal.onContainer else pal.onSurface)
+            tv.setTextColor(if (selected) pal.onSecondaryContainer else pal.onSurface)
             val lp = LinearLayout.LayoutParams(0, -2, 1f)
             lp.marginStart = px(12)
             row.addView(tv, lp)
@@ -498,7 +503,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         val r = 28 * d
         val shape = android.graphics.drawable.GradientDrawable()
         shape.cornerRadius = r
-        shape.setColor(if (selected) pal.container else android.graphics.Color.TRANSPARENT)
+        shape.setColor(if (selected) pal.secondaryContainer else android.graphics.Color.TRANSPARENT)
         val mask = android.graphics.drawable.GradientDrawable()
         mask.cornerRadius = r
         mask.setColor(android.graphics.Color.WHITE)
@@ -518,9 +523,9 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
             row.background = drawerRowBg(p, sel)
             (row.getChildAt(0) as? android.widget.ImageView)?.imageTintList =
                     android.content.res.ColorStateList.valueOf(
-                            if (sel) p.onContainer else p.onVariant)
+                            if (sel) p.onSecondaryContainer else p.onVariant)
             (row.getChildAt(1) as? TextView)?.setTextColor(
-                    if (sel) p.onContainer else p.onSurface)
+                    if (sel) p.onSecondaryContainer else p.onSurface)
         }
     }
 

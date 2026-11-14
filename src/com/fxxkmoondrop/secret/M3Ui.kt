@@ -97,7 +97,9 @@ class M3Ui {
          */
         class CollapseHeader(val view: android.widget.FrameLayout, private val title: TextView,
                              private val mini: TextView,
-                             private val expandedPx: Int, private val collapsedPx: Int) {
+                             private val expandedPx: Int, private val collapsedPx: Int,
+                             private val leftExpandedPx: Int = 0,
+                             private val leftCollapsedPx: Int = 0) {
             private var lastT = -1f
 
             /** t: 0 = 完全展开，1 = 完全收起 */
@@ -116,6 +118,18 @@ class M3Ui {
                 mini.alpha = ((t - 0.55f) / 0.45f).coerceIn(0f, 1f)
                 val sp = HEADER_EXPANDED_SP + (HEADER_COLLAPSED_SP - HEADER_EXPANDED_SP) * t
                 title.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                // 展开态标题与内容左边缘对齐（16dp）；收起过程中平移到 68dp，
+                // 正好让开左上角常驻的 48dp 菜单键。
+                if (leftCollapsedPx > 0) {
+                    val lpTitle = title.layoutParams as? android.widget.FrameLayout.LayoutParams
+                    if (lpTitle != null) {
+                        val want = (leftExpandedPx + (leftCollapsedPx - leftExpandedPx) * t).toInt()
+                        if (lpTitle.leftMargin != want) {
+                            lpTitle.leftMargin = want
+                            title.layoutParams = lpTitle
+                        }
+                    }
+                }
             }
 
             fun onScroll(scrollY: Int) {
@@ -257,7 +271,7 @@ class M3Ui {
             big.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, HEADER_EXPANDED_SP)
             val blp = android.widget.FrameLayout.LayoutParams(-1, -2)
             blp.gravity = Gravity.BOTTOM
-            blp.leftMargin = padL
+            blp.leftMargin = dp(act, 16)
             blp.rightMargin = dp(act, 16)
             blp.bottomMargin = dp(act, 16)
             bar.addView(big, blp)
@@ -283,7 +297,8 @@ class M3Ui {
             val lp = LinearLayout.LayoutParams(-1, heightPx)
             bar.layoutParams = lp
             return CollapseHeader(bar, big, mini,
-                    dp(act, HEADER_EXPANDED_DP), dp(act, HEADER_COLLAPSED_DP))
+                    dp(act, HEADER_EXPANDED_DP), dp(act, HEADER_COLLAPSED_DP),
+                    dp(act, 16), padL)
         }
 
         @JvmStatic
