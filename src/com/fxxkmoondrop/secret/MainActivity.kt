@@ -582,7 +582,10 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         else androidx.drawerlayout.widget.DrawerLayout.LOCK_MODE_UNLOCKED)
         floatNav?.let { contentHost?.removeView(it) }
         floatNav = null
-        if (!floating) return
+        if (!floating) {
+            M3Ui.pageScrollHook = null
+            return
+        }
         val bar = buildFloatingNav(pal)
         floatNav = bar
         val lp = android.widget.FrameLayout.LayoutParams(-2, -2)
@@ -687,22 +690,23 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
     private var navHidden = false
 
     private fun bindScrollToNav() {
-        if (navMode() != 1) return
-        contentHost?.post {
-            val sv = contentHost?.findViewById<android.widget.ScrollView>(R.id.m3_page_scroll)
-                    ?: return@post
-            lastScrollY = sv.scrollY
-            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
-                val dy = sy - lastScrollY
-                if (dy > 6 && !navHidden) {
-                    navHidden = true
-                    hideShowNav(false)
-                } else if (dy < -6 && navHidden) {
-                    navHidden = false
-                    hideShowNav(true)
-                }
-                lastScrollY = sy
+        if (navMode() != 1) {
+            M3Ui.pageScrollHook = null
+            return
+        }
+        // 用 M3Ui 的钩子接收滚动：自己 setOnScrollChangeListener 会顶掉大标题的收缩动画
+        lastScrollY = -1
+        M3Ui.pageScrollHook = { sy ->
+            if (lastScrollY < 0) lastScrollY = sy
+            val dy = sy - lastScrollY
+            if (dy > 6 && !navHidden) {
+                navHidden = true
+                hideShowNav(false)
+            } else if (dy < -6 && navHidden) {
+                navHidden = false
+                hideShowNav(true)
             }
+            lastScrollY = sy
         }
     }
 
@@ -768,7 +772,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                                    else (idx - 1).coerceAtLeast(0)
                         if (next != idx) {
                             showTab(order[next])
-                            paintFloatingSelection(palRef ?: ThemeUtil.Palette(this))
+                            animateFloatingSelection(palRef ?: ThemeUtil.Palette(this))
                         }
                     }
                 } else if (d != null && pn != null && !d.isDrawerOpen(pn)) {
