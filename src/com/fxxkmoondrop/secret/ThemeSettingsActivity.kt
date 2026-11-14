@@ -109,11 +109,22 @@ class ThemeSettingsActivity : BaseActivity() {
             // 只写偏好：主页在 onResume 检测到变化后自己重建，不把用户弹回去
         }
         val scale = UiStyle.clampScale(sp().getFloat("ui_scale", 1f))
+        // 标题行：左侧说明这是哪一项，右侧显示当前百分比（此前只有一句「当前 100%」，没有项名）
+        val titleRow = LinearLayout(this)
+        titleRow.orientation = LinearLayout.HORIZONTAL
+        titleRow.gravity = Gravity.CENTER_VERTICAL
+        titleRow.setPadding(dp(16), dp(12), dp(16), dp(4))
+        val lbl = TextView(this)
+        lbl.text = Lang.t("界面缩放", "UI scale")
+        lbl.textSize = 16f
+        lbl.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        lbl.setTextColor(pal.onSurface)
+        titleRow.addView(lbl, LinearLayout.LayoutParams(0, -2, 1f))
         val txt = TextView(this)
-        txt.text = Lang.t("当前 ", "Current ") + (scale * 100).toInt() + "%"
+        txt.text = (scale * 100).toInt().toString() + "%"
         txt.textSize = 14f
-        txt.setTextColor(pal.onSurface)
-        txt.setPadding(dp(16), dp(12), dp(16), dp(4))
+        txt.setTextColor(pal.onVariant)
+        titleRow.addView(txt, LinearLayout.LayoutParams(-2, -2))
         val slider = com.google.android.material.slider.Slider(this)
         slider.valueFrom = 0.8f
         slider.valueTo = 1.2f
@@ -123,11 +134,11 @@ class ThemeSettingsActivity : BaseActivity() {
         slider.addOnChangeListener { _, v, fromUser ->
             if (!fromUser) return@addOnChangeListener
             sp().edit().putFloat("ui_scale", v).commit()
-            txt.text = Lang.t("当前 ", "Current ") + (v * 100).toInt() + "%"
+            txt.text = (v * 100).toInt().toString() + "%"
         }
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        wrap.addView(txt, LinearLayout.LayoutParams(-1, -2))
+        wrap.addView(titleRow, LinearLayout.LayoutParams(-1, -2))
         wrap.addView(slider, LinearLayout.LayoutParams(-1, -2).also {
             it.leftMargin = dp(12); it.rightMargin = dp(12); it.bottomMargin = dp(8)
         })
