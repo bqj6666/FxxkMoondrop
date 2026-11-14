@@ -255,8 +255,14 @@ class OverviewFragment : Fragment() {
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         statusPanel.addView(heroRow, heroLp)
-        // 当前状态英雄卡已移到侧滑抽屉（banner 下方），概览页不再显示
-        statusPanel.visibility = View.GONE
+        // 抽屉模式下英雄卡在抽屉里（banner 下方），概览页不重复显示；
+        // 悬浮导航栏模式没有抽屉，英雄卡回到概览页顶部。
+        val floatingNav = requireContext().getSharedPreferences("cfg", 0).getInt("nav_mode", 1) == 1
+        if (floatingNav) {
+            // 必须真正 addView 进布局：早先那版把 addView 改成只设 visibility，
+            // 视图从未进入视图树，所以即使设为 VISIBLE 也看不到。
+            root.addView(statusPanel, lp(false))
+        }
 
         root.addView(spacer(dp(16)))
 

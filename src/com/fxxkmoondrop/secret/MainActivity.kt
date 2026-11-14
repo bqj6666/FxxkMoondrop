@@ -139,6 +139,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         mlp.topMargin = sbhPx + (4 * resources.displayMetrics.density).toInt()
         mlp.leftMargin = (4 * resources.displayMetrics.density).toInt()
         contentWrap.addView(menuBtn, mlp)
+        contentHost = contentWrap
+        menuButton = menuBtn
         root.addView(contentWrap, LinearLayout.LayoutParams(-1, 0, 1f))
         navBar = M3Ui.navBar(this, pal, curTab) { showTab(it) }
         // 3.3.x: 底部导航栏移除 —— 导航统一走侧滑菜单（M3 抽屉式导航）。
@@ -167,6 +169,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         palRef = pal
         installBackHandler()
         maybeAutoCheckUpdate()
+        appliedNavMode = navMode()
+        applyNavMode(pal)
 
         // 系统手势导航把左边缘划动占为「返回」，DrawerLayout 收不到边缘滑动。
         // 用官方 systemGestureExclusionRects 把左侧 40dp 让给应用，抽屉边缘手势才生效。
@@ -218,6 +222,12 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
 
     override fun onResume() {
         super.onResume()
+        // 导航方式在主题设置里改过：回到主页自己重建，不打断用户
+        if (appliedNavMode >= 0 && navMode() != appliedNavMode) {
+            appliedNavMode = navMode()
+            recreate()
+            return
+        }
         // 从「主题设置」回来时若缩放改过，重建一次让新 density 生效
         val cur = try {
             getSharedPreferences("cfg", MODE_PRIVATE).getFloat("ui_scale", 1f)
@@ -560,7 +570,168 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         }
     }
 
+    // ── 导航方式：抽屉 / 悬浮导航栏 ──────────────────────────────
+    // nav_mode = 0 抽屉（默认），1 悬浮胶囊导航栏；二选一在设置页「外观」里切换。
+    private var contentHost: android.widget.FrameLayout? = null
+    private var menuButton: View? = null
+    private var floatNav: View? = null
+    private var floatNavRow: LinearLayout? = null
+    private var floatNavCells: MutableList<NavCell>? = null
+
+    private fun navMode(): Int = getSharedPreferences("cfg", MODE_PRIVATE).getInt("nav_mode", 1)
+
+    /** 本实例已应用的导航方式：主题设置里改了之后，回到主页时自动重建。 */
+    private var appliedNavMode = -1
+
+    /** 按当前导航方式切换：抽屉模式下显示菜单键并解锁抽屉，悬浮模式下反之。 */
+    private fun applyNavMode(pal: ThemeUtil.Palette) {
+        val floating = navMode() == 1
+        menuButton?.visibility = if (floating) View.GONE else View.VISIBLE
+        drawerRef?.setDrawerLockMode(if (floating)
+            androidx.drawerlayout.widget.DrawerLayout.LOCK_MODE_LOCKED_CLOSED
+        else androidx.drawerlayout.widget.DrawerLayout.LOCK_MODE_UNLOCKED)
+        floatNav?.let { contentHost?.removeView(it) }
+        floatNav = null
+        if (!floating) {
+            M3Ui.pageScrollHook = null
+            return
+        }
+        val bar = buildFloatingNav(pal)
+        floatNav = bar
+        val lp = android.widget.FrameLayout.LayoutParams(-2, -2)
+        lp.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
+        lp.bottomMargin = (24 * resources.displayMetrics.density).toInt()
+        contentHost?.addView(bar, lp)
+        navHidden = false
+        bindScrollToNav()
+    }
+
+    private class NavCell(val tab: Int, val cell: LinearLayout,
+                          val icon: android.widget.ImageView, val label: TextView)
+
+    /** 悬浮胶囊导航栏：三个入口，选中项展开名字（ChangeBounds + Fade 过渡）。 */
+    private fun buildFloatingNav(pal: ThemeUtil.Palette): View {
+        val d = resources.displayMetrics.density
+        fun p2(v: Int) = (v * d).toInt()
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = android.view.Gravity.CENTER
+        row.setPadding(p2(8), p2(8), p2(8), p2(8))
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.cornerRadius = p2(28).toFloat()
+        bg.setColor(pal.card)
+        row.background = bg
+
+        val cells = ArrayList<NavCell>()
+        floatNavRow = row
+        floatNavCells = cells
+
+        fun addItem(tab: Int, iconRes: Int, labelText: String) {
+            val cell = LinearLayout(this)
+            cell.orientation = LinearLayout.HORIZONTAL
+            cell.gravity = android.view.Gravity.CENTER
+            cell.setPadding(p2(14), 0, p2(14), 0)
+            val cellBg = android.graphics.drawable.GradientDrawable()
+            cellBg.cornerRadius = p2(20).toFloat()
+            cell.background = cellBg
+            val ic = android.widget.ImageView(this)
+            ic.setImageResource(iconRes)
+            cell.addView(ic, LinearLayout.LayoutParams(p2(24), p2(24)))
+            val tv = TextView(this)
+            tv.text = labelText
+            tv.textSize = 13f
+            tv.isSingleLine = true
+            tv.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            val tlp = LinearLayout.LayoutParams(-2, -2)
+            tlp.marginStart = p2(6)
+            cell.addView(tv, tlp)
+            cell.contentDescription = labelText
+            cell.setOnClickListener {
+                if (navMode() == 1 && curTab != tab) {
+                    showTab(tab)
+                    animateFloatingSelection(pal)
+                }
+            }
+            val clp = LinearLayout.LayoutParams(-2, p2(48))
+            clp.leftMargin = p2(2)
+            clp.rightMargin = p2(2)
+            row.addView(cell, clp)
+            cells.add(NavCell(tab, cell, ic, tv))
+        }
+
+        addItem(1, R.drawable.ic_home, Lang.t("概览", "Overview"))
+        addItem(2, R.drawable.ic_settings, Lang.t("设置", "Settings"))
+        addItem(3, R.drawable.ic_info, Lang.t("关于", "About"))
+
+        paintFloatingSelection(pal)
+        return row
+    }
+
+    /** 选中态切换：整条底栏走 ChangeBounds + Fade，胶囊平滑展开、名字淡入。 */
+    private fun animateFloatingSelection(pal: ThemeUtil.Palette) {
+        val row = floatNavRow ?: return
+        android.transition.TransitionManager.beginDelayedTransition(row,
+                android.transition.TransitionSet().apply {
+                    addTransition(android.transition.ChangeBounds())
+                    addTransition(android.transition.Fade())
+                    duration = Motion.MEDIUM1
+                    interpolator = Motion.enter()
+                })
+        paintFloatingSelection(pal)
+    }
+
+    /** 直接刷新选中态（无水波动画，用于首次构建）。 */
+    private fun paintFloatingSelection(pal: ThemeUtil.Palette) {
+        val cells = floatNavCells ?: return
+        for (c in cells) {
+            val sel = c.tab == curTab
+            (c.cell.background as? android.graphics.drawable.GradientDrawable)
+                    ?.setColor(if (sel) pal.secondaryContainer else android.graphics.Color.TRANSPARENT)
+            c.icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                    if (sel) pal.onSecondaryContainer else pal.onVariant)
+            c.label.visibility = if (sel) View.VISIBLE else View.GONE
+            c.label.setTextColor(pal.onSecondaryContainer)
+        }
+    }
+
+    /** 内容滚动时收起/展开悬浮导航栏（下滑收起、上滑出现）。 */
+    private var lastScrollY = 0
+    private var navHidden = false
+
+    private fun bindScrollToNav() {
+        if (navMode() != 1) {
+            M3Ui.pageScrollHook = null
+            return
+        }
+        // 用 M3Ui 的钩子接收滚动：自己 setOnScrollChangeListener 会顶掉大标题的收缩动画
+        lastScrollY = -1
+        M3Ui.pageScrollHook = { sy ->
+            if (lastScrollY < 0) lastScrollY = sy
+            val dy = sy - lastScrollY
+            if (dy > 6 && !navHidden) {
+                navHidden = true
+                hideShowNav(false)
+            } else if (dy < -6 && navHidden) {
+                navHidden = false
+                hideShowNav(true)
+            }
+            lastScrollY = sy
+        }
+    }
+
+    private fun hideShowNav(show: Boolean) {
+        val v = floatNav ?: return
+        v.animate().cancel()
+        val dy = if (show) 0f else v.height.toFloat() + 32f
+        v.animate().translationY(dy)
+                .alpha(if (show) 1f else 0f)
+                .setDuration(if (show) Motion.MEDIUM1 else Motion.SHORT4)
+                .setInterpolator(if (show) Motion.enter() else Motion.exit())
+                .start()
+    }
+
     /** 左边缘手势排除：DrawerLayout 的边缘滑动要能用，必须让系统返回手势让位。 */
+
     private fun applyGestureExclusion() {
         if (Build.VERSION.SDK_INT < 29) return
         val dv = window?.decorView ?: return
@@ -595,10 +766,25 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
                 swipeArmed = true
             }
             android.view.MotionEvent.ACTION_MOVE -> {
-                if (swipeArmed && d != null && pn != null && !d.isDrawerOpen(pn)) {
-                    val dx = ev.rawX - swipeDownX
-                    val dy = ev.rawY - swipeDownY
-                    val threshold = 64 * resources.displayMetrics.density
+                if (!swipeArmed) return super.dispatchTouchEvent(ev)
+                val dx = ev.rawX - swipeDownX
+                val dy = ev.rawY - swipeDownY
+                if (Math.abs(dy) > Math.abs(dx)) return super.dispatchTouchEvent(ev)
+                val threshold = 72 * resources.displayMetrics.density
+                if (navMode() == 1) {
+                    // 悬浮导航栏模式：左右滑切页，顺序与底栏一致（概览 1 / 设置 2 / 关于 3）
+                    if (Math.abs(dx) > threshold) {
+                        swipeArmed = false
+                        val order = intArrayOf(1, 2, 3)
+                        val idx = order.indexOf(curTab).coerceAtLeast(0)
+                        val next = if (dx < 0) (idx + 1).coerceAtMost(order.size - 1)
+                                   else (idx - 1).coerceAtLeast(0)
+                        if (next != idx) {
+                            showTab(order[next])
+                            animateFloatingSelection(palRef ?: ThemeUtil.Palette(this))
+                        }
+                    }
+                } else if (d != null && pn != null && !d.isDrawerOpen(pn)) {
                     if (dx > threshold && dx > 2 * Math.abs(dy)) {
                         swipeArmed = false
                         openDrawer()
@@ -660,6 +846,7 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
         ft.setCustomAnimations(R.anim.m3_page_in, R.anim.m3_page_out)
         ft.replace(containerId, f)
         ft.commit()
+        contentHost?.postDelayed({ bindScrollToNav() }, 350)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

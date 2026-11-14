@@ -17,9 +17,9 @@ android {
     defaultConfig {
         applicationId = "com.fxxkmoondrop.secret"
         minSdk = 32
-        targetSdk = 36
-        versionCode = 351
-        versionName = "3.3.1"
+        targetSdk = 37
+        versionCode = 400
+        versionName = "3.4.0"
 
         // DexKit 自带 4 个 ABI 的 libdexkit.so；x86/x86_64 只服务模拟器，
         // 剔除后单 APK 省约 0.8MB（模块只跑在真机上）。
@@ -195,6 +195,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    // 1.5.0：官方 M3 Expressive LoadingIndicator（关于页图标背景动画）需要的版本
+    implementation("androidx.compose.material3:material3-android:1.5.0-rc01")
     implementation("androidx.activity:activity-compose")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     // 3.2.13: miuix-preference 提供 **官方**的下拉选择组件

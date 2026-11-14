@@ -81,6 +81,13 @@ class M3Ui {
          *   FrameLayout[ ScrollView(paddingTop = 展开高度) , Header(TOP 对齐, 高度随滚动变化) ]
          * 滚动只改 Header 自身高度，不动 ScrollView 的布局，因此不会每帧触发内容重新测量。
          */
+        /**
+         * 页面滚动钩子。ScrollView 只允许一个 OnScrollChangeListener，
+         * 外部（如悬浮底栏的收起逻辑）不能自己再 set 一遍，否则会顶掉大标题的收缩动画。
+         */
+        @JvmStatic
+        var pageScrollHook: ((Int) -> Unit)? = null
+
         class LargeHeaderPage(val container: android.widget.FrameLayout,
                               val sv: android.widget.ScrollView,
                               val header: CollapseHeader)
@@ -210,7 +217,10 @@ class M3Ui {
 
             val header = CollapseHeader(bar, big, mini, expandedPx, collapsedPx)
             // 与主页面同一套滚动行为：big 渐隐、mini 渐显、栏高 112 → 64dp 收缩
-            sv.setOnScrollChangeListener { _, _, sy, _, _ -> header.onScroll(sy) }
+            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
+                header.onScroll(sy)
+                pageScrollHook?.invoke(sy)
+            }
             header.apply(0f)
             sv.post { header.onScroll(sv.scrollY) }
             return LargeHeaderPage(container, sv, header)
@@ -240,7 +250,10 @@ class M3Ui {
             hlp.gravity = Gravity.TOP
             container.addView(header.view, hlp)
 
-            sv.setOnScrollChangeListener { _, _, sy, _, _ -> header.onScroll(sy) }
+            sv.setOnScrollChangeListener { _, _, sy, _, _ ->
+                header.onScroll(sy)
+                pageScrollHook?.invoke(sy)
+            }
             header.apply(0f)
             // 3.2.10: 重建后 ScrollView 是在自己的 onLayout 里还原滚动位置的，
             // 那一刻 onScrollChange 已经派发完，大标题栏会停在展开态、把正文压住。
@@ -254,8 +267,9 @@ class M3Ui {
         fun collapsingHeader(act: Activity, pal: ThemeUtil.Palette, title: String, heightPx: Int): CollapseHeader {
             val bar = android.widget.FrameLayout(act)
             bar.setBackgroundColor(pal.surface)
-            // 左 68dp：给 MainActivity 常驻的 48dp 菜单键让位，避免标题与它重合
-            val padL = dp(act, 68)
+            // 抽屉模式左 68dp（给 48dp 菜单键让位）；悬浮导航栏模式没有菜单键，标题左对齐 16dp
+            val floatingNav = act.getSharedPreferences("cfg", 0).getInt("nav_mode", 1) == 1
+            val padL = dp(act, if (floatingNav) 16 else 68)
 
             // 展开态大标题：底部对齐
             val big = TextView(act)
