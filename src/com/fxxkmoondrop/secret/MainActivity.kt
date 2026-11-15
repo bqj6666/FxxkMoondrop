@@ -414,6 +414,8 @@ class MainActivity : BaseFragmentActivity(), NavigationEventDispatcherOwner,
 
     /** 经 Root 通道读蓝牙栈的当前编解码器（系统 API 是 @SystemApi，普通应用拿不到）。 */
     private fun refreshCodecBadge() {
+        // 免 root 不发起 su：拿不到编解码器就退回链路类型，不影响功能
+        if (!RootShell.isAvailable()) return
         if (linkTypeLabel() == null) {
             codecLabel = null
             return

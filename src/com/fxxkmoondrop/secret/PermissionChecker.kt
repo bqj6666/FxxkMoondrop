@@ -70,7 +70,7 @@ class PermissionChecker {
             // 因此失败绝不能当结论。用户在管理器里补上授权后点这一项即可重新检测。
             val rootBin = RootShell.binary()
             val rootOk = rootBin != null || EnvProbe.isRooted()
-            list.add(Item(Lang.t(ctx, "Root 权限", "Root access"), rootOk,
+            list.add(Item(Lang.t(ctx, "Root 增强（可选）", "Root boost (optional)"), rootOk,
                     when {
                         rootOk -> Lang.t(ctx, "可用，入口=" + (rootBin ?: "su"),
                                 "Available, entry=" + (rootBin ?: "su"))
@@ -78,7 +78,7 @@ class PermissionChecker {
                                 "已找到 root 入口但未取得授权。请在 Root 管理器中授权后点击此项重新检测",
                                 "Root entry found but not granted. Authorize it in your root manager, then tap here to re-check")
                         else -> Lang.t(ctx,
-                                "未检测到 root 入口。若设备已 root：请先在 Root 管理器中把本应用加入授权列表，再点击此项重新检测",
+                                "未检测到 root 入口。免 root 也可正常使用；若设备已 root，可在 Root 管理器中授权后再点此项重新检测",
                                 "No root entry detected. If rooted: allow this app in your root manager first, then tap here to re-check")
                     },
                     ACTION_ROOT_RECHECK, 0, false))

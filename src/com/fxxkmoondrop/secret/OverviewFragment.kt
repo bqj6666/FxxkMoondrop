@@ -1312,6 +1312,8 @@ class OverviewFragment : Fragment() {
      * 读不到时退回链路类型，再退到「未连接」，任何情况下不空着。
      */
     private fun refreshCodecBadge() {
+        // 免 root 不发起 su：拿不到编解码器就退回链路类型，不影响功能
+        if (!RootShell.isAvailable()) return
         // 无链路时不查（dumpsys 也在百毫秒级），并顺手清掉可能存在的过期值
         if (linkTypeLabel() == null) {
             codecLabel = null
