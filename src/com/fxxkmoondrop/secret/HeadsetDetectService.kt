@@ -22,6 +22,14 @@ import java.util.HashSet
 
 @Suppress("DEPRECATION")
 class HeadsetDetectService : Service() {
+
+    // ── 3.4.2 GAIA 重连节流 ──────────────────────────────────
+    // 目的：彻底消除「每 5 秒断开重连一次」的风暴（死机诱因）。
+    private var gaiaConnectInitiated = false
+    private var gaiaAttemptAddr: String? = null
+    private var gaiaAttemptAt = 0L
+    private var gaiaFailStreak = 0
+    private var gaiaBackoffUntil = 0L
     companion object {
         @JvmField
         @Volatile
@@ -410,12 +418,17 @@ class HeadsetDetectService : Service() {
             // 同一副耳机可能以两个不同地址（BR/EDR 与 LE、或 A2DP/HFP 两条 profile）
             // 各占一个 key，此前会在一轮里先后发起两次 connect —— 第二次必然先
             // disconnect 掉第一次刚建好的链路（实测 37ms 内两次 connectGatt）。
-            var gaiaConnectInitiated = false
+            // 3.4.2: 这个标记原本是**局部变量**，每 5 秒轮询都重置一次，
+            // 于是「连接中/刚发起」的防护形同虚设 —— 实测每 5 秒 disconnect + connect 一次，
+            // 连续 80+ 轮，耳机侧 BLE 链路被反复拆建，是死机/自动关机的直接诱因。
+            // 现在改成字段，并配失败退避：同一地址连续失败 2 次就静默 60 秒。
             for (key in now.sorted()) {
                 val idx = key.indexOf('|')
                 val addr = key.substring(0, idx)
                 val nm = key.substring(idx + 1)
                 PopupGate.tryShowConnectedDeferred(this, addr, nm)
+                // 退避期内不再发起 GAIA 连接（失败重试风暴会让耳机固件崩溃）
+                if (SystemClock.elapsedRealtime() < gaiaBackoffUntil) continue
                 hasMoondrop = true
                 // alpha2.18: 同族设备（前缀12位相同）GAIA 已连时不重复发起（双地址自我反馈防护）
                 val gaia = GaiaBleClient.getInstance()
@@ -440,6 +453,8 @@ class HeadsetDetectService : Service() {
                     if (gaia.isConnecting()) continue
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
+                    gaiaAttemptAddr = gaiaAddr
+                    gaiaAttemptAt = SystemClock.elapsedRealtime()
                 } else if (!gaia.isConnected()) {
                     // 3.2.1: 链路空闲但仍残留上一次的 deviceAddress —— 此前这里连的是那个
                     // **旧地址**，于是「先连 A 再换 B」时永远在重连 A，B 一辈子连不上。
@@ -461,6 +476,29 @@ class HeadsetDetectService : Service() {
                     }
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
+                    gaiaAttemptAddr = gaiaAddr
+                    gaiaAttemptAt = SystemClock.elapsedRealtime()
+                }
+            }
+
+            // ── 连接结果结算：成功清零，失败累计并退避 ──
+            run {
+                val gaiaNow = GaiaBleClient.getInstance()
+                val t = SystemClock.elapsedRealtime()
+                if (gaiaNow.isConnected()) {
+                    gaiaConnectInitiated = false
+                    gaiaFailStreak = 0
+                    gaiaBackoffUntil = 0L
+                } else if (gaiaConnectInitiated && !gaiaNow.isConnecting() &&
+                        t - gaiaAttemptAt > 6000) {
+                    gaiaConnectInitiated = false
+                    gaiaFailStreak++
+                    if (gaiaFailStreak >= 2) {
+                        gaiaBackoffUntil = t + 60000L
+                        gaiaFailStreak = 0
+                        AppLog.w(TAG, "GAIA connect failed twice on " + gaiaAttemptAddr +
+                                ", back off 60s (avoid reconnect storm)")
+                    }
                 }
             }
 
