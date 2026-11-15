@@ -1306,7 +1306,6 @@ class GaiaBleClient private constructor(
 
     // ── 支持列表（feature 0x00 / cmd 0x04）：每次连接只请求一次，刷新时强制重取 ──
     private var featReqDone = false
-    private var featReqAt = 0L
 
     /**
      * 请求一次「支持的 feature 列表」。
@@ -1316,15 +1315,19 @@ class GaiaBleClient private constructor(
      * 避免连断抖动时刷屏。
      */
     fun requestSupportedFeatures(force: Boolean = false) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (!force) {
-            if (featReqDone) return
-            if (now - featReqAt < 10_000L) return
-        }
-        featReqAt = now
+        // 只保留「每次连接一次」这一个条件：同一连接内不重复发，
+        // 刷新按钮用 force 绕过。不叠加时间窗等额外防御 —— 连接路径越简单越不容易出问题。
+        if (!force && featReqDone) return
         featReqDone = true
-        writeCommand(GaiaConstants.FEATURE_BASIC,
-                GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+        // 官方连接后的握手顺序：先读基础信息（00 01），再读支持列表（00 04）。
+        // 实测单独发 00 04 设备不回应，按官方顺序补上前一条。
+        writeCommand(GaiaConstants.FEATURE_BASIC, 0x01, ByteArray(0))
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            runCatching {
+                writeCommand(GaiaConstants.FEATURE_BASIC,
+                        GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+            }
+        }, 250L)
         val caller = Throwable().stackTrace.take(5)
                 .joinToString(" <- ") {
                     it.className.substringAfterLast('.') + "." + it.methodName + ":" + it.lineNumber
