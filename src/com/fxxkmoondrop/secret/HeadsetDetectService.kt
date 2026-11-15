@@ -28,7 +28,6 @@ class HeadsetDetectService : Service() {
     private var gaiaConnectInitiated = false
     private var gaiaAttemptAddr: String? = null
     private var gaiaAttemptAt = 0L
-    private var gaiaFailStreak = 0
     private var gaiaBackoffUntil = 0L
     private var gaiaFailAddr: String? = null
     companion object {
@@ -511,7 +510,6 @@ class HeadsetDetectService : Service() {
                 val t = SystemClock.elapsedRealtime()
                 if (gaiaNow.isConnected()) {
                     gaiaConnectInitiated = false
-                    gaiaFailStreak = 0
                     gaiaBackoffUntil = 0L
                 } else if (gaiaConnectInitiated && t - gaiaAttemptAt > 20000L) {
                     // 硬超时：20 秒还没连上（含卡在 isConnecting 的僵死 gatt）——
@@ -522,17 +520,9 @@ class HeadsetDetectService : Service() {
                     gaiaFailAddr = gaiaAttemptAddr
                     gaiaBackoffUntil = t + 30000L
                     AppLog.w(TAG, "GAIA connect hard timeout, reset and back off 30s")
-                } else if (gaiaConnectInitiated && !gaiaNow.isConnecting() &&
-                        t - gaiaAttemptAt > 6000) {
-                    gaiaConnectInitiated = false
-                    gaiaFailStreak++
-                    if (gaiaFailStreak >= 2) {
-                        gaiaBackoffUntil = t + 60000L
-                        gaiaFailStreak = 0
-                        gaiaFailAddr = gaiaAttemptAddr
-                        AppLog.w(TAG, "GAIA connect failed twice, back off 60s (avoid reconnect storm)")
-                    }
                 }
+                // 失败结算只保留上面的 20 秒硬超时这一条：
+                // 「连败 2 次再退避」与它是同一件事的第二份实现，删掉以免两套阈值互相干扰。
             }
 
             // v3.17: 断开时 force-stop Moondrop App

@@ -1305,6 +1305,7 @@ class GaiaBleClient private constructor(
     }
 
     // ── 支持列表（feature 0x00 / cmd 0x04）：每次连接只请求一次，刷新时强制重取 ──
+    private val FEATURE_QUERY_ENABLED = false
     private var featReqDone = false
 
     /**
@@ -1315,6 +1316,9 @@ class GaiaBleClient private constructor(
      * 避免连断抖动时刷屏。
      */
     fun requestSupportedFeatures(force: Boolean = false) {
+        // 保留实现供后续研究：实测该机型对 00 1D 00 xx 不回包，因此默认关闭，
+        // 不在连接流程里白发请求。需要实验时把开关改成 true 即可。
+        if (!FEATURE_QUERY_ENABLED) return
         // 只保留「每次连接一次」这一个条件：同一连接内不重复发，
         // 刷新按钮用 force 绕过。不叠加时间窗等额外防御 —— 连接路径越简单越不容易出问题。
         if (!force && featReqDone) return
