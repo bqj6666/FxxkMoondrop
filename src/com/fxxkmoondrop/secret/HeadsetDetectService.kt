@@ -547,9 +547,15 @@ class HeadsetDetectService : Service() {
                     // 原本这里无条件 disconnect()，A 断开会把还连着的 B 一起掐掉。
                     val gaiaNow = GaiaBleClient.getInstance()
                     val cur = gaiaNow.deviceAddress
-                    val isOurLink = gaiaNow.isConnected() && cur != null &&
-                            cur.length >= 12 && addr.length >= 12 &&
-                            cur.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)
+                    // 判据改为「当前连接的地址是否还在本轮快照里」。
+                    // 原实现比较地址前 12 位（MAC 只到 B5: 就相同），BR/EDR 与 LE 两个别名
+                    // 会被当成同一副耳机 —— 任一别名从快照消失就误判「我们的耳机走了」，
+                    // 于是主动断开 GAIA，形成「测一下就掉线、接着疯狂重连、又弹窗」的循环。
+                    val curStillThere = cur != null && now.any {
+                        val i2 = it.indexOf('|')
+                        i2 > 0 && it.substring(0, i2).equals(cur, ignoreCase = true)
+                    }
+                    val isOurLink = gaiaNow.isConnected() && cur != null && !curStillThere
                     if (isOurLink) {
                         gaiaNow.disconnect()
                         AppLog.i(TAG, "gaia disconnected (its device left): " + addr)
