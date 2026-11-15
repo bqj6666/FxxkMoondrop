@@ -1494,11 +1494,6 @@ class GaiaBleClient private constructor(
 
     /** alpha2.28: writeCommand delegates to sendGaia (single write path) */
     @Synchronized
-    /** 通用只读写入入口（调试探测用，不参与正常业务流程）。 */
-    fun writeRaw(feature: Int, command: Int, payload: ByteArray = ByteArray(0)) {
-        writeCommand(feature, command, payload)
-    }
-
     private fun writeCommand(feature: Int, command: Int, payload: ByteArray) {
         val packet = GaiaCommands.v3Packet(feature, command, payload)
         Log.d(GaiaConstants.TAG, "TX feature=0x" + Integer.toHexString(feature) +

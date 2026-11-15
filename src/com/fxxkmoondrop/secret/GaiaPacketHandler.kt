@@ -48,7 +48,6 @@ class GaiaPacketHandler(
                 return
             }
             val feature = (cmdValue shr 9) and 0x7F
-            runCatching { FeatureProbe.onPacket(feature, (cmdValue and 0x7F)) }
             val type = (cmdValue shr 7) and 0x03
             val command = cmdValue and 0x7F
             val payload = if (value.size > 4) value.copyOfRange(4, value.size) else ByteArray(0)
@@ -70,7 +69,6 @@ class GaiaPacketHandler(
                         payload.joinToString(" ") { "%02X".format(it) })
                 probe.handleFeatureResponse(payload, command)
             } else if (feature == GaiaCommands.F_CODEC) {
-                runCatching { FeatureProbe.onPacket(feature, command) }
                 CodecState.onResponse(command, payload)
             } else if (feature == GaiaConstants.FEATURE_BASIC &&
                     (command == GaiaConstants.CMD_GET_VARIANT || command == GaiaConstants.CMD_GET_APP_VERSION ||

@@ -100,10 +100,6 @@
             android:name=".ManualConnectActivity"
             android:exported="false" />
 
-        <activity
-            android:name=".FeatureProbeActivity"
-            android:exported="false" />
-
         <provider
             android:name=".HearableSliceProvider"
             android:authorities="com.fxxkmoondrop.secret.slices"
