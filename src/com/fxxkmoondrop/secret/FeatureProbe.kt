@@ -57,6 +57,9 @@ object FeatureProbe {
     /** 当前正在等待回包的 feature（-1 = 无）。按 feature 匹配而不是按命令号/下标，
      *  因为设备回包的命令号未必等于请求命令号，且回包可能晚于窗口。 */
     private var pending = -1
+
+    /** 当前正在探测的项（用于区分 viaApp 与直写两种匹配策略）。 */
+    private var pendingItem: Item? = null
     private val handler = Handler(Looper.getMainLooper())
 
     /** 最近一次启动失败的原因（null = 正常）。 */
@@ -120,9 +123,13 @@ object FeatureProbe {
         lastError = null
         running = true
         pending = item.feature
+        pendingItem = item
         status[item.feature] = WAITING
         listener?.invoke()
         sentAt[keyOf(item.feature, item.command)] = SystemClock.elapsedRealtime()
+        AppLog.i("FeatureProbe", "send " + item.labelZh + " feature=0x" +
+                Integer.toHexString(item.feature) + " cmd=0x" +
+                Integer.toHexString(item.command) + " viaApp=" + item.viaApp)
         runCatching {
             if (item.viaApp) {
                 // 走应用既有通道：ANC 会按 ancPath 自动选正确 feature，不硬编码
@@ -134,6 +141,7 @@ object FeatureProbe {
         handler.postDelayed({
             if (status[item.feature] != OK) status[item.feature] = TIMEOUT
             if (pending == item.feature) pending = -1
+            if (pendingItem === item) pendingItem = null
             running = false
             listener?.invoke()
             AppLog.i("FeatureProbe", "single probe " + item.labelZh + " state=" + status[item.feature])
@@ -180,15 +188,25 @@ object FeatureProbe {
     @JvmStatic
     fun onPacket(feature: Int, command: Int) {
         if (!running) return
+        val item = pendingItem ?: return
         val now = SystemClock.elapsedRealtime()
+        // viaApp 项（ANC）：由应用通道发请求，无法预知设备用哪个 feature 回包，
+        // 只接受 ANC 家族的 feature（8 = 音频定制 / 32 = ANC V2）。
+        AppLog.i("FeatureProbe", "rx feature=0x" + Integer.toHexString(feature) +
+                " cmd=0x" + Integer.toHexString(command) + " while probing " + item.labelZh)
+        if (item.viaApp) {
+            if (feature == 8 || feature == 32) {
+                status[item.feature] = OK
+                listener?.invoke()
+            }
+            return
+        }
         // 精确匹配 (feature, command)：同一 feature 下的不同命令必须区分开，
         // 否则 codec 的三项会互相顶替（feature 16 的任意回包都被算成"支持"）。
         val k = keyOf(feature, command)
         val at = sentAt[k]
         val hit = at != null && now - at <= MATCH_WINDOW_MS
-        // viaApp 项无法预知设备用哪个 command 回包：只看 feature 且限窗口
-        val viaAppHit = feature == pending
-        if (hit || viaAppHit) {
+        if (hit) {
             status[feature] = OK
             listener?.invoke()
         }
