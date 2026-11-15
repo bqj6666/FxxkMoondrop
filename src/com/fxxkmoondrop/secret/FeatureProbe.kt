@@ -26,8 +26,10 @@ object FeatureProbe {
     const val OK = 2
     const val TIMEOUT = 3
 
-    private const val GAP_MS = 1200L
+    private const val GAP_MS = 2500L
 
+    // 只放「已知安全」的只读命令：实测连发未知命令会让耳机侧断链。
+    // 未确认语义的功能（指示灯 19、佩戴检测 9）不在这里探测 —— 需要时再单独验证。
     private val items = listOf(
             Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LDAC, "LDAC", "LDAC"),
             Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LHDC, "LHDC", "LHDC"),
@@ -35,9 +37,7 @@ object FeatureProbe {
             Item(GaiaConstants.FEATURE_BATTERY, GaiaConstants.CMD_GET_BATTERY_LEVELS,
                     "电量", "Battery"),
             Item(GaiaCommands.F_ANC_V2, GaiaConstants.CMD_GET_CURRENT_MODE,
-                    "降噪 V2 状态", "ANC V2 state"),
-            Item(19, 0x02, "指示灯", "LED", experimental = true),
-            Item(9, 0x02, "佩戴检测", "In-ear detect", experimental = true))
+                    "降噪 V2 状态", "ANC V2 state"))
 
     private val status = HashMap<Int, Int>()
     private var running = false
@@ -99,6 +99,13 @@ object FeatureProbe {
             return
         }
         val it = items[i]
+        if (!GaiaBleClient.getInstance().isConnected()) {
+            lastError = Lang.t("链路已断开，探测已停止", "Link lost, probe stopped")
+            running = false
+            pending = -1
+            listener?.invoke()
+            return
+        }
         pending = it.feature
         status[it.feature] = WAITING
         listener?.invoke()
