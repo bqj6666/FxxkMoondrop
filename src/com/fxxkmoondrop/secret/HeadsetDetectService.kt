@@ -476,8 +476,13 @@ class HeadsetDetectService : Service() {
                     val stale = gaia.deviceAddress
                     if (stale != null && !stale.equals(gaiaAddr, ignoreCase = true)) {
                         // 目标换了设备：清掉旧地址再连新的（3.2.1 修复的「永远重连旧地址」）
-                        AppLog.i(TAG, "gaia idle but stale addr " + stale + " -> switch to " + gaiaAddr)
+                        AppLog.i(TAG, "gaia idle but stale addr " + stale + ", drop it and re-connect next poll")
                         gaia.disconnect()
+                        // 断链是异步的：紧跟着 connect() 会在旧 gatt 还没 close 时注册新 client，
+                        // 实测会留下僵死连接、下一轮又判失败 —— 交给下一次轮询再连更稳。
+                        gaiaConnectInitiated = false
+                        gaiaAttemptAddr = null
+                        continue
                     } else if (gaia.isConnecting()) {
                         // 「耳机死机」根因 C：链路正在建立时此前也会再走一次 disconnect + connect。
                         // 一次 pollConnected 里同名设备可能出现多个条目（A2DP + HFP 两条 profile），
