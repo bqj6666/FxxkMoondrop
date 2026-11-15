@@ -30,6 +30,7 @@ class HeadsetDetectService : Service() {
     private var gaiaAttemptAt = 0L
     private var gaiaFailStreak = 0
     private var gaiaBackoffUntil = 0L
+    private var gaiaFailAddr: String? = null
     companion object {
         @JvmField
         @Volatile
@@ -427,8 +428,21 @@ class HeadsetDetectService : Service() {
                 val addr = key.substring(0, idx)
                 val nm = key.substring(idx + 1)
                 PopupGate.tryShowConnectedDeferred(this, addr, nm)
-                // 退避期内不再发起 GAIA 连接（失败重试风暴会让耳机固件崩溃）
-                if (SystemClock.elapsedRealtime() < gaiaBackoffUntil) continue
+                // 退避期内不再发起 GAIA 连接（失败重试风暴会让耳机固件崩溃）。
+                // 但如果这次检测到的是**另一副**耳机，立刻解除退避 —— 否则旧地址的
+                // 失败会把新设备的自动连接一起挡住。
+                if (SystemClock.elapsedRealtime() < gaiaBackoffUntil) {
+                    val failedOn = gaiaFailAddr
+                    val target = try {
+                        GaiaBleClient.resolveLeAddress(adapter, adapter.getRemoteDevice(addr)) ?: addr
+                    } catch (_: Exception) { addr }
+                    if (failedOn != null && !failedOn.equals(target, ignoreCase = true)) {
+                        gaiaBackoffUntil = 0L
+                        AppLog.i(TAG, "new target detected, lift GAIA backoff")
+                    } else {
+                        continue
+                    }
+                }
                 hasMoondrop = true
                 // alpha2.18: 同族设备（前缀12位相同）GAIA 已连时不重复发起（双地址自我反馈防护）
                 val gaia = GaiaBleClient.getInstance()
@@ -489,6 +503,15 @@ class HeadsetDetectService : Service() {
                     gaiaConnectInitiated = false
                     gaiaFailStreak = 0
                     gaiaBackoffUntil = 0L
+                } else if (gaiaConnectInitiated && t - gaiaAttemptAt > 20000L) {
+                    // 硬超时：20 秒还没连上（含卡在 isConnecting 的僵死 gatt）——
+                    // 必须复位标记并主动断开，否则 gaiaConnectInitiated 永远为 true，
+                    // 之后再来耳机也不会再发起连接。
+                    gaiaConnectInitiated = false
+                    runCatching { gaiaNow.disconnect() }
+                    gaiaFailAddr = gaiaAttemptAddr
+                    gaiaBackoffUntil = t + 30000L
+                    AppLog.w(TAG, "GAIA connect hard timeout, reset and back off 30s")
                 } else if (gaiaConnectInitiated && !gaiaNow.isConnecting() &&
                         t - gaiaAttemptAt > 6000) {
                     gaiaConnectInitiated = false
@@ -496,8 +519,8 @@ class HeadsetDetectService : Service() {
                     if (gaiaFailStreak >= 2) {
                         gaiaBackoffUntil = t + 60000L
                         gaiaFailStreak = 0
-                        AppLog.w(TAG, "GAIA connect failed twice on " + gaiaAttemptAddr +
-                                ", back off 60s (avoid reconnect storm)")
+                        gaiaFailAddr = gaiaAttemptAddr
+                        AppLog.w(TAG, "GAIA connect failed twice, back off 60s (avoid reconnect storm)")
                     }
                 }
             }

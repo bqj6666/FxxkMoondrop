@@ -626,6 +626,8 @@ class EqEditorActivity : BaseActivity() {
                 ui.post { busy = false; if (alive) { setApplyEnabled(editable); showError(Lang.t("写入前建链失败", "Connect failed")) } }
                 return@Thread
             }
+            // 预设档位激活时固件会忽略写曲线 —— 先切到自定义档（探测式，失败则按旧行为继续）
+            MoondropSpp.selectCustomPreset()
             val ok = MoondropSpp.writeCurve(raw)
             ui.post {
                 busy = false
