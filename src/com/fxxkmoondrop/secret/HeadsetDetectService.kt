@@ -271,6 +271,8 @@ class HeadsetDetectService : Service() {
         override fun onConnected(address: String) {
             Log.i(TAG, "GAIA connected: $address")
             AppLog.i(TAG, "GAIA connected: " + address + " protocol=" + GaiaBleClient.getInstance().activeProtocol())
+            // 连接后读一次支持列表（只读，官方同款），结果由 DeviceFeatures 缓存
+            runCatching { GaiaBleClient.getInstance().requestSupportedFeatures() }
             lastGaiaFetchMs = 0
             // alpha1.4: 延迟等 notification descriptor 写完后请求电量/降噪模式
             handler.postDelayed({

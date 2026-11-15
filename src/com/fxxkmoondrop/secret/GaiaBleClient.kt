@@ -1304,6 +1304,35 @@ class GaiaBleClient private constructor(
         writeCommand(GaiaCommands.F_CODEC, codec, ByteArray(0))
     }
 
+    // ── 支持列表（feature 0x00 / cmd 0x04）：每次连接只请求一次，刷新时强制重取 ──
+    private var featReqDone = false
+    private var featReqAt = 0L
+
+    /**
+     * 请求一次「支持的 feature 列表」。
+     *
+     * 只读、不改设备状态；与官方 App 连接后的握手同款。
+     * 去重规则：同一连接内只发一次（[force] 为真时例外），且 10 秒内不重复发，
+     * 避免连断抖动时刷屏。
+     */
+    fun requestSupportedFeatures(force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force) {
+            if (featReqDone) return
+            if (now - featReqAt < 10_000L) return
+        }
+        featReqAt = now
+        featReqDone = true
+        writeCommand(GaiaConstants.FEATURE_BASIC,
+                GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+        AppLog.i(GaiaConstants.TAG, "request supported features (force=" + force + ")")
+    }
+
+    /** 链路断开时复位，允许下一次连接重新请求。 */
+    fun resetFeatureRequestState() {
+        featReqDone = false
+    }
+
     fun fetchAncMode(cb: AncControlCallback?) {
         this.ancCallback = cb
         if (simConnected) {
