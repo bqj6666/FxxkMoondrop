@@ -589,7 +589,12 @@ class OverviewFragment : Fragment() {
         // 禁用/启用完全由加载态驱动（见 showRefreshBar / stopRefreshSpinner）：
         // 之前用 1500ms 防连点，时间一到按钮就自己解禁，而刷新还在跑 —— 加载中看着像可点。
         val refreshBtn = makeButton(Lang.t("刷新状态", "Refresh"),
-                R.drawable.ic_refresh, container, onContainer, 0L) { showRefreshBar(); refreshAnc() }
+                R.drawable.ic_refresh, container, onContainer, 0L) {
+                    showRefreshBar()
+                    // 用户明确点刷新：支持列表强制重读一次（连接后已读过一次）
+                    runCatching { GaiaBleClient.getInstance().requestSupportedFeatures(force = true) }
+                    refreshAnc()
+                }
         refreshBox.addView(refreshBtn, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -1379,8 +1384,6 @@ class OverviewFragment : Fragment() {
         // alpha2.52: 用户主动点「刷新状态」= 明确要求重试。
         // 清空探测失败名单，让此前被判定为「无 GAIA/9ECA」的设备重新走一遍
         // 协议指纹探测（HeadsetDetectService 下一轮轮询内放行，最长约 5 秒）。
-        // 用户点「刷新状态」= 明确要求重读：支持列表也一并强制刷新
-        runCatching { GaiaBleClient.getInstance().requestSupportedFeatures(force = true) }
         DeviceMatcher.clearRejected(requireContext())
         // 3.3.2: 同时重置探测预算 —— 否则「用满即停」之后用户点刷新也不会有任何反应，
         // 按钮看起来是坏的。用户显式要求重试 = 重新给一轮额度。

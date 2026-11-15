@@ -1325,7 +1325,11 @@ class GaiaBleClient private constructor(
         featReqDone = true
         writeCommand(GaiaConstants.FEATURE_BASIC,
                 GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
-        AppLog.i(GaiaConstants.TAG, "request supported features (force=" + force + ")")
+        val caller = Throwable().stackTrace.take(5)
+                .joinToString(" <- ") {
+                    it.className.substringAfterLast('.') + "." + it.methodName + ":" + it.lineNumber
+                }
+        AppLog.i(GaiaConstants.TAG, "request supported features (force=" + force + ") caller=" + caller)
     }
 
     /** 链路断开时复位，允许下一次连接重新请求。 */
