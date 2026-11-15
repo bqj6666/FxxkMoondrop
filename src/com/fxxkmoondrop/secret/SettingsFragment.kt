@@ -709,6 +709,15 @@ class SettingsFragment : Fragment() {
                 startActivity(Intent(requireContext(), DebugLogActivity::class.java))
             }
             diagRows.add(rowDebugLog)
+            // 能力探测：逐条只读命令，测绘新耳机支持哪些功能
+            val rowFeatureProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
+                    Lang.t("能力探测", "Capability probe"),
+                    Lang.t("逐条读取各功能状态，有回包即支持",
+                            "Read each feature state; a reply means supported"),
+                    M3Ui.chevron(requireContext(), pal.onVariant)) {
+                startActivity(Intent(requireContext(), FeatureProbeActivity::class.java))
+            }
+            diagRows.add(rowFeatureProbe)
             diagRows.add(rowProbe)
             diagRows.add(rowEq)
         }   // 只有调试模式才暴露
