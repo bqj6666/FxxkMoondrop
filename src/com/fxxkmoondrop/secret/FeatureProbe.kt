@@ -19,7 +19,9 @@ object FeatureProbe {
 
     /** 单条探测项。[experimental] 表示命令号尚未被实测确认。 */
     class Item(val feature: Int, val command: Int, val labelZh: String,
-               val labelEn: String, val experimental: Boolean = false)
+               val labelEn: String, val experimental: Boolean = false,
+               /** true = 不直接写 GAIA，而是走应用自己的读取通道（如 ANC 按 ancPath 选择）。 */
+               val viaApp: Boolean = false)
 
     const val UNKNOWN = 0
     const val WAITING = 1
@@ -35,14 +37,22 @@ object FeatureProbe {
     // 说明设备不接受，暂不放入探测列表；等从官方抓包里确认后再补。
     private val items = listOf(
             Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LDAC, "LDAC", "LDAC"),
+            Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LHDC, "LHDC", "LHDC"),
+            Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LC3, "LC3", "LC3"),
             Item(GaiaConstants.FEATURE_BATTERY, GaiaConstants.CMD_GET_BATTERY_LEVELS,
                     "电量", "Battery"),
             Item(GaiaCommands.F_ANC_V2, GaiaConstants.CMD_GET_CURRENT_MODE,
-                    "降噪 V2 状态", "ANC V2 state"))
+                    "降噪状态", "ANC state", viaApp = true))
 
     private val status = HashMap<Int, Int>()
     private var running = false
     private var index = 0
+
+    /** 最近发出的请求：key = (feature shl 8) or command，value = 发送时刻。 */
+    private val sentAt = HashMap<Int, Long>()
+    private const val MATCH_WINDOW_MS = 3000L
+
+    private fun keyOf(feature: Int, command: Int): Int = (feature shl 8) or (command and 0xFF)
 
     /** 当前正在等待回包的 feature（-1 = 无）。按 feature 匹配而不是按命令号/下标，
      *  因为设备回包的命令号未必等于请求命令号，且回包可能晚于窗口。 */
@@ -112,8 +122,14 @@ object FeatureProbe {
         pending = item.feature
         status[item.feature] = WAITING
         listener?.invoke()
+        sentAt[keyOf(item.feature, item.command)] = SystemClock.elapsedRealtime()
         runCatching {
-            GaiaBleClient.getInstance().writeRaw(item.feature, item.command, ByteArray(0))
+            if (item.viaApp) {
+                // 走应用既有通道：ANC 会按 ancPath 自动选正确 feature，不硬编码
+                AncBridge.fetchAncMode()
+            } else {
+                GaiaBleClient.getInstance().writeRaw(item.feature, item.command, ByteArray(0))
+            }
         }
         handler.postDelayed({
             if (status[item.feature] != OK) status[item.feature] = TIMEOUT
@@ -164,7 +180,15 @@ object FeatureProbe {
     @JvmStatic
     fun onPacket(feature: Int, command: Int) {
         if (!running) return
-        if (feature == pending) {
+        val now = SystemClock.elapsedRealtime()
+        // 精确匹配 (feature, command)：同一 feature 下的不同命令必须区分开，
+        // 否则 codec 的三项会互相顶替（feature 16 的任意回包都被算成"支持"）。
+        val k = keyOf(feature, command)
+        val at = sentAt[k]
+        val hit = at != null && now - at <= MATCH_WINDOW_MS
+        // viaApp 项无法预知设备用哪个 command 回包：只看 feature 且限窗口
+        val viaAppHit = feature == pending
+        if (hit || viaAppHit) {
             status[feature] = OK
             listener?.invoke()
         }
