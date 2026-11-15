@@ -30,10 +30,11 @@ object FeatureProbe {
 
     // 只放「已知安全」的只读命令：实测连发未知命令会让耳机侧断链。
     // 未确认语义的功能（指示灯 19、佩戴检测 9）不在这里探测 —— 需要时再单独验证。
+    // 只放「已实测会正常回包」的项。
+    // LHDC / LC3 的命令号（0x10 族 6 与 3）是推测值：实测发出去后耳机立即断链，
+    // 说明设备不接受，暂不放入探测列表；等从官方抓包里确认后再补。
     private val items = listOf(
             Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LDAC, "LDAC", "LDAC"),
-            Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LHDC, "LHDC", "LHDC"),
-            Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LC3, "LC3", "LC3"),
             Item(GaiaConstants.FEATURE_BATTERY, GaiaConstants.CMD_GET_BATTERY_LEVELS,
                     "电量", "Battery"),
             Item(GaiaCommands.F_ANC_V2, GaiaConstants.CMD_GET_CURRENT_MODE,
