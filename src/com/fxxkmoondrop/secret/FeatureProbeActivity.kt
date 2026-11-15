@@ -39,8 +39,8 @@ class FeatureProbeActivity : BaseActivity() {
         root.addView(header)
 
         val hint = TextView(this)
-        hint.text = Lang.t("只读：逐条读各功能状态，有回包即视为支持。不影响连接。",
-                "Read-only: asks each feature state; a reply means supported.")
+        hint.text = Lang.t("只读：点任意一行单独测试，有回包即支持。单条发送，不会连累其它项。",
+                "Read-only: tap a row to test it alone; a reply means supported.")
         hint.textSize = 13f
         hint.setTextColor(pal.onVariant)
         hint.setPadding(0, dp(8), 0, dp(12))
@@ -50,14 +50,7 @@ class FeatureProbeActivity : BaseActivity() {
         rowsBox.orientation = LinearLayout.VERTICAL
         root.addView(rowsBox, LinearLayout.LayoutParams(-1, -2))
 
-        startBtn = M3Ui.actionButton(this, Lang.t("开始探测", "Start probe"),
-                R.drawable.ic_refresh, pal.primary, pal.onPrimary, android.view.View.OnClickListener {
-                    if (FeatureProbe.isRunning()) FeatureProbe.stop() else FeatureProbe.start()
-                    renderRows()
-                }, medium = true)
-        root.addView(startBtn, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(16)
-        })
+        startBtn = android.view.View(this)
 
         FeatureProbe.listener = {
             runOnUiThread { renderRows() }
@@ -87,11 +80,9 @@ class FeatureProbeActivity : BaseActivity() {
             val name = FeatureProbe.label(item) + if (item.experimental)
                 Lang.t("（实验）", " (experimental)") else ""
             rowsBox.addView(M3Ui.listRow(this, pal, R.drawable.ic_bug_report,
-                    name, text, null, null))
+                    name, text, null,
+                    Runnable { FeatureProbe.probeOne(item); renderRows() }))
         }
-        (startBtn as? com.google.android.material.button.MaterialButton)?.text =
-                if (FeatureProbe.isRunning()) Lang.t("停止", "Stop")
-                else Lang.t("开始探测", "Start probe")
     }
 
     override fun onDestroy() {

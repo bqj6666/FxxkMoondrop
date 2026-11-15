@@ -91,6 +91,38 @@ object FeatureProbe {
         listener?.invoke()
     }
 
+
+    /**
+     * 单条探测：只发这一条命令，等一个窗口后结算。
+     *
+     * 批量探测会被不支持的命令打断链路（实测 LHDC 那条发出去后 GAIA 立即断开），
+     * 因此改成一条一条点：出问题只影响这一条，不会连累整轮。
+     */
+    @JvmStatic
+    fun probeOne(item: Item) {
+        if (running) return
+        if (!GaiaBleClient.getInstance().isConnected()) {
+            lastError = Lang.t("耳机未连接，先连上再探测", "Earbuds not connected")
+            listener?.invoke()
+            return
+        }
+        lastError = null
+        running = true
+        pending = item.feature
+        status[item.feature] = WAITING
+        listener?.invoke()
+        runCatching {
+            GaiaBleClient.getInstance().writeRaw(item.feature, item.command, ByteArray(0))
+        }
+        handler.postDelayed({
+            if (status[item.feature] != OK) status[item.feature] = TIMEOUT
+            if (pending == item.feature) pending = -1
+            running = false
+            listener?.invoke()
+            AppLog.i("FeatureProbe", "single probe " + item.labelZh + " state=" + status[item.feature])
+        }, GAP_MS)
+    }
+
     private fun step() {
         val i = index
         if (i >= items.size) {
