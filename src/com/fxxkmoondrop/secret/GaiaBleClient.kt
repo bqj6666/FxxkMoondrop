@@ -1288,6 +1288,22 @@ class GaiaBleClient private constructor(
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING, byteArrayOf(state.toByte()))
     }
 
+    // ── Codec（feature 0x10）：开关与状态读取，命令号 3=LC3 / 4=LDAC / 6=LHDC ──
+
+    /**
+     * 设置某个 codec 开关。
+     * ⚠️ 实测切换 codec 会让耳机重启并自动重连，因此调用方需容忍随后的一次断连。
+     */
+    fun setCodec(codec: Int, on: Boolean) {
+        writeCommand(GaiaCommands.F_CODEC, codec, byteArrayOf(if (on) 1 else 0))
+        AppLog.i(GaiaConstants.TAG, "codec set cmd=" + codec + " on=" + on)
+    }
+
+    /** 读某个 codec 当前状态（同一命令号，无载荷）。 */
+    fun fetchCodec(codec: Int) {
+        writeCommand(GaiaCommands.F_CODEC, codec, ByteArray(0))
+    }
+
     fun fetchAncMode(cb: AncControlCallback?) {
         this.ancCallback = cb
         if (simConnected) {
