@@ -31,7 +31,7 @@ class HeadsetReceiver : BroadcastReceiver() {
                     Log.i(TAG, "fastpair mode echo ignored -> $mode")
                     return
                 }
-                AncBridge.setAncMode(mode)
+                AncBridge.setAncMode(mode, "fp-popup")
                 Log.i(TAG, "fastpair mode change -> $mode")
             }
             return

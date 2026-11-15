@@ -70,7 +70,7 @@ class AncTileService : TileService() {
         // 下次有人改成 (idx+2) 就会踩坑
         val next = if (idx < 0) modes[0] else modes[(idx + 1) % modes.size]
         Log.d(TAG, "tile click: cur=$cur modes=${modes.joinToString(",")} -> next=$next")
-        AncBridge.setAncMode(next)
+        AncBridge.setAncMode(next, "tile")
         // 乐观刷新：GA2 这类 AudioCuration 设备不回 ACK，等回调会显得迟钝；
         // 设备真回包时 AncBridge 会再刷一次，以设备为准
         refresh()

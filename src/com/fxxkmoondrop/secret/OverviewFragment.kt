@@ -339,7 +339,7 @@ class OverviewFragment : Fragment() {
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(primaryColor, containerColor))
             btn.setOnClickListener {
-                AncBridge.setAncMode(fm)
+                AncBridge.setAncMode(fm, "overview")
                 ancMode = fm
                 updateAncStatus()
             }

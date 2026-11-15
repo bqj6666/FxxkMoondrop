@@ -118,7 +118,7 @@ class AncBridge {
         private var lastSentAt = 0L
 
         @JvmStatic
-        fun setAncMode(mode: Int) {
+        fun setAncMode(mode: Int, source: String = "unknown") {
             if (mode < 0 || mode > 5) return
             // 只挡「同一次事件的重入」：同档位 200ms 内重复调用直接丢弃。
             // ⚠️ 不要放大这个窗口 —— 连接后同步档位、重连对齐都走这里，
@@ -130,7 +130,7 @@ class AncBridge {
             }
             lastSentMode = mode
             lastSentAt = nowMs
-            Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
+            Log.d(TAG, "setAncMode ui=$mode src=$source (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
             val prevMode = currentMode
