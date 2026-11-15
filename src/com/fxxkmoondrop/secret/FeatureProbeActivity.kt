@@ -68,6 +68,14 @@ class FeatureProbeActivity : BaseActivity() {
 
     private fun renderRows() {
         rowsBox.removeAllViews()
+        FeatureProbe.lastError?.let { err ->
+            val tv = TextView(this)
+            tv.text = err
+            tv.textSize = 13f
+            tv.setTextColor(pal.onVariant)
+            tv.setPadding(0, 0, 0, dp(8))
+            rowsBox.addView(tv)
+        }
         for (item in FeatureProbe.list()) {
             val st = FeatureProbe.stateOf(item.feature)
             val text = when (st) {

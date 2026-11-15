@@ -26,7 +26,7 @@ object FeatureProbe {
     const val OK = 2
     const val TIMEOUT = 3
 
-    private const val GAP_MS = 700L
+    private const val GAP_MS = 1200L
 
     private val items = listOf(
             Item(GaiaCommands.F_CODEC, GaiaCommands.CODEC_LDAC, "LDAC", "LDAC"),
@@ -42,7 +42,14 @@ object FeatureProbe {
     private val status = HashMap<Int, Int>()
     private var running = false
     private var index = 0
+
+    /** 当前正在等待回包的 feature（-1 = 无）。按 feature 匹配而不是按命令号/下标，
+     *  因为设备回包的命令号未必等于请求命令号，且回包可能晚于窗口。 */
+    private var pending = -1
     private val handler = Handler(Looper.getMainLooper())
+
+    /** 最近一次启动失败的原因（null = 正常）。 */
+    var lastError: String? = null
 
     /** 状态变化回调（UI 用来刷新）。 */
     var listener: (() -> Unit)? = null
@@ -63,6 +70,13 @@ object FeatureProbe {
     @JvmStatic
     fun start() {
         if (running) return
+        // 没有活动链路时不要盲发：直接给出提示，避免"全部无响应"的误判
+        if (!GaiaBleClient.getInstance().isConnected()) {
+            lastError = Lang.t("耳机未连接，先连上再探测", "Earbuds not connected")
+            listener?.invoke()
+            return
+        }
+        lastError = null
         running = true
         index = 0
         status.clear()
@@ -85,6 +99,7 @@ object FeatureProbe {
             return
         }
         val it = items[i]
+        pending = it.feature
         status[it.feature] = WAITING
         listener?.invoke()
         runCatching {
@@ -94,6 +109,7 @@ object FeatureProbe {
         handler.postDelayed({
             // 本轮窗口内没等到回包 → 记为超时
             if (status[it.feature] != OK) status[it.feature] = TIMEOUT
+            if (pending == it.feature) pending = -1
             index++
             listener?.invoke()
             if (running) {
@@ -108,8 +124,7 @@ object FeatureProbe {
     @JvmStatic
     fun onPacket(feature: Int, command: Int) {
         if (!running) return
-        val cur = items.getOrNull(index) ?: return
-        if (cur.feature == feature) {
+        if (feature == pending) {
             status[feature] = OK
             listener?.invoke()
         }
