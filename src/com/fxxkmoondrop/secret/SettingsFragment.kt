@@ -145,7 +145,7 @@ class SettingsFragment : Fragment() {
 
         // 语言：区域设置与主题同类 → 与 主题 / 动态取色 / AMOLED 放进**同一张卡**（同一分组）。
         val langRow = M3Ui.dropdownRow(requireActivity(), pal, "语言 / Language",
-                Lang.t("应用界面语言", "App interface language"),
+                null,
                 arrayOf("跟随系统", "中文", "English"), Lang.mode(requireContext())) { mi ->
             getSP().edit().putInt("lang", mi).commit()
             scheduleRebuild(0L)
@@ -314,8 +314,7 @@ class SettingsFragment : Fragment() {
         val styleSelfDraw = getSP().getBoolean("feat_detail_anc_selfdraw", true)
         val rowPanelStyle = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("降噪面板样式", "Noise control panel style"),
-                Lang.t("自绘面板与概览页同款；官方面板依赖系统切片",
-                        "In-app panel matches the overview page; official panel relies on system slices"),
+                null,
                 arrayOf(Lang.t("自绘降噪面板", "In-app panel"),
                         Lang.t("系统官方面板", "Official panel")),
                 if (styleSelfDraw) 0 else 1) { mi ->
@@ -355,7 +354,7 @@ class SettingsFragment : Fragment() {
         val timingIdx = if (PopupGate.waitGaia(requireContext())) 0 else 1
         val rowTiming = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("弹出时机", "Show when"),
-                Lang.t("等左右耳电量就绪后再显示", "Show after the battery readings are ready"),
+                null,
                 timingLabels, timingIdx) { mi ->
             getSP().edit().putBoolean("popup_wait_gaia", mi == 0).commit()
         }
@@ -370,7 +369,7 @@ class SettingsFragment : Fragment() {
         }
         val rowDelay = M3Ui.dropdownRow(requireActivity(), pal,
                 Lang.t("延迟弹出", "Delay"),
-                Lang.t("连接后延迟显示", "Show after a delay once connected"),
+                null,
                 delayLabels, delayIdx) { mi ->
             val sec = when (mi) {
                 1 -> 1
@@ -385,7 +384,7 @@ class SettingsFragment : Fragment() {
         swSkipLock.isChecked = PopupGate.skipLocked(requireContext())
         val rowSkipLock = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_devices,
                 Lang.t("锁屏时不弹出", "Skip on the lock screen"),
-                Lang.t("锁屏时不显示弹窗", "Do not show the popup while the screen is locked"),
+                null,
                 swSkipLock, null)
         swSkipLock.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("popup_skip_locked", checked).commit()
@@ -395,7 +394,7 @@ class SettingsFragment : Fragment() {
         swSkipLand.isChecked = PopupGate.skipLandscape(requireContext())
         val rowSkipLand = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_devices,
                 Lang.t("横屏时不弹出", "Skip in landscape"),
-                Lang.t("横屏时不显示弹窗", "Do not show the popup in landscape"),
+                null,
                 swSkipLand, null)
         swSkipLand.setOnCheckedChangeListener { _, checked ->
             getSP().edit().putBoolean("popup_skip_landscape", checked).commit()
@@ -599,43 +598,13 @@ class SettingsFragment : Fragment() {
         val trackLabels = AncProfileLib.resolveDc(ancProfileDevice).trackingLabels
         val trackRows = ArrayList<View>()
         for (i in trackLabels.indices) {
-            val et = EditText(requireContext())
-            et.setText(getSP().getString("track_label_" + i, trackLabels[i]))
-            et.textSize = 16f
-            et.setSingleLine(true)
-            et.setPadding(dp(8), dp(4), dp(8), dp(4))
-            val etBg = GradientDrawable()
-            etBg.shape = GradientDrawable.RECTANGLE
-            etBg.setStroke(dp(1), pal.outline)
-            etBg.setColor(pal.surface)
-            etBg.setCornerRadius(dp(8).toFloat())
-            et.background = etBg
-            // alpha2.53: 改成失焦/回车时才保存。原先每次按键都写库，
-            // 一个名字没敲完就落了半截；空值视为恢复默认。
-            val labelIdx = i
-            val defLabel = trackLabels[i]
-            et.hint = defLabel
-            et.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
-            et.setOnFocusChangeListener { _, has ->
-                if (!has) {
-                    val v = et.text?.toString()?.trim()
-                    if (v.isNullOrEmpty()) {
-                        getSP().edit().remove("track_label_" + labelIdx).commit()
-                        et.setText(defLabel)
-                    } else {
-                        getSP().edit().putString("track_label_" + labelIdx, v).commit()
-                    }
-                    DeviceControlBridge.refreshProfile(requireContext())
-                }
-            }
-            et.setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                    et.clearFocus()
-                    true
-                } else false
-            }
+            val def = trackLabels[i]
+            val cur = getSP().getString("track_label_" + i, def) ?: def
+            val idx = i
             trackRows.add(M3Ui.listRow(requireActivity(), pal, 0,
-                    Lang.t("模式 ", "Mode ") + i, Lang.t("默认名称：", "Default name: ") + trackLabels[i], et, null))
+                    Lang.t("模式 ", "Mode ") + i, cur,
+                    M3Ui.chevron(requireActivity(), pal.onVariant),
+                    Runnable { showTrackLabelDialog(idx, def) }))
         }
         box.addView(M3Ui.groupCard(requireActivity(), pal, *trackRows.toTypedArray()))
         box.addView(spacer(dp(10)))
@@ -679,8 +648,7 @@ class SettingsFragment : Fragment() {
         // 用带多彩图标容器的行（与「检查权限」「日志抓取」同款），保持诊断区视觉一致
         val rowDebug = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_bug_report,
                 Lang.t("调试模式", "Debug mode"),
-                Lang.t("显示排查入口（服务探测 / EQ 通道）",
-                        "Show diagnostics entries (GATT probe, SPP EQ)"),
+                Lang.t("显示排查选项", "Show troubleshooting options"),
                 swDebug, null)
         // GATT 服务探测：判断型号是否提供 9ECA（均衡器）/GAIA 等私有服务
         val rowProbe = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_code,
@@ -871,6 +839,43 @@ class SettingsFragment : Fragment() {
      * 只读缓存的刷新（onResume）不够 —— 负结果在有效期内会被 checkAll 直接复用，
      * 用户点了看不到任何变化。探测最长阻塞 10s，必须在子线程。
      */
+    /** 空间音频追踪标签编辑：Material 弹窗 + 内嵌单行输入框。 */
+    private fun showTrackLabelDialog(index: Int, def: String) {
+        val (dlg, body) = M3Ui.materialDialog(requireContext(), pal.primary, pal.card)
+        body.addView(M3Ui.dialogTitle(requireContext(),
+                Lang.t("模式 ", "Mode ") + index + Lang.t(" 显示名称", " name"), pal.onSurface),
+                LinearLayout.LayoutParams(-1, -2))
+        val et = EditText(requireContext())
+        et.setText(getSP().getString("track_label_" + index, def) ?: def)
+        et.hint = def
+        et.setSingleLine(true)
+        et.textSize = 16f
+        val bg = GradientDrawable()
+        bg.shape = GradientDrawable.RECTANGLE
+        bg.setStroke(dp(1), pal.outline)
+        bg.setColor(pal.surface)
+        bg.setCornerRadius(dp(8).toFloat())
+        et.background = bg
+        et.setPadding(dp(12), dp(10), dp(12), dp(10))
+        body.addView(et, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(12) })
+        val actions = LinearLayout(requireContext())
+        actions.orientation = LinearLayout.HORIZONTAL
+        actions.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        actions.addView(M3Ui.textButton(requireContext(), pal, Lang.t("取消", "Cancel")) {
+            dlg.dismiss()
+        })
+        actions.addView(M3Ui.textButton(requireContext(), pal, Lang.t("保存", "Save")) {
+            val v = et.text?.toString()?.trim()
+            if (v.isNullOrEmpty()) getSP().edit().remove("track_label_" + index).commit()
+            else getSP().edit().putString("track_label_" + index, v).commit()
+            DeviceControlBridge.refreshProfile(requireContext())
+            dlg.dismiss()
+            scheduleRebuild(0L)
+        })
+        body.addView(actions, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(8) })
+        dlg.show()
+    }
+
     private fun recheckRunMode() {
         val act = activity ?: return
         val appCtx = act.applicationContext

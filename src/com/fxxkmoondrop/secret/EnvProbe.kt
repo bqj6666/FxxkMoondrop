@@ -252,22 +252,11 @@ class EnvProbe private constructor() {
         @JvmStatic
         fun runModeDetail(ctx: Context?): String {
             if (ctx == null) return ""
-            val rooted = isRooted()
-            return when (hookActiveCached()) {
-                true -> if (rooted)
-                    Lang.t(ctx, "FastPairHook 模块已激活；Root 增强功能可用",
-                            "FastPairHook module active; root enhancements available")
-                else
-                    Lang.t(ctx, "FastPairHook 模块已激活，无需 Root；Root 增强功能不可用",
-                            "FastPairHook module active without root; root enhancements unavailable")
-                false -> if (rooted)
-                    Lang.t(ctx, "FastPairHook 模块未激活，将使用内置自扫",
-                            "FastPairHook module inactive; built-in scan will be used")
-                else
-                    Lang.t(ctx, "仅通知栏与主界面控制降噪（GAIA 直连）",
-                            "ANC control from the notification and main UI only (GAIA direct)")
-                null -> Lang.t(ctx, "正在检测 FastPairHook 模块状态…", "Detecting FastPairHook module…")
-            }
+            // 只保留两种状态说明：模块是否已激活（root 等信息由权限页展示）
+            return if (hookActiveCached() == true)
+                Lang.t(ctx, "模块已激活", "Module active")
+            else
+                Lang.t(ctx, "模块未激活", "Module inactive")
         }
     }
 }
