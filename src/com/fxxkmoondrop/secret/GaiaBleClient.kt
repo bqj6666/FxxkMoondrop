@@ -1121,8 +1121,21 @@ class GaiaBleClient private constructor(
                         advanceCandidate()
                     }
                     failSession("Bluetooth connection/setup timeout")
-                    if (exhausted && connectionGeneration == generation + 1)
-                        postSessionDelayed({ startGenericScan() }, 1000)
+                    if (exhausted && connectionGeneration == generation + 1) {
+                        // BLE 连不上且候选已耗尽：若是经典蓝牙设备，改走 RFCOMM(SPP)。
+                        // Pudding(MD-TWS-056) 就属于这类 —— 它的回退实现早就写好，
+                        // 但此前从来没有调用点，于是表现成无限「连接超时 + 重新扫描」。
+                        val addrNow = deviceAddress
+                        val dev: BluetoothDevice? = if (addrNow == null) null else runCatching {
+                            android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                                    ?.getRemoteDevice(addrNow)
+                        }.getOrNull()
+                        val classic = dev != null &&
+                                dev.type != android.bluetooth.BluetoothDevice.DEVICE_TYPE_LE
+                        postSessionDelayed({
+                            if (classic && dev != null) tryRfcommFallback(dev) else startGenericScan()
+                        }, 1000)
+                    }
                 }
             }
         }
@@ -1286,6 +1299,62 @@ class GaiaBleClient private constructor(
     fun setHeadTracking(state: Int) {
         if (simConnected) { dcBridge?.onHeadTrackingResult(state); return }
         writeCommand(GaiaConstants.FEATURE_SPATIAL_AUDIO, GaiaConstants.CMD_SPATIAL_SET_HEAD_TRACKING, byteArrayOf(state.toByte()))
+    }
+
+    // ── Codec（feature 0x10）：开关与状态读取，命令号 3=LC3 / 4=LDAC / 6=LHDC ──
+
+    /**
+     * 设置某个 codec 开关。
+     * ⚠️ 实测切换 codec 会让耳机重启并自动重连，因此调用方需容忍随后的一次断连。
+     */
+    fun setCodec(codec: Int, on: Boolean) {
+        writeCommand(GaiaCommands.F_CODEC, codec, byteArrayOf(if (on) 1 else 0))
+        AppLog.i(GaiaConstants.TAG, "codec set cmd=" + codec + " on=" + on)
+    }
+
+    /** 读某个 codec 当前状态（同一命令号，无载荷）。 */
+    fun fetchCodec(codec: Int) {
+        writeCommand(GaiaCommands.F_CODEC, codec, ByteArray(0))
+    }
+
+    // ── 支持列表（feature 0x00 / cmd 0x04）：每次连接只请求一次，刷新时强制重取 ──
+    private val FEATURE_QUERY_ENABLED = false
+    private var featReqDone = false
+
+    /**
+     * 请求一次「支持的 feature 列表」。
+     *
+     * 只读、不改设备状态；与官方 App 连接后的握手同款。
+     * 去重规则：同一连接内只发一次（[force] 为真时例外），且 10 秒内不重复发，
+     * 避免连断抖动时刷屏。
+     */
+    fun requestSupportedFeatures(force: Boolean = false) {
+        // 保留实现供后续研究：实测该机型对 00 1D 00 xx 不回包，因此默认关闭，
+        // 不在连接流程里白发请求。需要实验时把开关改成 true 即可。
+        if (!FEATURE_QUERY_ENABLED) return
+        // 只保留「每次连接一次」这一个条件：同一连接内不重复发，
+        // 刷新按钮用 force 绕过。不叠加时间窗等额外防御 —— 连接路径越简单越不容易出问题。
+        if (!force && featReqDone) return
+        featReqDone = true
+        // 官方连接后的握手顺序：先读基础信息（00 01），再读支持列表（00 04）。
+        // 实测单独发 00 04 设备不回应，按官方顺序补上前一条。
+        writeCommand(GaiaConstants.FEATURE_BASIC, 0x01, ByteArray(0))
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            runCatching {
+                writeCommand(GaiaConstants.FEATURE_BASIC,
+                        GaiaConstants.CMD_GET_SUPPORTED_FEATURES, ByteArray(0))
+            }
+        }, 250L)
+        val caller = Throwable().stackTrace.take(5)
+                .joinToString(" <- ") {
+                    it.className.substringAfterLast('.') + "." + it.methodName + ":" + it.lineNumber
+                }
+        AppLog.i(GaiaConstants.TAG, "request supported features (force=" + force + ") caller=" + caller)
+    }
+
+    /** 链路断开时复位，允许下一次连接重新请求。 */
+    fun resetFeatureRequestState() {
+        featReqDone = false
     }
 
     fun fetchAncMode(cb: AncControlCallback?) {

@@ -62,6 +62,11 @@ class EqEditorActivity : BaseActivity() {
 
     private var presetIds: IntArray = intArrayOf(0, 1, 2)
     private var currentPreset = -1
+    /**
+     * 刚写入自定义曲线：官方 App 的行为是「写入自定义曲线后，三档预设全部取消选中」。
+     * 这里用标记保证回读时不会又把预设索引点亮。
+     */
+    private var customCurveApplied = false
     private var presetKnown = false
 
     @Volatile private var alive = false
@@ -570,7 +575,7 @@ class EqEditorActivity : BaseActivity() {
                     if (!alive) return@post
                     presetKnown = ids != null
                     if (ids != null) presetIds = ids
-                    currentPreset = cur
+                    currentPreset = if (customCurveApplied) -1 else cur
                     rebuildPresets()
                     if (pr == null) {
                         showError(Lang.t("载荷布局不认识（", "Unrecognised payload (") + raw.size +
@@ -621,12 +626,21 @@ class EqEditorActivity : BaseActivity() {
                 ui.post { busy = false; if (alive) { setApplyEnabled(editable); showError(Lang.t("写入前建链失败", "Connect failed")) } }
                 return@Thread
             }
+            // 预设档位激活时固件会忽略写曲线 —— 先切到自定义档（探测式，失败则按旧行为继续）
+            MoondropSpp.selectCustomPreset()
             val ok = MoondropSpp.writeCurve(raw)
             ui.post {
                 busy = false
                 if (!alive) return@post
                 setApplyEnabled(editable)
-                if (!ok) showError(Lang.t("写入失败（链路断开？）", "Write failed"))
+                if (!ok) {
+                    showError(Lang.t("写入失败（链路断开？）", "Write failed"))
+                } else {
+                    // 与官方一致：写入自定义曲线后，三档预设全部取消选中
+                    customCurveApplied = true
+                    currentPreset = -1
+                    rebuildPresets()
+                }
             }
             if (ok) { Thread.sleep(500); doRead(raw) }
         }.start()
@@ -645,7 +659,7 @@ class EqEditorActivity : BaseActivity() {
             ui.post {
                 if (!alive) return@post
                 if (r == null) showError(Lang.t("切换预设失败", "Preset switch failed"))
-                else { currentPreset = idx; rebuildPresets() }
+                else { customCurveApplied = false; currentPreset = idx; rebuildPresets() }
             }
             if (r != null) { Thread.sleep(300); doRead(null) }
         }.start()

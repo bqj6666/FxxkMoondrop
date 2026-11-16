@@ -17,7 +17,7 @@ package com.fxxkmoondrop.secret
  * 水月雨「知更鸟 Robin」(`ROBIN'S EARPHONES`) 反复出现：
  *
  * ```
- * GATT connected 24:11:14:B5:7B:76 -> discovering services
+ * GATT connected XX:XX:XX:XX:XX:XX -> discovering services
  * GATT services(0):                                  <- 空！且距连接仅数十毫秒
  * no GAIA/9ECA in GATT -> rejected: ROBIN'S EARPHONES <- 被永久拉黑
  * ```

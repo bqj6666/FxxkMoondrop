@@ -154,6 +154,25 @@ object MoondropSpp {
     /** 读当前预设：00 1D 0A 02 */
     fun readPreset(): ByteArray? = request(byteArrayOf(0x00, 0x1D, 0x0A, 0x02))
 
+    /**
+     * 切到「自定义曲线」档位。
+     *
+     * 现象依据：三个官方预设激活时，写 0A 06 的曲线会被固件忽略（听起来仍是预设）。
+     * 官方 App 应用自定义曲线时三档全部取消选中 —— 说明它先发了一条「切到自定义」的
+     * 0A 03，索引不是 0/1/2。这里按最可能的两个候选探测：3 与 0xFF。
+     *
+     * 返回实际生效的索引；两个候选都不被接受时返回 -1（调用方照常写曲线，行为与旧版一致）。
+     */
+    fun selectCustomPreset(): Int {
+        for (candidate in intArrayOf(0x03, 0xFF)) {
+            request(byteArrayOf(0x00, 0x1D, 0x0A, 0x03, candidate.toByte())) ?: continue
+            val now = readCurrentPreset()
+            AppLog.i(TAG, "custom preset probe: sent " + candidate + ", readback " + now)
+            if (now == candidate) return candidate
+        }
+        return -1
+    }
+
     /** 切预设：0=流行 1=标准 2=监听 */
     fun setPreset(index: Int): ByteArray? =
         request(byteArrayOf(0x00, 0x1D, 0x0A, 0x03, index.toByte()))

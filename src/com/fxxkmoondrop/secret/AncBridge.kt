@@ -118,19 +118,28 @@ class AncBridge {
         private var lastSentAt = 0L
 
         @JvmStatic
-        fun setAncMode(mode: Int) {
+        fun setAncMode(mode: Int, source: String = "unknown") {
             if (mode < 0 || mode > 5) return
             // 只挡「同一次事件的重入」：同档位 200ms 内重复调用直接丢弃。
             // ⚠️ 不要放大这个窗口 —— 连接后同步档位、重连对齐都走这里，
             // 窗口一大就会吞掉正常命令（上一版 1.2s+限流那次就是这么把耳机搞成「连不上」的）。
             val nowMs = android.os.SystemClock.elapsedRealtime()
+            // 跨来源振荡守卫：面板（fp-popup / prefs）在 1.2 秒内回推一个**不同**档位时丢弃。
+            // 现象依据：连接耳机后 0 与 2 每约 500ms 交替下发，档位每次都不同，
+            // 「同档位回声」守卫拦不住；而弹窗被跳过时完全不复现。
+            // 只拦面板来源，主界面 / 通知 / 快捷开关等用户操作不受影响。
+            val fromPanel = source == "fp-popup" || source == "prefs"
+            if (fromPanel && mode != lastSentMode && nowMs - lastSentAt < 1200L) {
+                Log.i(TAG, "panel echo suppressed: $mode (last=$lastSentMode src=$source)")
+                return
+            }
             if (mode == lastSentMode && nowMs - lastSentAt < 200L) {
                 Log.d(TAG, "setAncMode reentry ignored: " + mode)
                 return
             }
             lastSentMode = mode
             lastSentAt = nowMs
-            Log.d(TAG, "setAncMode ui=$mode (path 由能力探测自动选择)")
+            Log.d(TAG, "setAncMode ui=$mode src=$source (path 由能力探测自动选择)")
             // alpha1.21: 乐观更新——GA2 AudioCuration 设备不回 ACK，不能依赖回调刷新
             // 缓存/弹窗高亮；先立即确认缓存并广播 GMS（设备真回包仍以设备为准覆盖）
             val prevMode = currentMode

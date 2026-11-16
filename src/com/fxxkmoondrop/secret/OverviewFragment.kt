@@ -339,7 +339,7 @@ class OverviewFragment : Fragment() {
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(primaryColor, containerColor))
             btn.setOnClickListener {
-                AncBridge.setAncMode(fm)
+                AncBridge.setAncMode(fm, "overview")
                 ancMode = fm
                 updateAncStatus()
             }
@@ -589,7 +589,12 @@ class OverviewFragment : Fragment() {
         // 禁用/启用完全由加载态驱动（见 showRefreshBar / stopRefreshSpinner）：
         // 之前用 1500ms 防连点，时间一到按钮就自己解禁，而刷新还在跑 —— 加载中看着像可点。
         val refreshBtn = makeButton(Lang.t("刷新状态", "Refresh"),
-                R.drawable.ic_refresh, container, onContainer, 0L) { showRefreshBar(); refreshAnc() }
+                R.drawable.ic_refresh, container, onContainer, 0L) {
+                    showRefreshBar()
+                    // 用户明确点刷新：支持列表强制重读一次（连接后已读过一次）
+                    runCatching { GaiaBleClient.getInstance().requestSupportedFeatures(force = true) }
+                    refreshAnc()
+                }
         refreshBox.addView(refreshBtn, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -1312,6 +1317,8 @@ class OverviewFragment : Fragment() {
      * 读不到时退回链路类型，再退到「未连接」，任何情况下不空着。
      */
     private fun refreshCodecBadge() {
+        // 免 root 不发起 su：拿不到编解码器就退回链路类型，不影响功能
+        if (!RootShell.isAvailable()) return
         // 无链路时不查（dumpsys 也在百毫秒级），并顺手清掉可能存在的过期值
         if (linkTypeLabel() == null) {
             codecLabel = null

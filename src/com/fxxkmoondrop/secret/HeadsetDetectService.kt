@@ -22,6 +22,14 @@ import java.util.HashSet
 
 @Suppress("DEPRECATION")
 class HeadsetDetectService : Service() {
+
+    // ── 3.4.2 GAIA 重连节流 ──────────────────────────────────
+    // 目的：彻底消除「每 5 秒断开重连一次」的风暴（死机诱因）。
+    private var gaiaConnectInitiated = false
+    private var gaiaAttemptAddr: String? = null
+    private var gaiaAttemptAt = 0L
+    private var gaiaBackoffUntil = 0L
+    private var gaiaFailAddr: String? = null
     companion object {
         @JvmField
         @Volatile
@@ -262,6 +270,11 @@ class HeadsetDetectService : Service() {
         override fun onConnected(address: String) {
             Log.i(TAG, "GAIA connected: $address")
             AppLog.i(TAG, "GAIA connected: " + address + " protocol=" + GaiaBleClient.getInstance().activeProtocol())
+            // 连接后读一次支持列表（只读，官方同款），结果由 DeviceFeatures 缓存。
+            // 延后 1.5s：onConnected 时写特征可能还没就绪，立即写会静默失败（实测无回包）。
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching { GaiaBleClient.getInstance().requestSupportedFeatures() }
+            }, 1500L)
             lastGaiaFetchMs = 0
             // alpha1.4: 延迟等 notification descriptor 写完后请求电量/降噪模式
             handler.postDelayed({
@@ -410,12 +423,30 @@ class HeadsetDetectService : Service() {
             // 同一副耳机可能以两个不同地址（BR/EDR 与 LE、或 A2DP/HFP 两条 profile）
             // 各占一个 key，此前会在一轮里先后发起两次 connect —— 第二次必然先
             // disconnect 掉第一次刚建好的链路（实测 37ms 内两次 connectGatt）。
-            var gaiaConnectInitiated = false
+            // 3.4.2: 这个标记原本是**局部变量**，每 5 秒轮询都重置一次，
+            // 于是「连接中/刚发起」的防护形同虚设 —— 实测每 5 秒 disconnect + connect 一次，
+            // 连续 80+ 轮，耳机侧 BLE 链路被反复拆建，是死机/自动关机的直接诱因。
+            // 现在改成字段，并配失败退避：同一地址连续失败 2 次就静默 60 秒。
             for (key in now.sorted()) {
                 val idx = key.indexOf('|')
                 val addr = key.substring(0, idx)
                 val nm = key.substring(idx + 1)
                 PopupGate.tryShowConnectedDeferred(this, addr, nm)
+                // 退避期内不再发起 GAIA 连接（失败重试风暴会让耳机固件崩溃）。
+                // 但如果这次检测到的是**另一副**耳机，立刻解除退避 —— 否则旧地址的
+                // 失败会把新设备的自动连接一起挡住。
+                if (SystemClock.elapsedRealtime() < gaiaBackoffUntil) {
+                    val failedOn = gaiaFailAddr
+                    val target = try {
+                        GaiaBleClient.resolveLeAddress(adapter, adapter.getRemoteDevice(addr)) ?: addr
+                    } catch (_: Exception) { addr }
+                    if (failedOn != null && !failedOn.equals(target, ignoreCase = true)) {
+                        gaiaBackoffUntil = 0L
+                        AppLog.i(TAG, "new target detected, lift GAIA backoff")
+                    } else {
+                        continue
+                    }
+                }
                 hasMoondrop = true
                 // alpha2.18: 同族设备（前缀12位相同）GAIA 已连时不重复发起（双地址自我反馈防护）
                 val gaia = GaiaBleClient.getInstance()
@@ -440,6 +471,8 @@ class HeadsetDetectService : Service() {
                     if (gaia.isConnecting()) continue
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
+                    gaiaAttemptAddr = gaiaAddr
+                    gaiaAttemptAt = SystemClock.elapsedRealtime()
                 } else if (!gaia.isConnected()) {
                     // 3.2.1: 链路空闲但仍残留上一次的 deviceAddress —— 此前这里连的是那个
                     // **旧地址**，于是「先连 A 再换 B」时永远在重连 A，B 一辈子连不上。
@@ -447,8 +480,13 @@ class HeadsetDetectService : Service() {
                     val stale = gaia.deviceAddress
                     if (stale != null && !stale.equals(gaiaAddr, ignoreCase = true)) {
                         // 目标换了设备：清掉旧地址再连新的（3.2.1 修复的「永远重连旧地址」）
-                        AppLog.i(TAG, "gaia idle but stale addr " + stale + " -> switch to " + gaiaAddr)
+                        AppLog.i(TAG, "gaia idle but stale addr " + stale + ", drop it and re-connect next poll")
                         gaia.disconnect()
+                        // 断链是异步的：紧跟着 connect() 会在旧 gatt 还没 close 时注册新 client，
+                        // 实测会留下僵死连接、下一轮又判失败 —— 交给下一次轮询再连更稳。
+                        gaiaConnectInitiated = false
+                        gaiaAttemptAddr = null
+                        continue
                     } else if (gaia.isConnecting()) {
                         // 「耳机死机」根因 C：链路正在建立时此前也会再走一次 disconnect + connect。
                         // 一次 pollConnected 里同名设备可能出现多个条目（A2DP + HFP 两条 profile），
@@ -461,7 +499,30 @@ class HeadsetDetectService : Service() {
                     }
                     gaia.connect(this, gaiaAddr)
                     gaiaConnectInitiated = true
+                    gaiaAttemptAddr = gaiaAddr
+                    gaiaAttemptAt = SystemClock.elapsedRealtime()
                 }
+            }
+
+            // ── 连接结果结算：成功清零，失败累计并退避 ──
+            run {
+                val gaiaNow = GaiaBleClient.getInstance()
+                val t = SystemClock.elapsedRealtime()
+                if (gaiaNow.isConnected()) {
+                    gaiaConnectInitiated = false
+                    gaiaBackoffUntil = 0L
+                } else if (gaiaConnectInitiated && t - gaiaAttemptAt > 20000L) {
+                    // 硬超时：20 秒还没连上（含卡在 isConnecting 的僵死 gatt）——
+                    // 必须复位标记并主动断开，否则 gaiaConnectInitiated 永远为 true，
+                    // 之后再来耳机也不会再发起连接。
+                    gaiaConnectInitiated = false
+                    runCatching { gaiaNow.disconnect() }
+                    gaiaFailAddr = gaiaAttemptAddr
+                    gaiaBackoffUntil = t + 30000L
+                    AppLog.w(TAG, "GAIA connect hard timeout, reset and back off 30s")
+                }
+                // 失败结算只保留上面的 20 秒硬超时这一条：
+                // 「连败 2 次再退避」与它是同一件事的第二份实现，删掉以免两套阈值互相干扰。
             }
 
             // v3.17: 断开时 force-stop Moondrop App
@@ -476,9 +537,15 @@ class HeadsetDetectService : Service() {
                     // 原本这里无条件 disconnect()，A 断开会把还连着的 B 一起掐掉。
                     val gaiaNow = GaiaBleClient.getInstance()
                     val cur = gaiaNow.deviceAddress
-                    val isOurLink = gaiaNow.isConnected() && cur != null &&
-                            cur.length >= 12 && addr.length >= 12 &&
-                            cur.substring(0, 12).equals(addr.substring(0, 12), ignoreCase = true)
+                    // 判据改为「当前连接的地址是否还在本轮快照里」。
+                    // 原实现只比较地址前 12 位（同一副耳机的 BR/EDR 与 LE 别名在前 12 位相同）
+                    // 会被当成同一副耳机 —— 任一别名从快照消失就误判「我们的耳机走了」，
+                    // 于是主动断开 GAIA，形成「测一下就掉线、接着疯狂重连、又弹窗」的循环。
+                    val curStillThere = cur != null && now.any {
+                        val i2 = it.indexOf('|')
+                        i2 > 0 && it.substring(0, i2).equals(cur, ignoreCase = true)
+                    }
+                    val isOurLink = gaiaNow.isConnected() && cur != null && !curStillThere
                     if (isOurLink) {
                         gaiaNow.disconnect()
                         AppLog.i(TAG, "gaia disconnected (its device left): " + addr)

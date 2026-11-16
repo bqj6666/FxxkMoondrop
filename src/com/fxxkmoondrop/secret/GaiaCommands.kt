@@ -627,6 +627,21 @@ object GaiaCommands {
         return p.size % 4 != 0
     }
 
+    // ── Codec 设置（feature 0x10，反编译官方 App 得到：3=LC3 / 4=LDAC / 6=LHDC）──
+    const val F_CODEC = 0x10
+    const val CODEC_LC3 = 3
+    const val CODEC_LDAC = 4
+    const val CODEC_LHDC = 6
+
+    /** 设置某个 codec 开关：载荷单字节，1=开 0=关。 */
+    @JvmStatic
+    fun codecSet(codec: Int, on: Boolean): ByteArray =
+            v3Packet(F_CODEC, codec, byteArrayOf(if (on) 1 else 0))
+
+    /** 读某个 codec 当前状态：同一 command 号，无载荷。 */
+    @JvmStatic
+    fun codecGet(codec: Int): ByteArray = v3Packet(F_CODEC, codec, null)
+
     /** 由能力集合推导 ANC 路径（优先级：AudioCuration > ANC V2 > ANC V1 > 未知） */
     @JvmStatic
     fun ancPathFrom(features: Set<Int>): Int = when {

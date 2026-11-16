@@ -123,7 +123,7 @@ class PrefsProvider : ContentProvider() {
             when (action) {
                 "set_anc" -> {
                     val mode = uri.getQueryParameter("mode")?.toIntOrNull() ?: -1
-                    AncBridge.setAncMode(mode)
+                    AncBridge.setAncMode(mode, "prefs")
                 }
                 "set_spatial" -> {
                     val enabled = uri.getQueryParameter("enabled")?.toBoolean() ?: false

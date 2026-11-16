@@ -64,7 +64,12 @@ class GaiaPacketHandler(
             } else if (feature == GaiaConstants.FEATURE_BASIC &&
                     (command == GaiaConstants.CMD_GET_SUPPORTED_FEATURES ||
                             command == GaiaCommands.C_BASIC_GET_SUPPORTED_FEATURES_NEXT)) {
+                AppLog.d(TAG, "supported-features RX cmd=0x" + Integer.toHexString(command) +
+                        " len=" + payload.size + " hex=" +
+                        payload.joinToString(" ") { "%02X".format(it) })
                 probe.handleFeatureResponse(payload, command)
+            } else if (feature == GaiaCommands.F_CODEC) {
+                CodecState.onResponse(command, payload)
             } else if (feature == GaiaConstants.FEATURE_BASIC &&
                     (command == GaiaConstants.CMD_GET_VARIANT || command == GaiaConstants.CMD_GET_APP_VERSION ||
                             command == GaiaConstants.CMD_GET_GAIA_VERSION)) {

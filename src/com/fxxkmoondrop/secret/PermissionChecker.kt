@@ -70,18 +70,6 @@ class PermissionChecker {
             // 因此失败绝不能当结论。用户在管理器里补上授权后点这一项即可重新检测。
             val rootBin = RootShell.binary()
             val rootOk = rootBin != null || EnvProbe.isRooted()
-            list.add(Item(Lang.t(ctx, "Root 权限", "Root access"), rootOk,
-                    when {
-                        rootOk -> Lang.t(ctx, "可用，入口=" + (rootBin ?: "su"),
-                                "Available, entry=" + (rootBin ?: "su"))
-                        RootShell.sawBinaryLastProbe() -> Lang.t(ctx,
-                                "已找到 root 入口但未取得授权。请在 Root 管理器中授权后点击此项重新检测",
-                                "Root entry found but not granted. Authorize it in your root manager, then tap here to re-check")
-                        else -> Lang.t(ctx,
-                                "未检测到 root 入口。若设备已 root：请先在 Root 管理器中把本应用加入授权列表，再点击此项重新检测",
-                                "No root entry detected. If rooted: allow this app in your root manager first, then tap here to re-check")
-                    },
-                    ACTION_ROOT_RECHECK, 0, false))
 
             // FastPairHook 项与 GAIA 项共用的实测结果。
             // 3.0.5-hotfix: 本函数本来就要实测 hook，且两个调用方都在子线程，所以直接取实测值 ——
@@ -110,6 +98,19 @@ class PermissionChecker {
                 gaiaDetail = Lang.t(ctx, "检测到 Root 但模块未激活；请启用 FastPairHook 或使用纯净环境", "Root detected but module not active; enable FastPairHook or use clean env")
             }
             list.add(Item(Lang.t(ctx, "GAIA 直连", "GAIA direct link"), gaiaOk, gaiaDetail, ACTION_NONE, 0, true))
+
+            list.add(Item(Lang.t(ctx, "Root 增强（可选）", "Root boost (optional)"), rootOk,
+                    when {
+                        rootOk -> Lang.t(ctx, "已授权（仅增强：GMS 图标、编解码器显示）",
+                                "Granted (boost only: GMS icon, codec label)")
+                        RootShell.sawBinaryLastProbe() -> Lang.t(ctx,
+                                "已找到 root 入口但未取得授权。请在 Root 管理器中授权后点击此项重新检测",
+                                "Root entry found but not granted. Authorize it in your root manager, then tap here to re-check")
+                        else -> Lang.t(ctx,
+                                "可选。免 root 全部功能可用；授权后额外提供 GMS 图标写入与编解码器显示",
+                                "No root entry detected. If rooted: allow this app in your root manager first, then tap here to re-check")
+                    },
+                    ACTION_ROOT_RECHECK, 0, false))
 
             return list
         }

@@ -26,7 +26,7 @@ class NotifActionReceiver : BroadcastReceiver() {
             Log.w("MoondropNotif", "ensure service from notif fail", t)
         }
         try {
-            AncBridge.setAncMode(mode)
+            AncBridge.setAncMode(mode, "notif")
         } catch (t: Throwable) {
             Log.w("MoondropNotif", "setAncMode from notif fail", t)
         }

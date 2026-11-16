@@ -570,7 +570,7 @@ GMS hook 实测 `onModuleLoaded` / `onPackageReady` 正常，**9 个 hook 点 + 
 
 ### 附带确认：失效 LE 地址淘汰机制在实战中生效
 - 同一份日志里出现了 3.2.6 新增的自愈日志：
-  `protocol: cached LE addr unusable, dropped: 26:03:27:B7:F0:15` ——
+  `protocol: cached LE addr unusable, dropped: XX:XX:XX:XX:XX:XX` ——
   该用户的耳机 LE 地址缓存多次连不上后被自动淘汰并重新发现，随后
   `probe:` 正常拿到能力集合，连接恢复。这为 3.2.6 的改动提供了真实设备上的验证。
 

@@ -206,6 +206,8 @@ class CapabilityProbe(
         onBasicAlive()
         features = features + feats
         ancPath = GaiaCommands.ancPathFrom(features)
+        // 把累积的支持列表同步给功能表：界面据此决定显示哪些功能块
+        DeviceFeatures.onSupported(features.toIntArray())
         featurePages++
         val more = pairList && payload[0].toInt() == 1
         if (more && featurePages < MAX_FEATURE_PAGES) {
