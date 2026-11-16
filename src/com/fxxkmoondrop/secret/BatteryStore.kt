@@ -38,6 +38,20 @@ class BatteryStore {
             }
         }
 
+        /**
+         * 该侧耳机当前是否真的连着手机。
+         *
+         * 实测：只取出一侧耳机时，留在舱内的那一侧依旧会被上报电量 0%，
+         * 直接显示「0%」会让人以为电量耗尽。这里统一把 0 视为「未连接 / 在舱内」，
+         * 由界面显示为「未连接」。真正耗尽（0%）的耳机此时也已关机，不会上报。
+         */
+        @JvmStatic
+        fun isSideConnected(address: String?, side: Int): Boolean = when (side) {
+            1 -> getLeft(address) > 0
+            2 -> getRight(address) > 0
+            else -> false
+        }
+
         /** GAIA 左耳电量（纯 GAIA 表，不回退系统值；用于弹窗左右耳优先显示） */
         @JvmStatic
         fun getGaiaLeft(address: String?): Int {

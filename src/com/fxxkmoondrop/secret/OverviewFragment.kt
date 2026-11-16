@@ -1544,15 +1544,14 @@ class OverviewFragment : Fragment() {
         if (mac != null) {
             val l = BatteryStore.getLeft(mac)
             val r = BatteryStore.getRight(mac)
-            if (l >= 0 && r >= 0) {
-                text = Lang.t("左耳 ", "L ") + l + "%  ·  " + Lang.t("右耳 ", "R ") + r + "%"
-            } else if (l >= 0) {
-                text = Lang.t("左耳 ", "L ") + l + "%"
-            } else if (r >= 0) {
-                text = Lang.t("右耳 ", "R ") + r + "%"
-            } else {
-                text = "--%"
-            }
+            // 0% 视为「该侧未连接（还在舱里）」，不再显示成 0%，避免误判为电量耗尽
+            val lOk = BatteryStore.isSideConnected(mac, 1)
+            val rOk = BatteryStore.isSideConnected(mac, 2)
+            val lTxt = if (lOk) l.toString() + "%" else Lang.t("未连接", "Not connected")
+            val rTxt = if (rOk) r.toString() + "%" else Lang.t("未连接", "Not connected")
+            text = if (lOk || rOk)
+                Lang.t("左耳 ", "L ") + lTxt + "  ·  " + Lang.t("右耳 ", "R ") + rTxt
+            else "--%"
         } else {
             text = "--%"
         }

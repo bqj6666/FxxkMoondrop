@@ -187,13 +187,14 @@ class PopupGate {
                     if (r < 0) r = BatteryStore.getRight(addr)
                     if (l < 0 && gaiaAddr != null && gaiaAddr != addr) l = BatteryStore.get(gaiaAddr)
                     if (r < 0 && gaiaAddr != null && gaiaAddr != addr) r = BatteryStore.get(gaiaAddr)
-                    if (l >= 0) batL = l.toString()
-                    if (r >= 0) batR = r.toString()
+                    // 0% = 该侧仍在舱内/未连接：既不要显示 0%，也不要当成有效电量传给弹窗
+                    if (l > 0) batL = l.toString()
+                    if (r > 0) batR = r.toString()
                 } else if (gaiaAddr != null) {
                     val l = BatteryStore.getGaiaLeft(gaiaAddr)
                     val r = BatteryStore.getGaiaRight(gaiaAddr)
-                    if (l >= 0) batL = l.toString()
-                    if (r >= 0) batR = r.toString()
+                    if (l > 0) batL = l.toString()
+                    if (r > 0) batR = r.toString()
                 }
                 if (batL != null) i.putExtra(EXTRA_FP_BATTERY_LEFT, batL)
                 if (batR != null) i.putExtra(EXTRA_FP_BATTERY_RIGHT, batR)
