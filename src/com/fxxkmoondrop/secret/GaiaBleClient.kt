@@ -1121,8 +1121,21 @@ class GaiaBleClient private constructor(
                         advanceCandidate()
                     }
                     failSession("Bluetooth connection/setup timeout")
-                    if (exhausted && connectionGeneration == generation + 1)
-                        postSessionDelayed({ startGenericScan() }, 1000)
+                    if (exhausted && connectionGeneration == generation + 1) {
+                        // BLE 连不上且候选已耗尽：若是经典蓝牙设备，改走 RFCOMM(SPP)。
+                        // Pudding(MD-TWS-056) 就属于这类 —— 它的回退实现早就写好，
+                        // 但此前从来没有调用点，于是表现成无限「连接超时 + 重新扫描」。
+                        val addrNow = deviceAddress
+                        val dev: BluetoothDevice? = if (addrNow == null) null else runCatching {
+                            android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                                    ?.getRemoteDevice(addrNow)
+                        }.getOrNull()
+                        val classic = dev != null &&
+                                dev.type != android.bluetooth.BluetoothDevice.DEVICE_TYPE_LE
+                        postSessionDelayed({
+                            if (classic && dev != null) tryRfcommFallback(dev) else startGenericScan()
+                        }, 1000)
+                    }
                 }
             }
         }
