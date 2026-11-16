@@ -511,6 +511,13 @@ class GaiaBleClient private constructor(
                 Log.d(GaiaConstants.TAG, "no LE addr known, start name scan for " + (device.name ?: address))
                 startScanForLe(device)
             }
+            // 纯经典蓝牙设备（如 Pudding MD-TWS-056）：GATT 永远连不上。
+            // 之前要等 20 秒硬超时 + 30 秒退避才回退到 SPP，用户感知为「根本不会自动连接」。
+            if (device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+                AppLog.i(GaiaConstants.TAG, "classic-only device, go straight to RFCOMM/SPP")
+                tryRfcommFallback(device)
+                return rfcommTransport != null
+            }
             if (Build.VERSION.SDK_INT >= 23) {
                 gatt = device.connectGatt(context, false, gattCallback, transportFor(device))
             } else {
