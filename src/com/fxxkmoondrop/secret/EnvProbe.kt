@@ -239,12 +239,15 @@ class EnvProbe private constructor() {
          */
         @JvmStatic
         fun runModeName(ctx: Context?): String {
-            // 这一行是「运行模式」这一项本身，标题固定；具体处在哪种模式由副标题说明，
-            // 因此不再把「模块模式 / 无 Root 模式」写进标题。
             if (ctx == null) return ""
-            return if (hookActiveCached() == null)
-                Lang.t(ctx, "检测中…", "Detecting…")
-            else Lang.t(ctx, "运行模式", "Run mode")
+            val hook = hookActiveCached()
+            return when {
+                hook == null -> Lang.t(ctx, "检测中…", "Detecting…")
+                // 既没有 root 入口、模块也没激活 —— 这种环境下功能不可用，
+                // 标题直接点明「无 Root 模式」，比笼统的「运行模式」更有信息量。
+                !isRooted() && hook == false -> Lang.t(ctx, "无 Root 模式", "No-root mode")
+                else -> Lang.t(ctx, "运行模式", "Run mode")
+            }
         }
 
         /** 当前运行模式的**一句说明**（设置页那一行的副标题）。 */
