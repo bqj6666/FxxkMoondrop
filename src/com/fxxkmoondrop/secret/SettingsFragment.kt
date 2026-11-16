@@ -472,8 +472,7 @@ class SettingsFragment : Fragment() {
         // 总开关状态 = enable && auto_service，两键始终同步写入
         swAuto.isChecked = KeepAlive.enabled(requireContext())
         val rowAuto = M3Ui.listRow(requireActivity(), pal, R.drawable.ic_sensors, Lang.t("后台监听", "Background monitor"),
-                Lang.t("启动与开机自动恢复，连接后直连 GAIA",
-                        "Resume on launch and boot; connect to GAIA when a headset is present"), swAuto, null)
+                Lang.t("后台自动发现耳机", "Discover earbuds in the background"), swAuto, null)
         swAuto.setOnCheckedChangeListener { _, checked ->
             KeepAlive.setEnabled(requireContext(), checked)
         }
@@ -845,19 +844,16 @@ class SettingsFragment : Fragment() {
         body.addView(M3Ui.dialogTitle(requireContext(),
                 Lang.t("模式 ", "Mode ") + index + Lang.t(" 显示名称", " name"), pal.onSurface),
                 LinearLayout.LayoutParams(-1, -2))
-        val et = EditText(requireContext())
+        // 用 Material 官方输入框（OutlinedBox），不再手绘边框 —— 与 EQ 命名弹窗同款
+        val til = com.google.android.material.textfield.TextInputLayout(requireContext(), null,
+                com.google.android.material.R.attr.textInputOutlinedStyle)
+        til.hint = def
+        val et = com.google.android.material.textfield.TextInputEditText(til.context)
+        et.inputType = android.text.InputType.TYPE_CLASS_TEXT
         et.setText(getSP().getString("track_label_" + index, def) ?: def)
-        et.hint = def
-        et.setSingleLine(true)
-        et.textSize = 16f
-        val bg = GradientDrawable()
-        bg.shape = GradientDrawable.RECTANGLE
-        bg.setStroke(dp(1), pal.outline)
-        bg.setColor(pal.surface)
-        bg.setCornerRadius(dp(8).toFloat())
-        et.background = bg
-        et.setPadding(dp(12), dp(10), dp(12), dp(10))
-        body.addView(et, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(12) })
+        et.setSelection(et.text?.length ?: 0)
+        til.addView(et)
+        body.addView(til, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(12) })
         val actions = LinearLayout(requireContext())
         actions.orientation = LinearLayout.HORIZONTAL
         actions.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
