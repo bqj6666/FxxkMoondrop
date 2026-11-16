@@ -109,7 +109,7 @@ class GaiaPacketHandler(
             } else if (feature == GaiaConstants.FEATURE_ANC_V1 &&
                     (command == GaiaConstants.CMD_ANC1_GET_ANC_STATE || command == GaiaConstants.CMD_ANC1_SET_ANC_STATE)) {
                 parseAncMode(payload)
-            } else if (feature == GaiaConstants.FEATURE_DAC_GAIN &&
+            } else if (isGainFeature(feature) &&
                     command == GaiaConstants.CMD_DAC_GET_GAIN) {
                 if (payload.isNotEmpty()) {
                     val level = payload[0].toInt() and 0xFF
@@ -120,13 +120,13 @@ class GaiaPacketHandler(
                         handler.post { cb.onGainResult(level) }
                     }
                 }
-            } else if (feature == GaiaConstants.FEATURE_DAC_GAIN &&
+            } else if (isGainFeature(feature) &&
                     command == GaiaConstants.CMD_DAC_SET_GAIN) {
                 Log.d(TAG, "DAC gain SET ACK (ignored)")
                 deviceControlCallbackProvider()?.let { cb ->
                     handler.postDelayed({ GaiaBleClient.getInstance().fetchGain() }, 300)
                 }
-            } else if (feature == GaiaConstants.FEATURE_LED &&
+            } else if (isLedFeature(feature) &&
                     command == GaiaConstants.CMD_LED_GET_STATE) {
                 if (payload.isNotEmpty()) {
                     val state = payload[0].toInt() and 0xFF
@@ -137,7 +137,7 @@ class GaiaPacketHandler(
                         handler.post { cb.onLedResult(state) }
                     }
                 }
-            } else if (feature == GaiaConstants.FEATURE_LED &&
+            } else if (isLedFeature(feature) &&
                     command == GaiaConstants.CMD_LED_SET_STATE) {
                 Log.d(TAG, "LED SET ACK (ignored)")
                 deviceControlCallbackProvider()?.let { cb ->
@@ -245,4 +245,18 @@ class GaiaPacketHandler(
             }
         }
     }
+    /** 增益 feature：默认 15，部分型号（布丁）为 0x1E —— 以型号档案为准。 */
+    private fun isGainFeature(feature: Int): Boolean {
+        if (feature == GaiaConstants.FEATURE_DAC_GAIN) return true
+        val name = runCatching { GaiaBleClient.getInstance().getConnectedDeviceName() }.getOrNull()
+        return feature == AncProfileLib.gainFeatureFor(name)
+    }
+
+    /** 指示灯 feature：默认 19，部分型号（布丁）为 0x26。 */
+    private fun isLedFeature(feature: Int): Boolean {
+        if (feature == GaiaConstants.FEATURE_LED) return true
+        val name = runCatching { GaiaBleClient.getInstance().getConnectedDeviceName() }.getOrNull()
+        return feature == AncProfileLib.ledFeatureFor(name)
+    }
+
 }

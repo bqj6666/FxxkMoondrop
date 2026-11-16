@@ -87,6 +87,7 @@ class GaiaBleClient private constructor(
     private var srcClient: BleSourceSwitchClient? = null
     var deviceAddress: String? = null
     @Volatile private var connectedDeviceName: String? = null
+        private set
     private var connected = false
 
     /**
@@ -1270,22 +1271,26 @@ class GaiaBleClient private constructor(
 
     fun fetchGain() {
         if (simConnected) { dcBridge?.onGainResult(1); return }
-        writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_GET_GAIN, ByteArray(0))
+        writeCommand(AncProfileLib.gainFeatureFor(connectedDeviceName),
+                GaiaConstants.CMD_DAC_GET_GAIN, ByteArray(0))
     }
 
     fun setGain(level: Int) {
         if (simConnected) { dcBridge?.onGainResult(level); return }
-        writeCommand(GaiaConstants.FEATURE_DAC_GAIN, GaiaConstants.CMD_DAC_SET_GAIN, byteArrayOf(level.toByte()))
+        writeCommand(AncProfileLib.gainFeatureFor(connectedDeviceName),
+                GaiaConstants.CMD_DAC_SET_GAIN, byteArrayOf(level.toByte()))
     }
 
     fun fetchLed() {
         if (simConnected) { dcBridge?.onLedResult(0); return }
-        writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_GET_STATE, ByteArray(0))
+        writeCommand(AncProfileLib.ledFeatureFor(connectedDeviceName),
+                GaiaConstants.CMD_LED_GET_STATE, ByteArray(0))
     }
 
     fun setLed(state: Int) {
         if (simConnected) { dcBridge?.onLedResult(state); return }
-        writeCommand(GaiaConstants.FEATURE_LED, GaiaConstants.CMD_LED_SET_STATE, byteArrayOf(state.toByte()))
+        writeCommand(AncProfileLib.ledFeatureFor(connectedDeviceName),
+                GaiaConstants.CMD_LED_SET_STATE, byteArrayOf(state.toByte()))
     }
 
     fun fetchSpatial() {

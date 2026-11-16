@@ -183,6 +183,13 @@ object AncProfileLib {
         )
     )
 
+    /** 增益/指示灯所属 feature（按型号档案，未收录型号用默认值）。 */
+    @JvmStatic
+    fun gainFeatureFor(deviceName: String?): Int = resolveDc(deviceName).gainFeature
+
+    @JvmStatic
+    fun ledFeatureFor(deviceName: String?): Int = resolveDc(deviceName).ledFeature
+
     private fun matchAncV2(deviceName: String?): AncV2Profile? {
         val n = deviceName?.uppercase()?.trim()
         if (!n.isNullOrEmpty()) {
@@ -319,7 +326,11 @@ object AncProfileLib {
         val gainCount: Int = 3,
         val gainMap: IntArray = intArrayOf(2, 1, 0),
         val gainLabels: List<String> = listOf("低", "中", "高"),
-        val trackingLabels: Array<String> = arrayOf("关闭追踪", "30°", "全方位")
+        val trackingLabels: Array<String> = arrayOf("关闭追踪", "30°", "全方位"),
+        /** 增益所属 feature（默认 15 = DAC_GAIN；布丁为 0x1E）。 */
+        val gainFeature: Int = 15,
+        /** 指示灯所属 feature（默认 19 = LED；布丁为 0x26）。 */
+        val ledFeature: Int = 19
     )
 
     private val DC_PROFILES: List<DcProfile> = listOf(
@@ -331,7 +342,8 @@ object AncProfileLib {
         // GAIA V4 over RFCOMM/SPP; ANC 走 ANC_V2，档位映射见 [ANC_V2_PROFILES]（非恒等）
         // 协议来源: https://github.com/lingbai-rong/PuddingPods
         // 增益 0x00=低/0x01=中/0x02=高（恒等映射）; 指示灯 0x00=关/0x01=开
-        DcProfile("PUDDING", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(0, 1, 2), gainLabels = listOf("低", "中", "高"),
+        DcProfile("PUDDING", hasSpatial = false, hasGain = true, hasLed = true, gainCount = 3, gainMap = intArrayOf(2, 1, 0), gainLabels = listOf("低", "中", "高"),
+                gainFeature = 0x1E, ledFeature = 0x26,
         trackingLabels = arrayOf("关闭追踪", "30°", "全方位")),
 
         // 太空漫游2 / Space Travel 2 (BT8932F, 中科蓝讯): 无空间音频, 三档增益
