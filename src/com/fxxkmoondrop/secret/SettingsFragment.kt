@@ -778,20 +778,51 @@ class SettingsFragment : Fragment() {
             updSp.edit().putInt("update_interval_days", d).apply()
         }
 
-        val updCard = M3Ui.groupCard(requireActivity(), pal,
-                rowNetUpdate, rowChannel, rowAutoUpdate, rowFreq)
+        // 检测到新版本时的提示行：直接读上次检查落库的结果，不发网络请求
+        val pending = UpdateChecker.pendingUpdate(requireContext())
+        val rowUpdateAvail = if (pending != null) {
+            M3Ui.listRow(requireActivity(), pal, R.drawable.ic_refresh,
+                    Lang.t("发现新版本 ", "New version ") + pending.second,
+                    Lang.t("点按查看并下载", "Tap to view and download"),
+                    M3Ui.chevron(requireContext(), pal.onVariant)) {
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW,
+                            android.net.Uri.parse(UpdateChecker.downloadUrl(pending.first))))
+                }
+            }
+        } else null
+
+        val updRows = ArrayList<View>()
+        updRows.add(rowNetUpdate)
+        if (rowUpdateAvail != null) updRows.add(rowUpdateAvail)
+        updRows.add(rowChannel)
+        updRows.add(rowAutoUpdate)
+        updRows.add(rowFreq)
+
+        val updCard = M3Ui.groupCard(requireActivity(), pal, *updRows.toTypedArray())
         val updInner = updCard.getChildAt(0) as? LinearLayout
-        // groupCard 内部结构：[行0, 细缝, 行1]；通道行隐藏时那条 1dp 细缝也得一起藏
-        val updGap = updInner?.getChildAt(1)
-        val showChannel = UpdateChecker.isEnabled(requireContext())
-        rowChannel.visibility = if (showChannel) View.VISIBLE else View.GONE
-        updGap?.visibility = rowChannel.visibility
+        // 「联网检查更新」是这一组的总开关：关掉时其余各项（含分隔细缝）全部隐藏
+        val subRows = ArrayList<View>()
+        if (rowUpdateAvail != null) subRows.add(rowUpdateAvail)
+        subRows.add(rowChannel)
+        subRows.add(rowAutoUpdate)
+        subRows.add(rowFreq)
+        if (updInner != null) {
+            for (i in 1 until updInner.childCount) subRows.add(updInner.getChildAt(i))
+        }
+        fun applyUpdateVisibility(animate: Boolean) {
+            val on = UpdateChecker.isEnabled(requireContext())
+            for (v in subRows) {
+                if (animate) M3Ui.reveal(v, on)
+                else v.visibility = if (on) View.VISIBLE else View.GONE
+            }
+        }
+        applyUpdateVisibility(false)
         box.addView(updCard, LinearLayout.LayoutParams(-1, -2))
 
         swNetUpdate.setOnCheckedChangeListener { _, checked ->
             UpdateChecker.setEnabled(requireContext(), checked)
-            M3Ui.reveal(rowChannel, checked)
-            updGap?.visibility = if (checked) View.VISIBLE else View.GONE
+            applyUpdateVisibility(true)
         }
         box.addView(spacer(dp(14)))
 

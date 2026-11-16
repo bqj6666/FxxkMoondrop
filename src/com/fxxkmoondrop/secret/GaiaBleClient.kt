@@ -514,7 +514,10 @@ class GaiaBleClient private constructor(
             }
             // 纯经典蓝牙设备（如 Pudding MD-TWS-056）：GATT 永远连不上。
             // 之前要等 20 秒硬超时 + 30 秒退避才回退到 SPP，用户感知为「根本不会自动连接」。
-            if (device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+            // 护栏：只有「没有已知 LE 地址」时才跳过 GATT。若缓存/扫描拿到过 LE 地址，
+            // 说明该设备可能双模，仍按原流程先试 BLE，避免误判成纯经典设备。
+            if (device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC &&
+                    cachedLeAddress == null && !leAddrVerified) {
                 AppLog.i(GaiaConstants.TAG, "classic-only device, go straight to RFCOMM/SPP")
                 tryRfcommFallback(device)
                 return rfcommTransport != null

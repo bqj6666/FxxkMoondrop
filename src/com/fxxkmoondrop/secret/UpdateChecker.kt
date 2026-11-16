@@ -228,6 +228,26 @@ object UpdateChecker {
      *
      * @param force 用户的显式「检查更新」：绕过 6 小时缓存。
      */
+    /**
+     * 上次检查到的可用更新（tag / 版本名），没有则为 null。
+     *
+     * 检查结果在 [check] 里落库，设置页直接读偏好，不再发网络请求。
+     */
+    @JvmStatic
+    fun pendingUpdate(ctx: Context): Pair<String, String>? {
+        val sp = prefs(ctx.applicationContext)
+        val tag = sp.getString("update_avail_tag", null) ?: return null
+        val name = sp.getString("update_avail_name", tag) ?: tag
+        return tag to name
+    }
+
+    private fun recordAvailability(app: Context, tag: String?, name: String?) {
+        val sp = prefs(app)
+        if (tag == null) sp.edit().remove("update_avail_tag").remove("update_avail_name").apply()
+        else sp.edit().putString("update_avail_tag", tag)
+                .putString("update_avail_name", name ?: tag).apply()
+    }
+
     @JvmStatic
     fun check(ctx: Context, force: Boolean): Result {
         val app = ctx.applicationContext
@@ -258,7 +278,11 @@ object UpdateChecker {
                 val (rCode, rName) = parsed
                 val localCode = localVersionCode(app)
                 val has = rCode > localCode
-                if (!has) return Result.UpToDate(remote.tag, remote.body)
+                if (!has) {
+                    recordAvailability(app, null, null)
+                    return Result.UpToDate(remote.tag, remote.body)
+                }
+                recordAvailability(app, remote.tag, rName)
                 Result.Available(UpdateInfo(
                         tag = remote.tag,
                         versionName = rName,
