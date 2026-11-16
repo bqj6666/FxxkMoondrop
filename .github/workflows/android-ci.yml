@@ -179,10 +179,14 @@ jobs:
       # workflow run（防递归），所以镜像同步永远不会自动发生（3.3.0/3.3.1 都是
       # 事后手工 dispatch 才补上的）。这里显式 dispatch，dispatch 事件不受该限制。
       - name: 触发镜像仓同步（modules.lsposed）
-        if: github.event_name == 'push' && github.ref_type == 'tag'
+        # 正式 tag 与手动触发的 ci-N 预发布都要同步到镜像仓；
+        # 镜像侧按源 Release 的 prerelease 状态落库，预发布在镜像里也标记为预发布，
+        # 不会顶替 latest，也不会表现为「正式发行」。
+        if: (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_TAG: ${{ github.event_name == 'workflow_dispatch' && format('ci-{0}', github.run_number) || github.ref_name }}
         run: |
           sleep 15   # 等 Release 的 APK 资产上传完成，mirror 侧要 gh release download
-          gh workflow run sync-module-release.yml -f tag="${{ github.ref_name }}"
-          echo "已触发镜像同步：${{ github.ref_name }}"
+          gh workflow run sync-module-release.yml -f tag="$SYNC_TAG"
+          echo "已触发镜像同步：$SYNC_TAG"
