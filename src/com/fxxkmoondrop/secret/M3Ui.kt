@@ -943,8 +943,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //   · 容器色 = surfaceContainerLow（比页面底亮一档，靠高程+色差区分）
             // 尺寸：菜单项 48dp、项内左右 12dp、前导图标 20dp、项间距 2dp
             val dk = ThemeUtil.isDark(c)
-            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_10", pal.card)
-            val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_50", pal.container)
+            // 与页面同色系的容器色 + 高程阴影分层（此前用 neutral1_10，浅色下几乎纯白，
+            // 和粉色页面割裂感明显；参考界面的菜单是「同色系略提亮」）
+            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_50", pal.card)
+            // 选中药丸用柔和一档的容器色，观感接近参考界面的粉色块
+            val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_100", pal.container)
             val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
             val menu = LinearLayout(c)
             menu.orientation = LinearLayout.VERTICAL
@@ -984,7 +987,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 item.addView(cb, clp)
                 val tv = TextView(c)
                 tv.text = items[i]
-                tv.textSize = 14f
+                tv.textSize = 16f
                 tv.setTextColor(if (on) selFg else pal.onSurface)
                 item.addView(tv, LinearLayout.LayoutParams(-2, -2))
                 item.setOnClickListener {
@@ -1310,6 +1313,44 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /** 官方列表行：图标 + 标题/副标题 + 尾随控件（switchRow 同款已验证结构） */
         @JvmStatic
+        /**
+         * 列表行按下形变：圆角 0 → 16dp、底色淡入，松开还原（120ms）。
+         *
+         * 参考界面（Eta）的列表项就是这个手感 —— 点下去方块变圆角块。
+         * 保留水波纹层，只是把底形换成自绘 shape 以便做半径动画。
+         */
+        private fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette) {
+            val shape = GradientDrawable()
+            shape.cornerRadius = 0f
+            shape.setColor(0x00000000)
+            val rippleColor = android.content.res.ColorStateList.valueOf(
+                    (pal.onSurface and 0x00FFFFFF) or 0x14000000)
+            row.background = android.graphics.drawable.RippleDrawable(rippleColor, shape, null)
+            val maxR = dp(act, 16).toFloat()
+            val fill = (pal.onSurface and 0x00FFFFFF) or 0x0F000000
+            row.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN ->
+                        animateRowPress(shape, v, maxR, fill)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL ->
+                        animateRowPress(shape, v, 0f, 0x00000000)
+                }
+                false   // 不拦截：点击仍交给 OnClickListener
+            }
+        }
+
+        /** 圆角与底色同时动画。 */
+        private fun animateRowPress(shape: GradientDrawable, v: View, radius: Float, color: Int) {
+            val start = shape.cornerRadius
+            val anim = android.animation.ValueAnimator.ofFloat(start, radius)
+            anim.duration = 120L
+            anim.addUpdateListener { shape.cornerRadius = it.animatedValue as Float }
+            anim.start()
+            shape.setColor(color)
+            v.invalidate()
+        }
+
         fun listRow(act: Activity, pal: ThemeUtil.Palette,
                     iconRes: Int, title: String, sub: String?,
                     trailing: View?, onClick: Runnable?): LinearLayout {
@@ -1323,6 +1364,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val padV = dp(act, if (hasSub) 8 else 4)
             row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
             row.minimumHeight = dp(act, if (hasSub) 72 else 56)
+            if (onClick != null) applyRowPressMorph(act, row, pal)
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
