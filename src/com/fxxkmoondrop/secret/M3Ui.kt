@@ -584,7 +584,11 @@ class M3Ui {
                 val morphNav = applyRowPressMorph(act, row, pal)
                 row.setOnTouchListener { _, e ->
                     when (e.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> morphNav(true)
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                        morphNav(true)
+                        row.performHapticFeedback(
+                                android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+                    }
                         android.view.MotionEvent.ACTION_UP,
                         android.view.MotionEvent.ACTION_CANCEL -> morphNav(false)
                     }
@@ -1341,20 +1345,22 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
          * 保留水波纹层，只是把底形换成自绘 shape 以便做半径动画。
          */
         fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette): (Boolean) -> Unit {
-            // 底形 + 遮罩都做成圆角：只给 content 圆角、mask 留方角的话，
-            // 水波纹会按方形边界铺开，看起来就是「圆角里套着一个方角底」。
+            // 关键：按下反馈全部走 **foreground**，background 保持透明。
+            // 之前把圆角 shape 放在 background 上，卡片底色/旧涟漪仍垫在后面，
+            // 视觉上就是「圆角块后面还有一层方角背景」。放到前景层后只有一层，画完即净。
+            row.background = null
             val content = GradientDrawable()
             content.cornerRadius = 0f
             content.setColor(0x00000000)
             val mask = GradientDrawable()
             mask.cornerRadius = 0f
             mask.setColor(android.graphics.Color.WHITE)
-            // M3 状态层：onSurface 12%（此前 8% 太淡，几乎看不见）
+            // M3 状态层：onSurface 12%
             val rippleColor = android.content.res.ColorStateList.valueOf(
                     (pal.onSurface and 0x00FFFFFF) or 0x1F000000)
-            row.background = android.graphics.drawable.RippleDrawable(rippleColor, content, mask)
+            row.foreground = android.graphics.drawable.RippleDrawable(rippleColor, content, mask)
             val maxR = dp(act, 16).toFloat()
-            val fill = (pal.onSurface and 0x00FFFFFF) or 0x0F000000
+            val fill = (pal.onSurface and 0x00FFFFFF) or 0x0C000000
             return { pressed ->
                 animateRowPress(content, mask, row,
                         if (pressed) maxR else 0f,
@@ -1396,7 +1402,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 val morph = applyRowPressMorph(act, row, pal)
                 row.setOnTouchListener { _, e ->
                     when (e.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> morph(true)
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            morph(true)
+                            row.performHapticFeedback(
+                                    android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+                        }
                         android.view.MotionEvent.ACTION_UP,
                         android.view.MotionEvent.ACTION_CANCEL -> morph(false)
                     }
