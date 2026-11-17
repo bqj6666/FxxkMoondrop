@@ -832,6 +832,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         at[0] = e.rawX.toInt(); at[1] = e.rawY.toInt(); hasAt = true
                         rowMorph(true)
+                        row.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
                     }
                     android.view.MotionEvent.ACTION_UP,
                     android.view.MotionEvent.ACTION_CANCEL -> rowMorph(false)
