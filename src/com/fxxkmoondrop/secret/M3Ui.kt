@@ -580,6 +580,17 @@ class M3Ui {
             val padVNav = dp(act, if (hasSubNav) 8 else 4)
             row.setPadding(dp(act, 16), padVNav, dp(act, 16), padVNav)
             row.minimumHeight = dp(act, if (hasSubNav) 72 else 56)
+            if (onClick != null) {
+                val morphNav = applyRowPressMorph(act, row, pal)
+                row.setOnTouchListener { _, e ->
+                    when (e.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN -> morphNav(true)
+                        android.view.MotionEvent.ACTION_UP,
+                        android.view.MotionEvent.ACTION_CANCEL -> morphNav(false)
+                    }
+                    false
+                }
+            }
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
@@ -811,9 +822,15 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             var hasAt = false
             // 当前选中态必须可变：否则选完再打开菜单，高亮还停在初始值上
             var cur = selected
+            val rowMorph = applyRowPressMorph(act, row, pal)
             row.setOnTouchListener { v, e ->
-                if (e.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    at[0] = e.rawX.toInt(); at[1] = e.rawY.toInt(); hasAt = true
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        at[0] = e.rawX.toInt(); at[1] = e.rawY.toInt(); hasAt = true
+                        rowMorph(true)
+                    }
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> rowMorph(false)
                 }
                 false
             }
@@ -945,7 +962,8 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val dk = ThemeUtil.isDark(c)
             // 与页面同色系的容器色 + 高程阴影分层（此前用 neutral1_10，浅色下几乎纯白，
             // 和粉色页面割裂感明显；参考界面的菜单是「同色系略提亮」）
-            val menuColor = ThemeUtil.dyn(c, if (dk) "system_neutral1_800" else "system_neutral1_50", pal.card)
+            // 同色系更鲜艳：取主色系的浅色调（accent1_50），不要中性白
+            val menuColor = ThemeUtil.dyn(c, if (dk) "system_accent1_900" else "system_accent1_50", pal.card)
             // 选中药丸用柔和一档的容器色，观感接近参考界面的粉色块
             val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_100", pal.container)
             val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
@@ -987,7 +1005,10 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 item.addView(cb, clp)
                 val tv = TextView(c)
                 tv.text = items[i]
-                tv.textSize = 16f
+                tv.textSize = 14f
+                // 字重比正文高一档：参考界面的菜单项是 medium 而不是更大字号
+                tv.typeface = android.graphics.Typeface.create("sans-serif-medium",
+                        android.graphics.Typeface.NORMAL)
                 tv.setTextColor(if (on) selFg else pal.onSurface)
                 item.addView(tv, LinearLayout.LayoutParams(-2, -2))
                 item.setOnClickListener {
@@ -1319,7 +1340,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
          * 参考界面（Eta）的列表项就是这个手感 —— 点下去方块变圆角块。
          * 保留水波纹层，只是把底形换成自绘 shape 以便做半径动画。
          */
-        private fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette) {
+        fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette): (Boolean) -> Unit {
             val shape = GradientDrawable()
             shape.cornerRadius = 0f
             shape.setColor(0x00000000)
@@ -1328,15 +1349,12 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             row.background = android.graphics.drawable.RippleDrawable(rippleColor, shape, null)
             val maxR = dp(act, 16).toFloat()
             val fill = (pal.onSurface and 0x00FFFFFF) or 0x0F000000
-            row.setOnTouchListener { v, e ->
-                when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN ->
-                        animateRowPress(shape, v, maxR, fill)
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL ->
-                        animateRowPress(shape, v, 0f, 0x00000000)
-                }
-                false   // 不拦截：点击仍交给 OnClickListener
+            // 返回一个 pressed 回调：调用方若有自己的 OnTouchListener（如下拉行记录触点），
+            // 在里面调用它即可同时获得形变效果。
+            return { pressed ->
+                animateRowPress(shape, row, if (pressed) maxR else 0f,
+                        if (pressed) fill else 0x00000000)
+                false
             }
         }
 
@@ -1364,7 +1382,17 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val padV = dp(act, if (hasSub) 8 else 4)
             row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
             row.minimumHeight = dp(act, if (hasSub) 72 else 56)
-            if (onClick != null) applyRowPressMorph(act, row, pal)
+            if (onClick != null) {
+                val morph = applyRowPressMorph(act, row, pal)
+                row.setOnTouchListener { _, e ->
+                    when (e.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN -> morph(true)
+                        android.view.MotionEvent.ACTION_UP,
+                        android.view.MotionEvent.ACTION_CANCEL -> morph(false)
+                    }
+                    false
+                }
+            }
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
