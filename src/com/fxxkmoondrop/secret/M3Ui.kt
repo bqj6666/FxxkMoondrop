@@ -571,7 +571,7 @@ class M3Ui {
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线，
             // 对齐 LSPosed 实测结构（见 groupCard 注释）。
             val row = LinearLayout(act)
-            row.background = null   // 按下反馈统一走自绘前景层，避免系统方角涟漪叠加
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             // 与 listRow / switchRow 同一套行高分级：单行 56dp、双行 72dp。
@@ -580,21 +580,6 @@ class M3Ui {
             val padVNav = dp(act, if (hasSubNav) 8 else 4)
             row.setPadding(dp(act, 16), padVNav, dp(act, 16), padVNav)
             row.minimumHeight = dp(act, if (hasSubNav) 72 else 56)
-            if (onClick != null) {
-                val morphNav = applyRowPressMorph(act, row, pal)
-                row.setOnTouchListener { _, e ->
-                    when (e.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> {
-                        morphNav(true)
-                        row.performHapticFeedback(
-                                android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-                    }
-                        android.view.MotionEvent.ACTION_UP,
-                        android.view.MotionEvent.ACTION_CANCEL -> morphNav(false)
-                    }
-                    false
-                }
-            }
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
@@ -660,7 +645,7 @@ class M3Ui {
             // 3.3.1: 返回**裸行**（不再自带 MaterialCardView）。
             // 卡片由 groupCard 统一添加 —— 一组一张卡 + 组内行间分隔线。
             val row = LinearLayout(act)
-            row.background = null   // 按下反馈统一走自绘前景层，避免系统方角涟漪叠加
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             // 行高按内容分级：单行 56dp、双行（标题 + 副标题）72dp。
@@ -669,21 +654,6 @@ class M3Ui {
             val padV = dp(act, if (hasSub) 8 else 4)
             row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
             row.minimumHeight = dp(act, if (hasSub) 72 else 56)
-            run {
-                val morphSw = applyRowPressMorph(act, row, pal)
-                row.setOnTouchListener { _, e ->
-                    when (e.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> {
-                            morphSw(true)
-                            row.performHapticFeedback(
-                                    android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-                        }
-                        android.view.MotionEvent.ACTION_UP,
-                        android.view.MotionEvent.ACTION_CANCEL -> morphSw(false)
-                    }
-                    false
-                }
-            }
             val labels = LinearLayout(act)
             labels.orientation = LinearLayout.VERTICAL
             val t1 = TextView(act)
@@ -841,16 +811,9 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             var hasAt = false
             // 当前选中态必须可变：否则选完再打开菜单，高亮还停在初始值上
             var cur = selected
-            val rowMorph = applyRowPressMorph(act, row, pal)
             row.setOnTouchListener { v, e ->
-                when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        at[0] = e.rawX.toInt(); at[1] = e.rawY.toInt(); hasAt = true
-                        rowMorph(true)
-                        row.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-                    }
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL -> rowMorph(false)
+                if (e.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    at[0] = e.rawX.toInt(); at[1] = e.rawY.toInt(); hasAt = true
                 }
                 false
             }
@@ -891,7 +854,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                       iconRes: Int, title: String, sub: String?,
                       trailing: View?, onClick: Runnable?): LinearLayout {
             val row = LinearLayout(act)
-            row.background = null   // 按下反馈统一走自绘前景层，避免系统方角涟漪叠加
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             // 与 listRow / switchRow 同一套行高分级：单行 56dp、双行 72dp。
@@ -980,11 +943,9 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             //   · 容器色 = surfaceContainerLow（比页面底亮一档，靠高程+色差区分）
             // 尺寸：菜单项 48dp、项内左右 12dp、前导图标 20dp、项间距 2dp
             val dk = ThemeUtil.isDark(c)
-            // 与页面同色系的容器色 + 高程阴影分层（此前用 neutral1_10，浅色下几乎纯白，
-            // 和粉色页面割裂感明显；参考界面的菜单是「同色系略提亮」）
-            // 同色系更鲜艳：取主色系的浅色调（accent1_50），不要中性白
+            // 同上：菜单与页面同色系、略鲜艳一档
             val menuColor = ThemeUtil.dyn(c, if (dk) "system_accent1_900" else "system_accent1_50", pal.card)
-            // 选中药丸用柔和一档的容器色，观感接近参考界面的粉色块
+            // 选中药丸用柔和一档，避免抢走整块视觉重心
             val selBg = ThemeUtil.dyn(c, if (dk) "system_accent2_800" else "system_accent2_100", pal.container)
             val selFg = ThemeUtil.dyn(c, if (dk) "system_accent2_50" else "system_accent2_900", pal.onContainer)
             val menu = LinearLayout(c)
@@ -1026,7 +987,7 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
                 val tv = TextView(c)
                 tv.text = items[i]
                 tv.textSize = 14f
-                // 字重比正文高一档：参考界面的菜单项是 medium 而不是更大字号
+                // 字重比正文高一档（参考界面是 medium，不是更大字号）
                 tv.typeface = android.graphics.Typeface.create("sans-serif-medium",
                         android.graphics.Typeface.NORMAL)
                 tv.setTextColor(if (on) selFg else pal.onSurface)
@@ -1354,64 +1315,11 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
 
         /** 官方列表行：图标 + 标题/副标题 + 尾随控件（switchRow 同款已验证结构） */
         @JvmStatic
-        /**
-         * 列表行按下形变：圆角 0 → 16dp、底色淡入，松开还原（120ms）。
-         *
-         * 参考界面（Eta）的列表项就是这个手感 —— 点下去方块变圆角块。
-         * 保留水波纹层，只是把底形换成自绘 shape 以便做半径动画。
-         */
-        fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette): (Boolean) -> Unit {
-            // 圆角从一开始就是 16dp —— 之前把半径从 0 动画到 16dp，
-            // 按下后的前 100ms 仍是方角，看着就像「圆角块后面还压着一圈方角」。
-            // 现在形状固定为圆角，只让底色淡入淡出。
-            row.background = null
-            val radius = dp(act, 16).toFloat()
-            val content = GradientDrawable()
-            content.cornerRadius = radius
-            content.setColor(0x00000000)
-            val mask = GradientDrawable()
-            mask.cornerRadius = radius
-            mask.setColor(android.graphics.Color.WHITE)
-            val rippleColor = android.content.res.ColorStateList.valueOf(
-                    (pal.onSurface and 0x00FFFFFF) or 0x1F000000)
-            row.foreground = android.graphics.drawable.RippleDrawable(rippleColor, content, mask)
-            val fill = (pal.onSurface and 0x00FFFFFF) or 0x33000000
-            return { pressed ->
-                animateRowPress(content, mask, row, radius, fill, pressed)
-                false
-            }
-        }
-
-        /**
-         * 按下：圆角 0 → maxR、底色淡入；抬起：反向。
-         *
-         * 系统的 selectableItemBackground 已从这些行移除，所以动画过程中
-         * 不会再出现「方角底」与自绘圆角叠加的情况。
-         */
-        private fun animateRowPress(content: GradientDrawable, mask: GradientDrawable,
-                                    v: View, maxR: Float, fill: Int, pressed: Boolean) {
-            val from = if (pressed) 0f else content.cornerRadius
-            val to = if (pressed) maxR else 0f
-            val anim = android.animation.ValueAnimator.ofFloat(from, to)
-            anim.duration = 140L
-            anim.addUpdateListener {
-                val r = it.animatedValue as Float
-                content.cornerRadius = r
-                mask.cornerRadius = r
-                val frac = if (maxR <= 0f) 0f else (r / maxR)
-                val alpha = (0x33 * frac).toInt()
-                content.setColor((fill and 0x00FFFFFF) or (alpha shl 24))
-                v.invalidate()
-            }
-            if (pressed) content.setColor(fill and 0x00FFFFFF)
-            anim.start()
-        }
-
         fun listRow(act: Activity, pal: ThemeUtil.Palette,
                     iconRes: Int, title: String, sub: String?,
                     trailing: View?, onClick: Runnable?): LinearLayout {
             val row = LinearLayout(act)
-            row.background = null   // 按下反馈统一走自绘前景层，避免系统方角涟漪叠加
+            row.background = selectableBackground(act)
             row.orientation = LinearLayout.HORIZONTAL
             row.gravity = Gravity.CENTER_VERTICAL
             // 行高按内容分级：单行 56dp、双行（标题 + 副标题）72dp。
@@ -1420,21 +1328,6 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
             val padV = dp(act, if (hasSub) 8 else 4)
             row.setPadding(dp(act, 16), padV, dp(act, 16), padV)
             row.minimumHeight = dp(act, if (hasSub) 72 else 56)
-            if (onClick != null) {
-                val morph = applyRowPressMorph(act, row, pal)
-                row.setOnTouchListener { _, e ->
-                    when (e.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> {
-                            morph(true)
-                            row.performHapticFeedback(
-                                    android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-                        }
-                        android.view.MotionEvent.ACTION_UP,
-                        android.view.MotionEvent.ACTION_CANCEL -> morph(false)
-                    }
-                    false
-                }
-            }
             if (iconRes != 0) {
                 // Android 16 Settings 样式：行首图标放在 48dp 圆形底色容器里，
                 // 底色按条目散列到不同色相（参考图中各分组图标颜色不同），
