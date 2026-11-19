@@ -1346,44 +1346,45 @@ fun ancModeDrawable(c: Context, mode: Int, px: Int, color: Int): Drawable? {
          * 保留水波纹层，只是把底形换成自绘 shape 以便做半径动画。
          */
         fun applyRowPressMorph(act: Activity, row: View, pal: ThemeUtil.Palette): (Boolean) -> Unit {
-            // 关键：按下反馈全部走 **foreground**，background 保持透明。
-            // 之前把圆角 shape 放在 background 上，卡片底色/旧涟漪仍垫在后面，
-            // 视觉上就是「圆角块后面还有一层方角背景」。放到前景层后只有一层，画完即净。
+            // 圆角从一开始就是 16dp —— 之前把半径从 0 动画到 16dp，
+            // 按下后的前 100ms 仍是方角，看着就像「圆角块后面还压着一圈方角」。
+            // 现在形状固定为圆角，只让底色淡入淡出。
             row.background = null
+            val radius = dp(act, 16).toFloat()
             val content = GradientDrawable()
-            content.cornerRadius = 0f
+            content.cornerRadius = radius
             content.setColor(0x00000000)
             val mask = GradientDrawable()
-            mask.cornerRadius = 0f
+            mask.cornerRadius = radius
             mask.setColor(android.graphics.Color.WHITE)
-            // M3 状态层：onSurface 12%
             val rippleColor = android.content.res.ColorStateList.valueOf(
                     (pal.onSurface and 0x00FFFFFF) or 0x1F000000)
             row.foreground = android.graphics.drawable.RippleDrawable(rippleColor, content, mask)
-            val maxR = dp(act, 16).toFloat()
             val fill = (pal.onSurface and 0x00FFFFFF) or 0x0C000000
             return { pressed ->
-                animateRowPress(content, mask, row,
-                        if (pressed) maxR else 0f,
-                        if (pressed) fill else 0x00000000)
+                animateRowPress(content, mask, row, fill, pressed)
                 false
             }
         }
 
-        /** 圆角（底形与遮罩同步）与底色一起动画。 */
+        /**
+         * 按下底色淡入 / 抬起淡出。
+         *
+         * 形状（圆角）保持恒定，只动颜色透明度 —— 半径动画会让前几帧露方角，
+         * 而这正是「圆角高亮外面还有一圈方角」的来源。
+         */
         private fun animateRowPress(content: GradientDrawable, mask: GradientDrawable,
-                                    v: View, radius: Float, color: Int) {
-            val start = content.cornerRadius
-            val anim = android.animation.ValueAnimator.ofFloat(start, radius)
+                                    v: View, fill: Int, pressed: Boolean) {
+            val from = if (pressed) 0 else 0x0C
+            val to = if (pressed) 0x0C else 0
+            val anim = android.animation.ValueAnimator.ofInt(from, to)
             anim.duration = 120L
             anim.addUpdateListener {
-                val r = it.animatedValue as Float
-                content.cornerRadius = r
-                mask.cornerRadius = r
+                val a = it.animatedValue as Int
+                content.setColor((fill and 0x00FFFFFF) or (a shl 24))
                 v.invalidate()
             }
             anim.start()
-            content.setColor(color)
         }
 
         fun listRow(act: Activity, pal: ThemeUtil.Palette,
